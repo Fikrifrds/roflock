@@ -39,6 +39,24 @@ describe('daemon boundary', () => {
     expect(listed.statusCode).toBe(200);
     expect((listed.json() as Array<{ id: string }>).some((p) => p.id === body.id)).toBe(true);
   });
+  it('recommends smallest sufficient workflows from task intent', async () => {
+    const { app } = await server();
+    const headers = {
+      'x-roleflock-token': 'test-token',
+      'x-roleflock-csrf': 'test-csrf',
+    };
+    const recommended = await app.inject({
+      method: 'GET',
+      url: '/api/workflows/recommend?type=investigation&risk=low',
+      headers,
+    });
+    expect(recommended.statusCode).toBe(200);
+    expect((recommended.json() as { mode: string }).mode).toBe('direct');
+
+    const intents = await app.inject({ method: 'GET', url: '/api/task-intents', headers });
+    expect(intents.statusCode).toBe(200);
+    expect((intents.json() as Array<{ id: string }>).some((i) => i.id === 'bug_fix')).toBe(true);
+  });
   it('exposes authenticated choose-directory dialog endpoint', async () => {
     const { app } = await server();
     expect(

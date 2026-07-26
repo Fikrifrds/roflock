@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Task } from '@roleflock/contracts';
 import { ConfirmationRepository, EvidenceRepository, ProjectRepository, TaskRepository, UsageRepository, type SqliteDb } from '@roleflock/database';
-import { getWorkflowGraph, workflowGraphs } from '@roleflock/graph-core';
+import { getWorkflowGraph, recommendWorkflow, workflowGraphs } from '@roleflock/graph-core';
 import { registerRepository } from '@roleflock/repository-runtime';
 import type { Session } from '../auth.js';
 import { EventBus } from '../services/event-bus.js';
@@ -82,7 +82,10 @@ export function registerApi(app: FastifyInstance, db: SqliteDb, session: Session
     if (!body.projectId || !body.title || !body.brief) {
       return reply.code(400).send({ error: 'projectId, title, and brief are required' });
     }
-    const mode = body.mode ?? (body.type === 'bug_fix' ? 'bug_fix' : 'standard');
+    const mode = body.mode ?? recommendWorkflow({
+      type: (body.type ?? 'bug_fix') as Parameters<typeof recommendWorkflow>[0]['type'],
+      risk: body.risk,
+    }).mode;
     let workflowGraphVersionId = 'bug_fix';
     try {
       workflowGraphVersionId = getWorkflowGraph(mode).id;
@@ -118,6 +121,33 @@ export function registerApi(app: FastifyInstance, db: SqliteDb, session: Session
       roles: graph.nodes.map((node) => node.id),
     })),
   );
+  app.get('/api/workflows/recommend', async (request) => {
+    const query = request.query as { type?: string; risk?: string };
+    const type = (query.type ?? 'feature') as Parameters<typeof recommendWorkflow>[0]['type'];
+    const risk = query.risk as Parameters<typeof recommendWorkflow>[0]['risk'] | undefined;
+    const recommendation = recommendWorkflow({ type, risk });
+    const graph = getWorkflowGraph(recommendation.mode);
+    return {
+      ...recommendation,
+      label: graph.label,
+      description: graph.description,
+      roles: graph.nodes.map((node) => node.id),
+    };
+  });
+  app.get('/api/task-intents', async () => [
+    { id: 'new_product', label: 'Build a New Product', description: 'Greenfield product work' },
+    { id: 'feature', label: 'Add a Feature', description: 'Extend an existing codebase' },
+    { id: 'bug_fix', label: 'Fix a Bug', description: 'Verified fix with regression checks' },
+    { id: 'refactor', label: 'Refactor Code', description: 'Improve structure without behaviour change' },
+    { id: 'investigation', label: 'Investigate an Issue', description: 'Diagnose before changing code' },
+    { id: 'review_changes', label: 'Review Existing Changes', description: 'Inspect a local diff or branch' },
+    { id: 'documentation', label: 'Documentation', description: 'Docs-only updates' },
+    { id: 'security_fix', label: 'Security Fix', description: 'High-assurance remediation' },
+    { id: 'migration', label: 'Migration', description: 'Schema or platform migration' },
+    { id: 'test_improvement', label: 'Improve Tests', description: 'Coverage and harness work' },
+    { id: 'performance', label: 'Performance', description: 'Speed or resource improvements' },
+    { id: 'dependency_update', label: 'Dependency Update', description: 'Library bumps and lockfile work' },
+  ]);
   app.get('/api/tasks', async (request) => tasks.list((request.query as { projectId?: string }).projectId));
   app.get('/api/tasks/:id', async (request, reply) => { const task = tasks.get((request.params as { id: string }).id); return task ?? reply.code(404).send({ error: 'Task not found' }); });
   app.get('/api/tasks/:id/approvals', async (request) =>

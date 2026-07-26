@@ -351,11 +351,17 @@ function NewTask() {
   const { data: workflows = [] } = useData<
     Array<{ id: string; label: string; description: string }>
   >(['workflows'], '/api/workflows');
+  const { data: intents = [] } = useData<
+    Array<{ id: string; label: string; description: string }>
+  >(['task-intents'], '/api/task-intents');
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [modeTouched, setModeTouched] = useState(false);
   const [form, setForm] = useState({
     projectId: '',
+    type: 'bug_fix',
+    risk: 'medium',
     title: '',
     brief: '',
     expectedBehaviour: '',
@@ -364,6 +370,25 @@ function NewTask() {
     maxAttempts: 3,
     maxActualCostUsd: 1,
   });
+  const { data: recommendation } = useData<{
+    mode: string;
+    rationale: string;
+    label: string;
+  }>(
+    ['workflow-recommend', form.type, form.risk],
+    `/api/workflows/recommend?type=${encodeURIComponent(form.type)}&risk=${encodeURIComponent(form.risk)}`,
+  );
+
+  useEffect(() => {
+    if (!modeTouched && recommendation?.mode) {
+      setForm((current) =>
+        current.mode === recommendation.mode
+          ? current
+          : { ...current, mode: recommendation.mode },
+      );
+    }
+  }, [recommendation?.mode, modeTouched]);
+
   return (
     <Shell>
       <Section title="New task">
@@ -377,11 +402,18 @@ function NewTask() {
               const task = await api.request<Task>('/api/tasks', {
                 method: 'POST',
                 body: JSON.stringify({
-                  ...form,
-                  type: form.mode === 'bug_fix' ? 'bug_fix' : 'feature',
+                  projectId: form.projectId,
+                  type: form.type,
+                  risk: form.risk,
+                  title: form.title,
+                  brief: form.brief,
+                  expectedBehaviour: form.expectedBehaviour || undefined,
+                  actualBehaviour: form.actualBehaviour || undefined,
+                  mode: form.mode,
+                  maxAttempts: form.maxAttempts,
+                  maxActualCostUsd: form.maxActualCostUsd,
                 }),
               });
-              // Land on task detail so Start is the obvious next action.
               navigate(`/tasks/${task.id}`);
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Failed to create task');
@@ -406,13 +438,61 @@ function NewTask() {
               </option>
             ))}
           </select>
+
+          <p className="field-label">What are you working on?</p>
+          <div className="intent-grid" role="listbox" aria-label="Task intent">
+            {(intents.length
+              ? intents
+              : [
+                  { id: 'bug_fix', label: 'Fix a Bug', description: '' },
+                  { id: 'feature', label: 'Add a Feature', description: '' },
+                  { id: 'investigation', label: 'Investigate', description: '' },
+                ]
+            ).map((intent) => (
+              <button
+                key={intent.id}
+                type="button"
+                role="option"
+                aria-selected={form.type === intent.id}
+                className={form.type === intent.id ? 'intent selected' : 'intent'}
+                onClick={() => {
+                  setModeTouched(false);
+                  setForm({ ...form, type: intent.id });
+                }}
+              >
+                <strong>{intent.label}</strong>
+                {intent.description ? <small>{intent.description}</small> : null}
+              </button>
+            ))}
+          </div>
+
+          <label className="field-label" htmlFor="task-risk">
+            Risk
+          </label>
+          <select
+            id="task-risk"
+            value={form.risk}
+            onChange={(e) => {
+              setModeTouched(false);
+              setForm({ ...form, risk: e.target.value });
+            }}
+          >
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
+
           <label className="field-label" htmlFor="workflow-mode">
             Workflow mode
           </label>
           <select
             id="workflow-mode"
             value={form.mode}
-            onChange={(e) => setForm({ ...form, mode: e.target.value })}
+            onChange={(e) => {
+              setModeTouched(true);
+              setForm({ ...form, mode: e.target.value });
+            }}
           >
             {(workflows.length
               ? workflows
@@ -430,9 +510,14 @@ function NewTask() {
             ))}
           </select>
           <small className="hint">
-            {workflows.find((workflow) => workflow.id === form.mode)?.description ??
-              'Choose the smallest sufficient execution path.'}
+            {recommendation
+              ? `Recommended: ${recommendation.label}. ${recommendation.rationale}${
+                  modeTouched && form.mode !== recommendation.mode ? ' (overridden)' : ''
+                }`
+              : workflows.find((workflow) => workflow.id === form.mode)?.description ??
+                'Choose the smallest sufficient execution path.'}
           </small>
+
           <label className="field-label" htmlFor="task-title">
             Title
           </label>
@@ -454,52 +539,60 @@ function NewTask() {
             value={form.brief}
             onChange={(e) => setForm({ ...form, brief: e.target.value })}
           />
+          {form.type === 'bug_fix' ? (
+            <div className="two-col">
+              <div>
+                <label className="field-label" htmlFor="task-expected">
+                  Expected behaviour
+                </label>
+                <textarea
+                  id="task-expected"
+                  className="compact"
+                  placeholder="Optional"
+                  value={form.expectedBehaviour}
+                  onChange={(e) => setForm({ ...form, expectedBehaviour: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="task-actual">
+                  Actual behaviour
+                </label>
+                <textarea
+                  id="task-actual"
+                  className="compact"
+                  placeholder="Optional"
+                  value={form.actualBehaviour}
+                  onChange={(e) => setForm({ ...form, actualBehaviour: e.target.value })}
+                />
+              </div>
+            </div>
+          ) : null}
           <div className="two-col">
             <div>
-              <label className="field-label" htmlFor="task-expected">
-                Expected behaviour
+              <label className="field-label" htmlFor="task-attempts">
+                Max attempts
               </label>
-              <textarea
-                id="task-expected"
-                className="compact"
-                placeholder="Optional"
-                value={form.expectedBehaviour}
-                onChange={(e) => setForm({ ...form, expectedBehaviour: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="task-actual">
-                Actual behaviour
-              </label>
-              <textarea
-                id="task-actual"
-                className="compact"
-                placeholder="Optional"
-                value={form.actualBehaviour}
-                onChange={(e) => setForm({ ...form, actualBehaviour: e.target.value })}
-              />
-            </div>
-          </div>
-          <div className="two-col">
-            <label>
-              Max attempts
               <input
+                id="task-attempts"
                 type="number"
                 min={1}
                 value={form.maxAttempts}
                 onChange={(e) => setForm({ ...form, maxAttempts: Number(e.target.value) })}
               />
-            </label>
-            <label>
-              Budget USD
+            </div>
+            <div>
+              <label className="field-label" htmlFor="task-budget">
+                Max actual cost (USD)
+              </label>
               <input
+                id="task-budget"
                 type="number"
                 min={0}
-                step="0.01"
+                step={0.01}
                 value={form.maxActualCostUsd}
                 onChange={(e) => setForm({ ...form, maxActualCostUsd: Number(e.target.value) })}
               />
-            </label>
+            </div>
           </div>
           {error ? <p className="error">{error}</p> : null}
           <div className="form-actions">
@@ -519,6 +612,10 @@ function TaskDetail() {
   const [actionError, setActionError] = useState('');
   const [starting, setStarting] = useState(false);
   const { data: task } = useData<Task>(['task', id], `/api/tasks/${id}`, Boolean(id));
+  const { data: workflows = [] } = useData<
+    Array<{ id: string; label: string; description: string; roles: string[] }>
+  >(['workflows'], '/api/workflows');
+  const workflow = workflows.find((item) => item.id === task?.workflowGraphVersionId);
   const { data: execution } = useData<ActiveExecution | null>(
     ['execution', id],
     `/api/tasks/${id}/active-execution`,
@@ -623,6 +720,18 @@ function TaskDetail() {
               </button>
             </div>
           </article>
+        ) : null}
+        {workflow ? (
+          <ol className="workflow-steps" aria-label="Workflow graph">
+            {workflow.roles.map((role) => {
+              const active = execution?.roleDisplayName === role;
+              return (
+                <li key={role} className={active ? 'active' : undefined}>
+                  {role}
+                </li>
+              );
+            })}
+          </ol>
         ) : null}
         <article className="execution">
           <p className="eyebrow">ACTIVE EXECUTION</p>

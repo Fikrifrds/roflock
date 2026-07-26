@@ -18,7 +18,7 @@ import {
   type SqliteDb,
 } from '@roleflock/database';
 import { runCommand } from '@roleflock/command-runner';
-import { getWorkflowGraph, type WorkflowGraph } from '@roleflock/graph-core';
+import { getWorkflowGraph, validateGraph, type WorkflowGraph } from '@roleflock/graph-core';
 import { runSequentialGraph } from '@roleflock/graph-runtime';
 import {
   captureDiff,
@@ -171,12 +171,17 @@ export class Orchestrator {
       task.workflowGraphVersionId === 'direct' ||
       task.workflowGraphVersionId === 'fast' ||
       task.workflowGraphVersionId === 'standard' ||
-      task.workflowGraphVersionId === 'bug_fix'
+      task.workflowGraphVersionId === 'bug_fix' ||
+      task.workflowGraphVersionId === 'critical'
         ? task.workflowGraphVersionId
         : task.type === 'bug_fix'
           ? 'bug_fix'
           : 'standard';
     const graph = getWorkflowGraph(graphMode);
+    const graphErrors = validateGraph(graph);
+    if (graphErrors.length) {
+      throw new Error(`Invalid workflow graph: ${graphErrors.join(', ')}`);
+    }
     const repo = await registerRepository(repositoryPath);
     let worktree;
     try {

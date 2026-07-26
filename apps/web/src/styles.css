@@ -265,6 +265,71 @@ textarea.compact {
   gap: 8px;
 }
 
+.intent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.intent {
+  text-align: left;
+  background: #0e1416;
+  border: 1px solid #ffffff25;
+  border-radius: 4px;
+  color: #d5cec1;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.intent strong {
+  font-weight: 600;
+  color: #f5efe6;
+}
+
+.intent small {
+  color: #9aa4a1;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.intent.selected {
+  border-color: #edae49;
+  background: #1b2528;
+}
+
+.workflow-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+}
+
+.workflow-steps li {
+  padding: 6px 10px;
+  border: 1px solid #ffffff22;
+  border-radius: 4px;
+  color: #9aa4a1;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.workflow-steps li.active {
+  border-color: #edae49;
+  color: #edae49;
+}
+
+@media (max-width: 700px) {
+  .intent-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .field-label {
   font-size: 12px;
   letter-spacing: 0.08em;
