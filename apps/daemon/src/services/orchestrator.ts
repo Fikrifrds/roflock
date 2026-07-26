@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ActiveExecution, Task } from '@roleflock/contracts';
 import { createConfirmationRequest } from '@roleflock/approval-engine';
-import { buildDisclosureManifest } from '@roleflock/context-compiler';
+import {
+  buildRepositoryMap,
+  compileContext,
+  type RoleId,
+} from '@roleflock/context-compiler';
 import {
   ActiveExecutionRepository,
   ConfirmationRepository,
@@ -12,6 +16,7 @@ import {
   EvidenceRepository,
   EventStore,
   InvocationRepository,
+  LocalKnowledgeRepository,
   TaskRepository,
   UsageRepository,
   WorktreeRepository,
@@ -289,16 +294,25 @@ export class Orchestrator {
       const disclosureEntries = [
         {
           id: `task:${task.id}`,
-          content: task.brief,
+          content: [
+            `Title: ${task.title}`,
+            task.brief,
+            `Expected: ${task.expectedBehaviour ?? 'n/a'}`,
+            `Actual: ${task.actualBehaviour ?? 'n/a'}`,
+          ].join('\n'),
           source: 'task.brief',
           sensitivity: 'internal' as const,
+          priority: 100,
         },
-        {
-          id: `worktree:${worktreePath}`,
-          content: worktreePath,
-          source: 'worktree.path',
-          sensitivity: 'internal' as const,
-        },
+        buildRepositoryMap(
+          (() => {
+            try {
+              return readdirSync(worktreePath);
+            } catch {
+              return [];
+            }
+          })(),
+        ),
         ...(this.documents?.list(task.id) ?? [])
           .filter((doc) => doc.extractedText)
           .slice(0, 5)
@@ -306,16 +320,40 @@ export class Orchestrator {
             id: `document:${doc.id}`,
             content: doc.extractedText!.slice(0, 2_000),
             source: `document:${doc.fileName}`,
+            path: doc.fileName,
             sensitivity: 'internal' as const,
+            priority: doc.authority === 'authoritative_requirement' ? 90 : 50,
+          })),
+        ...new LocalKnowledgeRepository(this.db)
+          .list({ projectId: task.projectId, state: 'published' })
+          .slice(0, 8)
+          .map((item) => ({
+            id: `knowledge:${item.id}`,
+            content: `${item.title}\n${item.body}`,
+            source: `knowledge:${item.type}`,
+            sensitivity: 'internal' as const,
+            priority: 30,
           })),
       ];
-      const disclosure = buildDisclosureManifest(disclosureEntries);
+      const compiled = compileContext({
+        role: (['planner', 'reviewer', 'writer', 'test', 'verifier', 'accept'].includes(role)
+          ? role
+          : 'planner') as RoleId,
+        items: disclosureEntries,
+      });
       this.evidence.addDisclosureManifest({
         id: randomUUID(),
         invocationId,
         providerConnectionId: route?.providerId ?? 'deterministic',
-        selectedContext: disclosure.entries,
-        exclusions: ['.env', '**/*.pem', '**/*.key'],
+        selectedContext: {
+          role: compiled.role,
+          contract: compiled.contract,
+          totalTokens: compiled.disclosure.totalTokens,
+          totalBytes: compiled.disclosure.totalBytes,
+          entries: compiled.disclosure.entries,
+          omitted: compiled.omitted,
+        },
+        exclusions: compiled.disclosure.exclusions,
         createdAt: now(),
       });
 
@@ -331,7 +369,7 @@ export class Orchestrator {
           adapter,
           invocationId,
           nodeRunId,
-          prompt: `${role.toUpperCase()} for RoleFlock task "${task.title}" (read-only):\n${task.brief}\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nDo not modify files.`,
+          prompt: `${role.toUpperCase()} for RoleFlock task "${task.title}" (read-only).\nDo not modify files.\n\n${compiled.promptBlock}`,
           cwd: worktreePath,
           signal: controller.signal,
         });
@@ -340,7 +378,7 @@ export class Orchestrator {
           taskId: task.id,
           nodeRunId,
           severity: 'info',
-          summary: `${role} via ${route?.providerDisplayName ?? 'fake'} / ${route?.modelDisplayName ?? 'phase0-fake'}`,
+          summary: `${role} via ${route?.providerDisplayName ?? 'fake'} / ${route?.modelDisplayName ?? 'phase0-fake'} · ${compiled.disclosure.totalTokens} ctx tokens`,
           details: output || task.brief,
           createdAt: now(),
         });
@@ -350,7 +388,7 @@ export class Orchestrator {
             adapter: route.adapter,
             invocationId,
             nodeRunId,
-            prompt: `Review plan for: ${task.brief}\nConfirm whether writing ROLEFLOCK_FIX.md is an appropriate scope.`,
+            prompt: `Review plan and confirm whether writing ROLEFLOCK_FIX.md is an appropriate scope.\n\n${compiled.promptBlock}`,
             cwd: worktreePath,
             signal: controller.signal,
           });

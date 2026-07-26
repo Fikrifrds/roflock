@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { MIGRATION_001 } from './migrations/001_initial.js';
 import { MIGRATION_002 } from './migrations/002_task_documents.js';
+import { MIGRATION_003 } from './migrations/003_local_knowledge.js';
 
 export type SqliteDb = Database.Database;
 
@@ -39,7 +40,7 @@ export function migrate(db: SqliteDb): void {
       .map((row) => (row as { version: number }).version),
   );
 
-  const migrations = [MIGRATION_001, MIGRATION_002];
+  const migrations = [MIGRATION_001, MIGRATION_002, MIGRATION_003];
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;
     const tx = db.transaction(() => {

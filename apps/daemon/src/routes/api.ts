@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Task } from '@roleflock/contracts';
-import { ConfirmationRepository, EvidenceRepository, PriceCardRepository, ProjectRepository, QuotaSnapshotRepository, TaskRepository, UsageRepository, type SqliteDb } from '@roleflock/database';
+import { ConfirmationRepository, EvidenceRepository, LocalKnowledgeRepository, PriceCardRepository, ProjectRepository, QuotaSnapshotRepository, TaskRepository, UsageRepository, type KnowledgeState, type KnowledgeType, type SqliteDb } from '@roleflock/database';
+import { compileContext, ROLE_CONTRACTS, type RoleId } from '@roleflock/context-compiler';
 import { getWorkflowGraph, recommendWorkflow, workflowGraphs } from '@roleflock/graph-core';
 import { budgetStatus } from '@roleflock/usage-ledger';
 import { registerRepository } from '@roleflock/repository-runtime';
@@ -442,5 +443,89 @@ export function registerApi(
       snapshot: JSON.parse(row.snapshotJson) as Record<string, unknown>,
     })),
   );
+  app.get('/api/knowledge', async (request) => {
+    const query = request.query as {
+      projectId?: string;
+      type?: string;
+      state?: KnowledgeState;
+      q?: string;
+    };
+    return new LocalKnowledgeRepository(db).list(query);
+  });
+  app.post('/api/knowledge', async (request, reply) => {
+    const body = request.body as {
+      projectId?: string;
+      type?: KnowledgeType;
+      title?: string;
+      body?: string;
+      provenance?: string;
+      state?: KnowledgeState;
+    };
+    if (!body.type || !body.title || !body.body) {
+      return reply.code(400).send({ error: 'type, title, and body are required' });
+    }
+    const item = new LocalKnowledgeRepository(db).create({
+      id: randomUUID(),
+      projectId: body.projectId,
+      type: body.type,
+      title: body.title,
+      body: body.body,
+      provenance: body.provenance,
+      state: body.state ?? 'candidate',
+      createdAt: now(),
+    });
+    bus.publish('knowledge.created', item);
+    return reply.code(201).send(item);
+  });
+  app.get('/api/roles/contracts', async () => Object.values(ROLE_CONTRACTS));
+  app.get('/api/tasks/:id/context-preview', async (request, reply) => {
+    const task = tasks.get((request.params as { id: string }).id);
+    if (!task) return reply.code(404).send({ error: 'Task not found' });
+    const role = ((request.query as { role?: string }).role ?? 'planner') as RoleId;
+    if (!ROLE_CONTRACTS[role]) return reply.code(400).send({ error: 'Unknown role' });
+    const docs = documents.list(task.id);
+    const knowledge = new LocalKnowledgeRepository(db).list({
+      projectId: task.projectId,
+      state: 'published',
+    });
+    const compiled = compileContext({
+      role,
+      items: [
+        {
+          id: `task:${task.id}`,
+          source: 'task.brief',
+          content: `${task.title}\n${task.brief}`,
+          priority: 100,
+          sensitivity: 'internal',
+        },
+        ...docs
+          .filter((doc) => doc.extractedText)
+          .map((doc) => ({
+            id: `document:${doc.id}`,
+            source: `document:${doc.fileName}`,
+            path: doc.fileName,
+            content: doc.extractedText!.slice(0, 2_000),
+            priority: 50,
+            sensitivity: 'internal' as const,
+          })),
+        ...knowledge.slice(0, 8).map((item) => ({
+          id: `knowledge:${item.id}`,
+          source: `knowledge:${item.type}`,
+          content: `${item.title}\n${item.body}`,
+          priority: 30,
+          sensitivity: 'internal' as const,
+        })),
+      ],
+    });
+    return {
+      role: compiled.role,
+      contract: compiled.contract,
+      totalTokens: compiled.disclosure.totalTokens,
+      totalBytes: compiled.disclosure.totalBytes,
+      entries: compiled.disclosure.entries,
+      omitted: compiled.omitted,
+      exclusions: compiled.disclosure.exclusions,
+    };
+  });
 }
 const now = () => new Date().toISOString();

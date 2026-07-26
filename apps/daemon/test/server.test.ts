@@ -167,6 +167,88 @@ describe('daemon boundary', () => {
       await rm(repoDir, { recursive: true, force: true });
     }
   });
+  it('exposes role contracts and context preview', async () => {
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { execFileSync } = await import('node:child_process');
+    const dataDir = await mkdtemp(join(tmpdir(), 'rf-ctx-data-'));
+    const repoDir = await mkdtemp(join(tmpdir(), 'rf-ctx-repo-'));
+    execFileSync('git', ['init'], { cwd: repoDir });
+    execFileSync('git', ['config', 'user.email', 'test@roleflock.local'], { cwd: repoDir });
+    execFileSync('git', ['config', 'user.name', 'RoleFlock'], { cwd: repoDir });
+    await writeFile(join(repoDir, 'README.md'), '# fixture\n');
+    execFileSync('git', ['add', 'README.md'], { cwd: repoDir });
+    execFileSync('git', ['commit', '-m', 'init'], { cwd: repoDir });
+    const session = { token: 'test-token', csrf: 'test-csrf' };
+    const instance = await createServer({ dataDir, session });
+    const headers = {
+      'x-roleflock-token': session.token,
+      'x-roleflock-csrf': session.csrf,
+      'content-type': 'application/json',
+    };
+    try {
+      const contracts = await instance.app.inject({
+        method: 'GET',
+        url: '/api/roles/contracts',
+        headers,
+      });
+      expect(contracts.statusCode).toBe(200);
+      expect((contracts.json() as unknown[]).length).toBeGreaterThan(0);
+
+      const project = await instance.app.inject({
+        method: 'POST',
+        url: '/api/projects',
+        headers,
+        payload: { path: repoDir },
+      });
+      const projectId = (project.json() as { id: string }).id;
+      await instance.app.inject({
+        method: 'POST',
+        url: '/api/knowledge',
+        headers,
+        payload: {
+          projectId,
+          type: 'coding_convention',
+          title: 'Prefer leased writes',
+          body: 'Writer paths must use the permission envelope.',
+          state: 'published',
+          provenance: 'test',
+        },
+      });
+      const task = await instance.app.inject({
+        method: 'POST',
+        url: '/api/tasks',
+        headers,
+        payload: {
+          projectId,
+          type: 'feature',
+          title: 'Context preview',
+          brief: 'Compile context',
+          mode: 'direct',
+        },
+      });
+      const taskId = (task.json() as { id: string }).id;
+      const preview = await instance.app.inject({
+        method: 'GET',
+        url: `/api/tasks/${taskId}/context-preview?role=planner`,
+        headers,
+      });
+      expect(preview.statusCode).toBe(200);
+      const body = preview.json() as {
+        totalTokens: number;
+        entries: unknown[];
+        exclusions: string[];
+      };
+      expect(body.totalTokens).toBeGreaterThan(0);
+      expect(body.entries.length).toBeGreaterThan(0);
+      expect(body.exclusions).toContain('.env');
+    } finally {
+      await instance.app.close();
+      await rm(dataDir, { recursive: true, force: true });
+      await rm(repoDir, { recursive: true, force: true });
+    }
+  });
   it('exposes authenticated choose-directory dialog endpoint', async () => {
     const { app } = await server();
     expect(

@@ -1097,6 +1097,60 @@ function Evidence() {
           <EvidenceSection title="Ledger entries" items={usage?.entries ?? []} />
         </section>
         <EvidenceSection title="Disclosures" items={data?.disclosures ?? []} />
+        <section className="evidence-section">
+          <h3>Context inspector</h3>
+          {(data?.disclosures ?? []).length ? (
+            (data?.disclosures ?? []).map((row, index) => {
+              const selectedRaw = parseJsonField(
+                (row as { selected_context_json?: string }).selected_context_json,
+              );
+              const selected =
+                selectedRaw && !Array.isArray(selectedRaw)
+                  ? (selectedRaw as Record<string, unknown>)
+                  : {};
+              const exclusions = parseJsonField(
+                (row as { exclusions_json?: string }).exclusions_json,
+              );
+              const entries = Array.isArray(selected.entries)
+                ? (selected.entries as Array<{ source?: string; tokens?: number }>)
+                : [];
+              const omitted = Array.isArray(selected.omitted)
+                ? (selected.omitted as Array<{ id?: string; reason?: string }>)
+                : [];
+              return (
+                <article className="evidence-item" key={String((row as { id?: string }).id ?? index)}>
+                  <p>
+                    <span>role</span> {String(selected.role ?? '—')}
+                  </p>
+                  <p>
+                    <span>tokens</span> {String(selected.totalTokens ?? '—')} ·{' '}
+                    <span>bytes</span> {String(selected.totalBytes ?? '—')}
+                  </p>
+                  <p>
+                    <span>sources</span>{' '}
+                    {entries.length
+                      ? entries
+                          .map((entry) => `${entry.source ?? '?'} (${entry.tokens ?? 0} tok)`)
+                          .join(' · ')
+                      : '—'}
+                  </p>
+                  <p>
+                    <span>omitted</span>{' '}
+                    {omitted.length
+                      ? omitted.map((item) => `${item.id}: ${item.reason}`).join(' · ')
+                      : 'none'}
+                  </p>
+                  <p>
+                    <span>exclusions</span>{' '}
+                    {Array.isArray(exclusions) ? exclusions.join(', ') : formatValue(exclusions)}
+                  </p>
+                </article>
+              );
+            })
+          ) : (
+            <Empty message="No disclosure manifests yet. Start a task to compile context." />
+          )}
+        </section>
         <details className="raw-json">
           <summary>Raw JSON</summary>
           <pre>{JSON.stringify({ evidence: data, usage }, null, 2)}</pre>
@@ -1311,6 +1365,17 @@ function EvidenceSection({ title, items }: { title: string; items: Array<Record<
 
 function formatValue(value: unknown): string {
   return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+function parseJsonField(value: unknown): Record<string, unknown> | unknown[] | Record<string, never> {
+  if (typeof value !== 'string') {
+    return (value as Record<string, unknown> | unknown[] | undefined) ?? {};
+  }
+  try {
+    return JSON.parse(value) as Record<string, unknown> | unknown[];
+  } catch {
+    return {};
+  }
 }
 
 function formatUsage(usage: Record<string, unknown>): string {
