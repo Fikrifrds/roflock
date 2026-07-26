@@ -1489,3 +1489,13 @@ pre {
   margin-top: var(--space-1);
   padding-top: var(--space-3);
 }
+
+/* The provider's own refusal text. Monospace because it is a machine message,
+   and wrapped because vendor errors run long. */
+.provider-detail {
+  margin-top: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  overflow-wrap: anywhere;
+}

@@ -68,8 +68,11 @@ export class ClaudeAdapter implements ProviderAdapter {
         family: 'sonnet',
       },
       {
+        // Deliberately no note about credits: whether one is needed depends on
+        // the plan, and a wrong hint is worse than none. If an account cannot
+        // use it, the CLI says so and that message is surfaced.
         id: 'fable',
-        displayName: 'Fable — hardest, longest-running tasks (needs credits)',
+        displayName: 'Fable — most capable for the hardest, longest tasks',
         family: 'fable',
       },
       {

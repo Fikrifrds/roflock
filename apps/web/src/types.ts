@@ -141,10 +141,28 @@ export type Workflow = {
 };
 
 /** Read-only projection of a graph run, from `/api/tasks/:id/graph`. */
+export type BlockedRun = {
+  role: string;
+  reason: string;
+  resumable: boolean;
+  refusals: Array<{
+    providerId: string;
+    providerDisplayName: string;
+    modelId: string;
+    modelDisplayName: string;
+    reason: string;
+    detail: string;
+    /** When the candidate becomes eligible again. Absent if it never ran. */
+    until?: string;
+  }>;
+};
+
 export type GraphRunView = {
   taskId: string;
   graphRunId: string | null;
   runState: string;
+  /** Set when the run stopped because no configured provider would answer. */
+  blocked: BlockedRun | null;
   graph: {
     id: string;
     version: string;

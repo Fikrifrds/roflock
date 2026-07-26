@@ -65,6 +65,41 @@ interface VerificationSpec {
   label: string;
 }
 
+export interface ProviderRefusal {
+  providerId: string;
+  providerDisplayName: string;
+  modelId: string;
+  modelDisplayName: string;
+  reason: string;
+  detail: string;
+  /** When the candidate becomes eligible again. Absent if it never ran. */
+  until?: string;
+}
+
+/**
+ * Every candidate configured for a role refused, and none of the refusals was
+ * worth retrying.
+ *
+ * Distinct from an ordinary node failure because the remedy is different and so
+ * is the state of the work: nothing the flock produced is wrong, the operator
+ * simply has to point the role at a model that will answer. The run is left
+ * resumable so doing that does not re-pay for the nodes that already succeeded.
+ */
+export class ProviderUnavailableError extends Error {
+  constructor(
+    readonly role: string,
+    readonly refusals: ProviderRefusal[],
+  ) {
+    const summary = refusals.length
+      ? refusals
+          .map((r) => `${r.providerDisplayName}/${r.modelDisplayName} (${r.reason.replaceAll('_', ' ')})`)
+          .join(', ')
+      : 'no candidate was reachable';
+    super(`No provider available for ${role}: ${summary}`);
+    this.name = 'ProviderUnavailableError';
+  }
+}
+
 export class Orchestrator {
   private readonly active = new Map<string, AbortController>();
   private readonly acceptanceWaiters = new Map<
@@ -808,9 +843,32 @@ export class Orchestrator {
     );
 
     const failed = results.find((r) => r.status === 'failed');
-    this.db
-      .prepare('UPDATE graph_runs SET state = ?, completed_at = ? WHERE id = ?')
-      .run(failed ? 'failed' : 'completed', now(), graphRunId);
+    const blocked = failed?.error instanceof ProviderUnavailableError ? failed.error : undefined;
+
+    if (blocked) {
+      // `interrupted`, not `failed`: the completed nodes are still good, so the
+      // next start resumes from them once the operator has pointed the role at
+      // a model that answers.
+      this.db
+        .prepare(
+          `UPDATE graph_runs
+             SET state = 'interrupted', completed_at = ?,
+                 blocked_role = ?, blocked_reason = ?, blocked_detail = ?
+           WHERE id = ?`,
+        )
+        .run(
+          now(),
+          blocked.role,
+          blocked.refusals[0]?.reason ?? 'unavailable',
+          JSON.stringify(blocked.refusals),
+          graphRunId,
+        );
+    } else {
+      this.db
+        .prepare('UPDATE graph_runs SET state = ?, completed_at = ? WHERE id = ?')
+        .run(failed ? 'failed' : 'completed', now(), graphRunId);
+    }
+
     if (failed) {
       const message =
         failed.error instanceof Error
@@ -818,9 +876,15 @@ export class Orchestrator {
           : typeof failed.error === 'string'
             ? failed.error
             : `Node ${failed.nodeId} failed`;
-      this.recordFailure(task.id, `Node ${failed.nodeId} failed`, message);
+      this.recordFailure(
+        task.id,
+        blocked ? `No provider available for ${blocked.role}` : `Node ${failed.nodeId} failed`,
+        blocked
+          ? `${message}\n\nChange the model for this role on the Roles page, then start the task again — it resumes from the steps that already finished.`
+          : message,
+      );
       if (!controller.signal.aborted) this.setTaskState(task.id, 'failed');
-      throw new Error(message);
+      throw failed.error instanceof Error ? failed.error : new Error(message);
     }
 
     const taskNow = this.tasks.get(task.id);
@@ -919,7 +983,7 @@ export class Orchestrator {
     this.setTaskState(task.id, 'running');
   }
 
-  private async resolveRoute(role: RoutedRole): Promise<RoleRoute> {
+  private async resolveRoute(role: RoutedRole): Promise<RoleRoute | null> {
     return this.router.route(role, { forceFake: this.forceFake });
   }
 
@@ -947,17 +1011,39 @@ export class Orchestrator {
     onRoute?: (route: RoleRoute) => void;
   }): Promise<{ output: string; route: RoleRoute }> {
     const attempted = new Set<string>();
+    const refusals: ProviderRefusal[] = [];
 
     for (;;) {
       const route = await this.resolveRoute(input.role);
+      if (!route) {
+        // Nothing the operator configured can serve this turn. Stop and say
+        // what refused, rather than inventing an answer.
+        //
+        // A candidate that failed this turn is already in `refusals` with the
+        // provider's own message; the router then reports it again as "cooling
+        // down". Listing both would show the same model twice and bury the
+        // message that explains it, so only genuinely untried candidates are
+        // added here.
+        const tried = new Set(refusals.map((r) => `${r.providerId}:${r.modelId}`));
+        const untried = this.router
+          .skippedFor(input.role)
+          .filter((skip) => !tried.has(`${skip.providerId}:${skip.modelId}`))
+          .map((skip) => ({
+            providerId: skip.providerId,
+            providerDisplayName: skip.providerId,
+            modelId: skip.modelId,
+            modelDisplayName: skip.modelId,
+            reason: skip.reason,
+            detail: skip.detail ?? '',
+          }));
+        throw new ProviderUnavailableError(input.role, [...refusals, ...untried]);
+      }
       const key = `${route.providerId}:${route.modelId}`;
 
       // The router can only skip what it knows is unavailable. If it hands back
       // a candidate this turn already tried, the list is exhausted.
       if (attempted.has(key)) {
-        throw new Error(
-          `Every provider configured for ${input.role} refused this turn (last: ${route.providerDisplayName}).`,
-        );
+        throw new ProviderUnavailableError(input.role, [...refusals]);
       }
       attempted.add(key);
       input.onRoute?.(route);
@@ -988,6 +1074,16 @@ export class Orchestrator {
           message,
         );
         if (!until) throw error;
+
+        refusals.push({
+          providerId: route.providerId,
+          providerDisplayName: route.providerDisplayName,
+          modelId: route.modelId,
+          modelDisplayName: route.modelDisplayName,
+          reason: kind,
+          detail: message.slice(0, 400),
+          until,
+        });
 
         this.evidence.addFinding({
           id: randomUUID(),
@@ -1196,7 +1292,9 @@ export class Orchestrator {
     nodeRunId: string,
     role: string,
     phase: ActiveExecution['phase'],
-    route?: RoleRoute,
+    // Null when no provider could be resolved for the turn; the projection
+    // falls back to placeholder names rather than claiming a provider ran.
+    route?: RoleRoute | null,
   ): void {
     const timestamp = now();
     const costs = this.usage.summarize(task.id);

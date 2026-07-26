@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Field, FileDrop } from '../components/Field.js';
+import { BlockedBanner } from '../components/BlockedBanner.js';
 import { GraphRunView } from '../components/GraphRunView.js';
 import { Select } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
@@ -9,7 +10,13 @@ import { Empty, Section, StatusPill } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { DOCUMENT_AUTHORITIES, DOCUMENT_KINDS } from '../lib/choices.js';
 import { formatPhase, formatTaskState, isTerminalState, taskStateTone } from '../lib/format.js';
-import type { ActiveExecution, Approval, Task, TaskDocument } from '../types.js';
+import type {
+  ActiveExecution,
+  Approval,
+  GraphRunView as GraphRunViewData,
+  Task,
+  TaskDocument,
+} from '../types.js';
 
 export function TaskDetail() {
   const { id = '' } = useParams();
@@ -32,6 +39,11 @@ export function TaskDetail() {
   const { data: taskDocuments = [] } = useData<TaskDocument[]>(
     ['task-documents', id],
     `/api/tasks/${id}/documents`,
+    Boolean(id),
+  );
+  const { data: runView } = useData<GraphRunViewData>(
+    ['task-graph', id],
+    `/api/tasks/${id}/graph`,
     Boolean(id),
   );
   const { data: evidence } = useData<{
@@ -85,6 +97,9 @@ export function TaskDetail() {
   };
 
   const finished = isTerminalState(task.state);
+  // Only worth showing while the task is stopped; a run that has moved on has
+  // already resolved it.
+  const blocked = task.state === 'failed' ? (runView?.blocked ?? null) : null;
   const waiting =
     task.state === 'awaiting_confirmation' ||
     task.state === 'awaiting_acceptance' ||
@@ -103,10 +118,18 @@ export function TaskDetail() {
           </small>
         </div>
         <p className="lede">{task.brief}</p>
-        {actionError || latestError ? (
+        {actionError || (latestError && !blocked) ? (
           <p className="error" role="alert">
             {actionError || latestError?.details || latestError?.summary}
           </p>
+        ) : null}
+
+        {blocked ? (
+          <BlockedBanner
+            blocked={blocked}
+            retrying={starting}
+            onRetry={() => void action('start')}
+          />
         ) : null}
 
         <div className="actions primary-actions">

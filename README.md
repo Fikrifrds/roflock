@@ -99,8 +99,10 @@ Shipping defaults:
 | Reviewer | Cursor · `gpt-5.6-terra-medium` | `claude-opus-5-low`, then Codex `gpt-5.6-terra` |
 | Verifier | Cursor · `gpt-5.6-terra-high` | `claude-opus-5-medium`, then Codex `gpt-5.6-terra` |
 
-Every list ends in the deterministic fake provider, so a run degrades to
-something inspectable rather than failing outright.
+The fake provider is deliberately not in any list. If every candidate for a role
+refuses, the run **stops** and shows what each provider said — fabricating
+plausible output when a real model was asked for would hide the one thing you
+need to act on. Use `ROLEFLOCK_FORCE_FAKE=1` to run without a CLI on purpose.
 
 Where a model is reachable through two providers it appears twice on purpose —
 Cursor and Codex meter separately, so an exhausted plan costs the run a
@@ -110,6 +112,13 @@ When a provider reports exhausted quota, an unknown model, or a dead session,
 that provider+model is parked on a cooldown (quota 1 h, unknown model 3 h) and
 the next candidate runs. The substitution is written to the task's evidence and
 the audit log — it is never silent. Lift a cooldown early from the Roles page.
+
+### When everything refuses
+
+The task stops and shows each provider's own error text, with a link straight to
+the role that needs changing. The steps that already finished are kept: the run
+is left resumable, so after you pick a model that answers, **Resume the run**
+picks up where it stopped instead of repeating work you already paid for.
 
 Effort is expressed differently per CLI: Cursor encodes it in the model id
 (`claude-opus-5-high` vs `-low`), while Claude Code and Codex take it as a

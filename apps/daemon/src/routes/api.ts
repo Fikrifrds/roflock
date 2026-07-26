@@ -328,7 +328,16 @@ export function registerApi(
 
     const run = db
       .prepare('SELECT * FROM graph_runs WHERE task_id = ? ORDER BY created_at DESC LIMIT 1')
-      .get(taskId) as { id: string; state: string; graph_version_id: string } | undefined;
+      .get(taskId) as
+      | {
+          id: string;
+          state: string;
+          graph_version_id: string;
+          blocked_role: string | null;
+          blocked_reason: string | null;
+          blocked_detail: string | null;
+        }
+      | undefined;
     const nodeRuns = run
       ? (db
           .prepare(
@@ -347,10 +356,29 @@ export function registerApi(
     const latest = new Map<string, (typeof nodeRuns)[number]>();
     for (const nodeRun of nodeRuns) latest.set(nodeRun.node_key, nodeRun);
 
+    // Present only when the run stopped because no configured provider would
+    // answer. The remedy is the operator's, so the UI needs enough to say what
+    // refused and point at where to change it.
+    const blocked = run?.blocked_role
+      ? {
+          role: run.blocked_role,
+          reason: run.blocked_reason ?? 'unavailable',
+          refusals: ((): unknown[] => {
+            try {
+              return JSON.parse(run.blocked_detail ?? '[]') as unknown[];
+            } catch {
+              return [];
+            }
+          })(),
+          resumable: run.state === 'interrupted',
+        }
+      : null;
+
     return {
       taskId,
       graphRunId: run?.id ?? null,
       runState: run?.state ?? 'not_started',
+      blocked,
       graph: {
         id: graph.id,
         version: graph.version,

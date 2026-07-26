@@ -11,6 +11,7 @@ import {
 import { ProviderRegistry } from '../src/services/provider-registry.js';
 import { RoleRouter, cooldownMinutesFor } from '../src/services/role-routing.js';
 import { DEFAULT_ROLE_ASSIGNMENTS } from '../src/services/role-defaults.js';
+import { ProviderUnavailableError } from '../src/services/orchestrator.js';
 
 async function harness() {
   const dataDir = await mkdtemp(join(tmpdir(), 'rf-roles-'));
@@ -20,10 +21,16 @@ async function harness() {
 }
 
 describe('role defaults', () => {
-  it('gives every role an ordered list ending in the deterministic provider', () => {
+  it('gives every role a fallback, and never the fake provider', () => {
     for (const [role, candidates] of Object.entries(DEFAULT_ROLE_ASSIGNMENTS)) {
       expect(candidates.length, `${role} needs a fallback`).toBeGreaterThan(1);
-      expect(candidates.at(-1)?.providerConnectionId, `${role} must end in fake`).toBe('fake');
+      // Falling through to the fake provider would fabricate plausible output
+      // when a real model was asked for, hiding the one thing the operator
+      // needs to act on. The run must stop instead.
+      expect(
+        candidates.some((c) => c.providerConnectionId === 'fake'),
+        `${role} must not silently degrade to fake`,
+      ).toBe(false);
     }
   });
 
@@ -75,9 +82,9 @@ describe('RoleRouter', () => {
 
   it('forceFake selects the fake provider without consulting the list', async () => {
     const route = await h.router.route('planner', { forceFake: true });
-    expect(route.providerId).toBe('fake');
-    expect(route.adapter).toBeInstanceOf(FakeProvider);
-    expect(route.fallbackUsed).toBe(false);
+    expect(route?.providerId).toBe('fake');
+    expect(route?.adapter).toBeInstanceOf(FakeProvider);
+    expect(route?.fallbackUsed).toBe(false);
   });
 
   it('routes to the first healthy candidate and reports what it passed over', async () => {
@@ -87,9 +94,9 @@ describe('RoleRouter', () => {
     ]);
 
     const route = await h.router.route('planner');
-    expect(route.providerId).toBe('fake');
-    expect(route.fallbackUsed).toBe(true);
-    expect(route.skipped).toEqual([
+    expect(route?.providerId).toBe('fake');
+    expect(route?.fallbackUsed).toBe(true);
+    expect(route?.skipped).toEqual([
       expect.objectContaining({ providerId: 'nonexistent', reason: 'unknown_provider' }),
     ]);
   });
@@ -101,15 +108,15 @@ describe('RoleRouter', () => {
     ]);
 
     const route = await h.router.route('reviewer');
-    expect(route.modelId).toBe('phase0-fake');
-    expect(route.skipped[0]).toMatchObject({ reason: 'disabled' });
+    expect(route?.modelId).toBe('phase0-fake');
+    expect(route?.skipped[0]).toMatchObject({ reason: 'disabled' });
   });
 
   it('carries the configured effort onto the route', async () => {
     h.router.replaceRole('writer', [
       { providerConnectionId: 'fake', modelId: 'phase0-fake', effort: 'xhigh' },
     ]);
-    expect((await h.router.route('writer')).effort).toBe('xhigh');
+    expect((await h.router.route('writer'))?.effort).toBe('xhigh');
   });
 
   it('parks a quota-exhausted candidate and moves to the next one', async () => {
@@ -117,7 +124,7 @@ describe('RoleRouter', () => {
       { providerConnectionId: 'fake', modelId: 'expensive' },
       { providerConnectionId: 'fake', modelId: 'phase0-fake' },
     ]);
-    expect((await h.router.route('planner')).modelId).toBe('expensive');
+    expect((await h.router.route('planner'))?.modelId).toBe('expensive');
 
     const until = h.router.recordFailure(
       'planner',
@@ -129,9 +136,9 @@ describe('RoleRouter', () => {
     expect(until).toBeTruthy();
 
     const after = await h.router.route('planner');
-    expect(after.modelId).toBe('phase0-fake');
-    expect(after.fallbackUsed).toBe(true);
-    expect(after.skipped[0]).toMatchObject({ reason: 'cooling_down' });
+    expect(after?.modelId).toBe('phase0-fake');
+    expect(after?.fallbackUsed).toBe(true);
+    expect(after?.skipped[0]).toMatchObject({ reason: 'cooling_down' });
   });
 
   it('does not park a candidate for a failure worth retrying', () => {
@@ -146,10 +153,10 @@ describe('RoleRouter', () => {
       { providerConnectionId: 'fake', modelId: 'phase0-fake' },
     ]);
     h.router.recordFailure('planner', 'fake', 'paused', 'quota_exhausted');
-    expect((await h.router.route('planner')).modelId).toBe('phase0-fake');
+    expect((await h.router.route('planner'))?.modelId).toBe('phase0-fake');
 
     h.router.clearCooldown('fake', 'paused');
-    expect((await h.router.route('planner')).modelId).toBe('paused');
+    expect((await h.router.route('planner'))?.modelId).toBe('paused');
   });
 
   it('never shortens a cooldown that is already running', () => {
@@ -176,19 +183,18 @@ describe('RoleRouter', () => {
 
     // Restarting must not re-run into a wall the provider already described.
     const restarted = new RoleRouter(h.db, h.registry);
-    expect((await restarted.route('planner')).modelId).toBe('phase0-fake');
+    expect((await restarted.route('planner'))?.modelId).toBe('phase0-fake');
   });
 
-  it('falls back to the deterministic provider when everything is skipped', async () => {
+  it('returns nothing when every candidate is skipped, rather than inventing one', async () => {
     h.router.replaceRole('verifier', [
       { providerConnectionId: 'ghost-a', modelId: 'a' },
       { providerConnectionId: 'ghost-b', modelId: 'b' },
     ]);
-    const route = await h.router.route('verifier');
-    expect(route.providerId).toBe('fake');
-    // Degrading silently would be the most misleading outcome available.
-    expect(route.fallbackUsed).toBe(true);
-    expect(route.skipped).toHaveLength(2);
+    // The caller stops the run on null. Quietly substituting the fake provider
+    // here would produce plausible output for a model that never ran.
+    expect(await h.router.route('verifier')).toBeNull();
+    expect(h.router.skippedFor('verifier')).toHaveLength(2);
   });
 
   it('resets a role to its shipping default', () => {
@@ -255,5 +261,44 @@ describe('refusals that exit successfully', () => {
     expect(refusalInOutput('warning: node 24 is experimental')).toBeUndefined();
     expect(refusalInOutput('   ')).toBeUndefined();
     expect(refusalInOutput(undefined)).toBeUndefined();
+  });
+});
+
+describe('ProviderUnavailableError', () => {
+  it('names the role and every provider that refused', () => {
+    const error = new ProviderUnavailableError('planner', [
+      {
+        providerId: 'cursor',
+        providerDisplayName: 'Cursor Agent CLI',
+        modelId: 'claude-opus-5-high',
+        modelDisplayName: 'Opus 5 1M',
+        reason: 'quota_exhausted',
+        detail: 'usage limit reached',
+        until: new Date().toISOString(),
+      },
+      {
+        providerId: 'codex',
+        providerDisplayName: 'Codex CLI',
+        modelId: 'gpt-5.6-sol',
+        modelDisplayName: 'GPT-5.6 Sol',
+        reason: 'unknown_model',
+        detail: 'unknown model',
+        until: new Date().toISOString(),
+      },
+    ]);
+
+    // The operator has to act on this, so the message must say what to fix
+    // rather than only that something went wrong.
+    expect(error.message).toContain('planner');
+    expect(error.message).toContain('Cursor Agent CLI/Opus 5 1M (quota exhausted)');
+    expect(error.message).toContain('Codex CLI/GPT-5.6 Sol (unknown model)');
+    expect(error.role).toBe('planner');
+    expect(error.refusals).toHaveLength(2);
+  });
+
+  it('reads sensibly when nothing was even reachable', () => {
+    expect(new ProviderUnavailableError('writer', []).message).toContain(
+      'no candidate was reachable',
+    );
   });
 });

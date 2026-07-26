@@ -73,6 +73,7 @@ export class RoleRouter {
   private readonly assignments: RoleAssignmentRepository;
   private readonly cooldowns: ProviderCooldownRepository;
   private readonly audit: AuditRepository;
+  private readonly lastSkipped = new Map<RoutedRole, SkippedCandidate[]>();
 
   constructor(
     db: SqliteDb,
@@ -184,7 +185,16 @@ export class RoleRouter {
     return until;
   }
 
-  async route(role: RoutedRole, options: { forceFake?: boolean } = {}): Promise<RoleRoute> {
+  /**
+   * Returns the provider that should run this turn, or `null` when nothing the
+   * operator configured can serve it.
+   *
+   * `null` rather than a silent downgrade to the fake provider: fabricating
+   * plausible output when a real model was asked for is the most misleading
+   * outcome available, and it hides the one thing the operator needs to know.
+   * The caller stops the run and surfaces the refusals instead.
+   */
+  async route(role: RoutedRole, options: { forceFake?: boolean } = {}): Promise<RoleRoute | null> {
     if (options.forceFake) return this.fakeRoute(role, []);
 
     const at = now();
@@ -248,7 +258,13 @@ export class RoleRouter {
       };
     }
 
-    return this.fakeRoute(role, skipped);
+    this.lastSkipped.set(role, skipped);
+    return null;
+  }
+
+  /** Why each candidate was passed over on the most recent failed route. */
+  skippedFor(role: RoutedRole): SkippedCandidate[] {
+    return this.lastSkipped.get(role) ?? [];
   }
 
   private async displayName(providerId: string): Promise<string> {
@@ -262,10 +278,8 @@ export class RoleRouter {
   }
 
   /**
-   * Last resort, reached when every configured candidate was skipped. The run
-   * continues deterministically instead of failing, but `fallbackUsed` is set
-   * and the skip list is attached: a silent downgrade to the fake provider
-   * would be the most misleading outcome available.
+   * Only reached through `forceFake`, which is an explicit offline/test mode.
+   * It is deliberately not a fallback: see `route`.
    */
   private fakeRoute(role: RoutedRole, skipped: SkippedCandidate[]): RoleRoute {
     return {

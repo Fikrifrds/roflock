@@ -29,8 +29,10 @@ export const ROLE_DESCRIPTIONS: Record<RoutedRole, string> = {
  * Cursor encodes effort in the model id; Codex and Claude take it as a separate
  * setting. Both spellings appear below because both are what those CLIs expect.
  *
- * `fake` is last everywhere. It is deterministic and free, so a run degrades to
- * something inspectable rather than failing outright when nothing else answers.
+ * The fake provider is deliberately absent. If every candidate refuses, the run
+ * stops and says which provider said what — fabricating plausible output when a
+ * real model was asked for would hide exactly the thing the operator needs to
+ * act on. `ROLEFLOCK_FORCE_FAKE=1` is the explicit way to run without a CLI.
  */
 export const DEFAULT_ROLE_ASSIGNMENTS: Record<RoutedRole, RoleCandidateInput[]> = {
   planner: [
@@ -38,25 +40,21 @@ export const DEFAULT_ROLE_ASSIGNMENTS: Record<RoutedRole, RoleCandidateInput[]> 
     { providerConnectionId: 'cursor', modelId: 'gpt-5.6-sol-high', effort: 'high' },
     { providerConnectionId: 'codex', modelId: 'gpt-5.6-sol', effort: 'high' },
     { providerConnectionId: 'claude', modelId: 'opus', effort: 'high' },
-    { providerConnectionId: 'fake', modelId: 'phase0-fake' },
   ],
   writer: [
     { providerConnectionId: 'cursor', modelId: 'cursor-grok-4.5-high', effort: 'high' },
     { providerConnectionId: 'cursor', modelId: 'claude-opus-5-high', effort: 'high' },
     { providerConnectionId: 'cursor', modelId: 'composer-2.5', effort: 'medium' },
-    { providerConnectionId: 'fake', modelId: 'phase0-fake' },
   ],
   reviewer: [
     { providerConnectionId: 'cursor', modelId: 'gpt-5.6-terra-medium', effort: 'medium' },
     { providerConnectionId: 'cursor', modelId: 'claude-opus-5-low', effort: 'low' },
     { providerConnectionId: 'codex', modelId: 'gpt-5.6-terra', effort: 'medium' },
-    { providerConnectionId: 'fake', modelId: 'phase0-fake' },
   ],
   verifier: [
     { providerConnectionId: 'cursor', modelId: 'gpt-5.6-terra-high', effort: 'high' },
     { providerConnectionId: 'cursor', modelId: 'claude-opus-5-medium', effort: 'medium' },
     { providerConnectionId: 'codex', modelId: 'gpt-5.6-terra', effort: 'high' },
-    { providerConnectionId: 'fake', modelId: 'phase0-fake' },
   ],
 };
 
