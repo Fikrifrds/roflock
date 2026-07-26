@@ -43,6 +43,17 @@ export class ConfirmationRepository {
     return rows.map(mapConfirmation);
   }
 
+  listPendingByTask(taskId: string): ConfirmationRequest[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM confirmation_requests
+         WHERE task_id = ? AND status = 'pending'
+         ORDER BY created_at ASC`,
+      )
+      .all(taskId) as Array<Record<string, unknown>>;
+    return rows.map(mapConfirmation);
+  }
+
   get(id: string): ConfirmationRequest | undefined {
     const row = this.db
       .prepare(`SELECT * FROM confirmation_requests WHERE id = ?`)

@@ -21,7 +21,14 @@ export class WorktreeRepository {
       .prepare(
         `INSERT INTO worktrees
           (id, task_id, project_id, path, branch_name, base_commit, writer_lease_id, status, created_at, archived_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(task_id) DO UPDATE SET
+           path = excluded.path,
+           branch_name = excluded.branch_name,
+           base_commit = excluded.base_commit,
+           writer_lease_id = excluded.writer_lease_id,
+           status = excluded.status,
+           archived_at = excluded.archived_at`,
       )
       .run(
         record.id,
@@ -35,7 +42,7 @@ export class WorktreeRepository {
         record.createdAt,
         record.archivedAt ?? null,
       );
-    return record;
+    return this.getByTask(record.taskId) ?? record;
   }
 
   getByTask(taskId: string): WorktreeRecord | undefined {

@@ -12,4 +12,17 @@ describe('daemon boundary', () => {
   it('defaults to loopback-only bind', async () => expect((await server()).host).toBe('127.0.0.1'));
   it('has no raw shell execution endpoint', async () => { const { app } = await server(); expect((await app.inject({ method: 'POST', url: '/api/shell', headers: { 'x-roleflock-token': 'test-token', 'x-roleflock-csrf': 'test-csrf' } })).statusCode).toBe(404); });
   it('rejects unauthenticated API requests', async () => { const { app } = await server(); expect((await app.inject({ method: 'GET', url: '/api/projects' })).statusCode).toBe(401); });
+  it('exposes authenticated choose-directory dialog endpoint', async () => {
+    const { app } = await server();
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/dialogs/choose-directory',
+          headers: { 'content-type': 'application/json' },
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(401);
+  });
 });

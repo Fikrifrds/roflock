@@ -11,6 +11,7 @@ import { authenticate, createSession, isLocalOrigin, type Session } from './auth
 import { registerApi } from './routes/api.js';
 import { EventBus } from './services/event-bus.js';
 import { Orchestrator } from './services/orchestrator.js';
+import { ProviderRegistry } from './services/provider-registry.js';
 
 export interface ServerOptions { dataDir?: string; host?: string; port?: number; session?: Session; }
 export async function createServer(options: ServerOptions = {}): Promise<{ app: FastifyInstance; session: Session; host: string; port: number }> {
@@ -29,7 +30,8 @@ export async function createServer(options: ServerOptions = {}): Promise<{ app: 
   reconcileOrphanedProcesses(db);
   const bus = new EventBus();
   const orchestrator = new Orchestrator(db, bus, join(dataDir, 'worktrees'));
-  registerApi(app, db, session, bus, orchestrator);
+  const providers = new ProviderRegistry();
+  registerApi(app, db, session, bus, orchestrator, providers);
   const webDist = join(process.cwd(), 'apps', 'web', 'dist');
   if (existsSync(webDist)) await app.register(statik, { root: webDist, wildcard: false });
   app.addHook('onClose', async () => db.close());

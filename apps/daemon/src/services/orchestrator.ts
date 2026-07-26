@@ -18,7 +18,7 @@ import {
   type SqliteDb,
 } from '@roleflock/database';
 import { runCommand } from '@roleflock/command-runner';
-import { bugFixGraph } from '@roleflock/graph-core';
+import { getWorkflowGraph, type WorkflowGraph } from '@roleflock/graph-core';
 import { runSequentialGraph } from '@roleflock/graph-runtime';
 import {
   captureDiff,
@@ -28,6 +28,13 @@ import {
 } from '@roleflock/repository-runtime';
 import { FakeProvider } from '@roleflock/provider-core';
 import { EventBus } from './event-bus.js';
+
+interface PreparedRun {
+  graphRunId: string;
+  graph: WorkflowGraph;
+  worktreePath: string;
+  baseCommit: string;
+}
 
 export class Orchestrator {
   private readonly active = new Map<string, AbortController>();
@@ -68,14 +75,35 @@ export class Orchestrator {
     mkdirSync(worktreeBaseDir, { recursive: true });
   }
 
-  start(task: Task, repositoryPath: string, baseBranch: string): void {
-    if (task.type !== 'bug_fix') throw new Error('Phase 0 supports bug_fix tasks only');
+  /** Awaits setup only; graph continues in background. */
+  async start(
+    task: Task,
+    repositoryPath: string,
+    baseBranch: string,
+  ): Promise<{ graphRunId: string }> {
     if (this.active.has(task.id)) throw new Error('Task is already running');
     const controller = new AbortController();
     this.active.set(task.id, controller);
-    void this.run(task, repositoryPath, baseBranch, controller).finally(() =>
-      this.active.delete(task.id),
-    );
+
+    try {
+      const prepared = await this.prepareRun(task, repositoryPath, baseBranch);
+      void this.executeGraph(task, prepared, controller)
+        .catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : 'Task execution failed';
+          this.recordFailure(task.id, 'Task failed', message);
+          if (!controller.signal.aborted) this.setTaskState(task.id, 'failed');
+        })
+        .finally(() => {
+          this.active.delete(task.id);
+        });
+      return { graphRunId: prepared.graphRunId };
+    } catch (error) {
+      this.active.delete(task.id);
+      const message = error instanceof Error ? error.message : 'Task failed to start';
+      this.recordFailure(task.id, 'Task failed to start', message);
+      this.setTaskState(task.id, 'failed');
+      throw error;
+    }
   }
 
   control(taskId: string, commandType: string): void {
@@ -125,23 +153,39 @@ export class Orchestrator {
     if (request) this.setTaskState(request.taskId, 'running');
   }
 
-  private async run(
+  private async prepareRun(
     task: Task,
     repositoryPath: string,
     baseBranch: string,
-    controller: AbortController,
-  ): Promise<void> {
+  ): Promise<PreparedRun> {
     const graphRunId = randomUUID();
+    const graphMode =
+      task.workflowGraphVersionId === 'direct' ||
+      task.workflowGraphVersionId === 'fast' ||
+      task.workflowGraphVersionId === 'standard' ||
+      task.workflowGraphVersionId === 'bug_fix'
+        ? task.workflowGraphVersionId
+        : task.type === 'bug_fix'
+          ? 'bug_fix'
+          : 'standard';
+    const graph = getWorkflowGraph(graphMode);
     const repo = await registerRepository(repositoryPath);
-    const worktree = await createWorktree(repo, task.id, {
-      baseRef: baseBranch === 'HEAD' ? 'HEAD' : baseBranch,
-      worktreeBaseDir: this.worktreeBaseDir,
-    });
+    let worktree;
+    try {
+      worktree = await createWorktree(repo, task.id, {
+        baseRef: baseBranch === 'HEAD' ? 'HEAD' : baseBranch,
+        worktreeBaseDir: this.worktreeBaseDir,
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to create Git worktree: ${detail}`);
+    }
+
     this.db
       .prepare(
         'INSERT INTO graph_runs (id, task_id, graph_version_id, state, started_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
       )
-      .run(graphRunId, task.id, 'bug-fix-v1', 'running', now(), now());
+      .run(graphRunId, task.id, graph.id, 'running', now(), now());
     this.worktrees.create({
       id: randomUUID(),
       taskId: task.id,
@@ -153,17 +197,30 @@ export class Orchestrator {
       createdAt: now(),
     });
     this.setTaskState(task.id, 'running');
+    const bootstrapNode = graph.nodes[0]?.id ?? 'planner';
+    this.updateExecution(task, graphRunId, randomUUID(), bootstrapNode, 'preparing');
+    this.bus.publish('task.started', { taskId: task.id, graphRunId });
+    return {
+      graphRunId,
+      graph,
+      worktreePath: worktree.path,
+      baseCommit: worktree.baseCommit,
+    };
+  }
 
+  private async executeGraph(
+    task: Task,
+    prepared: PreparedRun,
+    controller: AbortController,
+  ): Promise<void> {
+    const { graphRunId, graph, worktreePath, baseCommit } = prepared;
     const provider = new FakeProvider('fake', [
       { type: 'phase.changed', phase: 'reasoning' },
       { type: 'heartbeat', at: now() },
-      {
-        type: 'invocation.completed',
-        output: { summary: `Completed ${task.title}` },
-      },
+      { type: 'invocation.completed', output: { summary: `Completed ${task.title}` } },
     ]);
 
-    const results = await runSequentialGraph(bugFixGraph, async (role) => {
+    const results = await runSequentialGraph(graph, async (role) => {
       if (controller.signal.aborted) throw new Error('Cancelled by operator');
       const nodeRunId = randomUUID();
       this.db
@@ -177,7 +234,7 @@ export class Orchestrator {
           ? 'running_tests'
           : role === 'writer'
             ? 'writing'
-            : role === 'accept'
+            : role === 'accept' || role === 'reviewer'
               ? 'awaiting_confirmation'
               : 'reasoning';
       this.updateExecution(task, graphRunId, nodeRunId, role, phase);
@@ -201,15 +258,14 @@ export class Orchestrator {
           sensitivity: 'internal',
         },
         {
-          id: `worktree:${worktree.path}`,
-          content: worktree.path,
+          id: `worktree:${worktreePath}`,
+          content: worktreePath,
           source: 'worktree.path',
           sensitivity: 'internal',
         },
       ]);
-      const disclosureId = randomUUID();
       this.evidence.addDisclosureManifest({
-        id: disclosureId,
+        id: randomUUID(),
         invocationId,
         providerConnectionId: 'fake',
         selectedContext: disclosure.entries,
@@ -221,7 +277,7 @@ export class Orchestrator {
         for await (const event of provider.invoke({
           invocationId,
           prompt: `${role}: ${task.brief}`,
-          cwd: worktree.path,
+          cwd: worktreePath,
           signal: controller.signal,
         })) {
           if (event.type === 'heartbeat') {
@@ -251,30 +307,31 @@ export class Orchestrator {
           exactAction: {
             kind: 'scope',
             verb: 'confirm',
-            target: 'bug_fix',
+            target: graph.id,
             paths: ['ROLEFLOCK_FIX.md'],
             sideEffectClass: 'local_write',
           },
           affectedPaths: ['ROLEFLOCK_FIX.md'],
           riskClass: 'medium',
-          stateHash: worktree.baseCommit,
+          stateHash: baseCommit,
         });
         this.confirmations.create(confirmation);
         this.setTaskState(task.id, 'awaiting_confirmation');
+        this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation');
         this.bus.publish('approval.requested', confirmation);
         const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
         if (decision === 'rejected') throw new Error('Confirmation rejected');
       } else if (role === 'writer') {
-        const lease = new WriterLease(worktree.path, nodeRunId);
+        const lease = new WriterLease(worktreePath, nodeRunId);
         if (!lease.acquire()) throw new Error('Writer lease unavailable');
         this.worktrees.setWriterLease(task.id, nodeRunId);
         try {
-          const target = join(worktree.path, 'ROLEFLOCK_FIX.md');
+          const target = join(worktreePath, 'ROLEFLOCK_FIX.md');
           await writeFile(
             target,
             `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\n`,
           );
-          const diff = await captureDiff(worktree.path);
+          const diff = await captureDiff(worktreePath);
           this.evidence.addArtefact({
             id: randomUUID(),
             taskId: task.id,
@@ -292,8 +349,8 @@ export class Orchestrator {
         const result = await runCommand({
           command: process.execPath,
           args: ['-e', 'console.log("RoleFlock deterministic test passed")'],
-          cwd: worktree.path,
-          sandboxRoot: worktree.path,
+          cwd: worktreePath,
+          sandboxRoot: worktreePath,
           timeoutMs: 15_000,
         });
         this.evidence.addTestRun({
@@ -339,14 +396,34 @@ export class Orchestrator {
     this.db
       .prepare('UPDATE graph_runs SET state = ?, completed_at = ? WHERE id = ?')
       .run(failed ? 'failed' : 'completed', now(), graphRunId);
-    if (!failed) {
-      const taskNow = this.tasks.get(task.id);
-      if (taskNow && taskNow.state !== 'accepted' && taskNow.state !== 'rejected') {
-        this.setTaskState(task.id, 'accepted');
-      }
-    } else if (!controller.signal.aborted) {
-      this.setTaskState(task.id, 'failed');
+    if (failed) {
+      const message =
+        failed.error instanceof Error
+          ? failed.error.message
+          : typeof failed.error === 'string'
+            ? failed.error
+            : `Node ${failed.nodeId} failed`;
+      this.recordFailure(task.id, `Node ${failed.nodeId} failed`, message);
+      if (!controller.signal.aborted) this.setTaskState(task.id, 'failed');
+      throw new Error(message);
     }
+
+    const taskNow = this.tasks.get(task.id);
+    if (taskNow && taskNow.state !== 'accepted' && taskNow.state !== 'rejected') {
+      this.setTaskState(task.id, 'accepted');
+    }
+  }
+
+  private recordFailure(taskId: string, summary: string, details: string): void {
+    this.evidence.addFinding({
+      id: randomUUID(),
+      taskId,
+      severity: 'error',
+      summary,
+      details,
+      createdAt: now(),
+    });
+    this.bus.publish('task.failed', { taskId, error: details });
   }
 
   private waitForAcceptance(

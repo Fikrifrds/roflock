@@ -22,7 +22,10 @@
     "@roleflock/database": "workspace:*",
     "@roleflock/graph-core": "workspace:*",
     "@roleflock/graph-runtime": "workspace:*",
+    "@roleflock/provider-claude": "workspace:*",
+    "@roleflock/provider-codex": "workspace:*",
     "@roleflock/provider-core": "workspace:*",
+    "@roleflock/provider-cursor": "workspace:*",
     "@roleflock/repository-runtime": "workspace:*",
     "@roleflock/run-control": "workspace:*",
     "fastify": "^5.2.1"

@@ -3,23 +3,23 @@
 **RoleFlock by Mlola** — local-first control plane for governed multi-agent software engineering.
 
 - Public site: https://roleflock.com
-- Local runtime: http://127.0.0.1:4178
+- Local UI (dev): http://127.0.0.1:5173
+- Local daemon: http://127.0.0.1:4178
 
-## What Phase 0 delivers
+## Status: ready for local testing
 
-A verified bug-fix walking skeleton:
+Phase 0 walking skeleton is implemented and covered by automated tests:
 
-```text
-Create bug-fix task
-→ planner (fake/Claude)
-→ reviewer confirmation
-→ writer under one-writer worktree lease
-→ deterministic test
-→ independent verifier
-→ human accept/reject
-```
+- Verified bug-fix flow (planner → approval → writer → test → verifier → accept)
+- Direct / Fast / Standard / Bug Fix workflow modes
+- Folder picker + custom project names
+- Approval inbox + in-task approve banner
+- Providers page with honest CLI discovery (Claude / Codex / Cursor / Fake)
+- Evidence, usage, disclosure manifests
+- Daemon restart recovery for pending approvals
+- Localhost-only bind, session token, CSRF, no shell endpoint
 
-Durable SQLite event store, localhost-only daemon, typed approvals, usage/disclosure evidence, pause/stop/cancel controls, and orphan reconciliation on restart.
+Manual checklist: [`docs/test-plans/manual-test-checklist.md`](docs/test-plans/manual-test-checklist.md)
 
 ## Setup
 
@@ -37,15 +37,41 @@ pnpm test
 # Terminal 1 — daemon (binds only to 127.0.0.1:4178)
 pnpm dev
 
-# Terminal 2 — Vite UI (proxies /api to the daemon)
+# Terminal 2 — Vite UI
 pnpm dev:web
 ```
 
-Open http://127.0.0.1:5173. The UI bootstraps the session token from `/api/runtime/info`.
+Open http://127.0.0.1:5173
 
-State lives at `~/.roleflock/roleflock.db` (override with `ROLEFLOCK_DATA_DIR`).
+State: `~/.roleflock/roleflock.db` (override with `ROLEFLOCK_DATA_DIR`).
 
-## Workspace layout
+**Important:** restart both daemon and web after pulling new code. If Start fails, the UI now shows the error text.
+
+## Suggested first test path
+
+1. Projects → Choose… → register a Git repo → optional display name
+2. New task → Verified Bug Fix → Send to flock
+3. Task detail → Start
+4. Approve confirmation when reviewer asks
+5. Accept when verification finishes
+6. Open Evidence + Providers
+
+## Notes
+
+- Walking skeleton uses the **Fake provider** for deterministic local runs.
+- Claude / Codex / Cursor appear on Providers with `ready` or `missing` based on PATH.
+- Real CLI-driven writing is scaffolded; full live CLI orchestration is next after local UI validation.
+
+## Safety invariants
+
+- Browser never executes shell commands
+- Daemon binds to localhost by default
+- No raw shell or arbitrary filesystem-read HTTP endpoints
+- One writer lease per task worktree
+- Secret/symlink escape paths denied
+- Unknown billable outcomes are not auto-retried
+
+## Workspace
 
 ```text
 apps/web          Local React control UI
@@ -53,17 +79,5 @@ apps/daemon       Fastify local daemon + orchestrator
 packages/*        Contracts, database, runtime, providers, approvals
 docs/product      PRD + implementation plan
 docs/adr          Architecture decision records
+docs/test-plans   Exit gates + manual checklist
 ```
-
-## Safety invariants
-
-- Browser never executes shell commands.
-- Daemon binds to localhost by default.
-- No raw shell or arbitrary filesystem-read HTTP endpoints.
-- One writer lease per task worktree.
-- Secret/symlink escape paths are denied.
-- Unknown billable invocation outcomes are not auto-retried.
-
-## Product docs
-
-See `docs/product/` for PRD v2.4 and Implementation Plan v1.0.

@@ -16,6 +16,7 @@ type Task = {
   risk: string;
   brief: string;
   maxAttempts: number;
+  workflowGraphVersionId: string;
   expectedBehaviour?: string;
   actualBehaviour?: string;
 };
@@ -44,10 +45,30 @@ type ActiveExecution = {
 
 type Approval = {
   id: string;
+  taskId?: string;
   requestType: string;
   rationale: string;
   riskClass: string;
   fingerprint: string;
+};
+
+type Provider = {
+  id: string;
+  displayName: string;
+  status: string;
+  capabilities: Record<string, boolean>;
+};
+
+type EvidenceBundle = {
+  findings: Array<Record<string, unknown>>;
+  testRuns: Array<Record<string, unknown>>;
+  artefacts: Array<Record<string, unknown>>;
+  disclosures: Array<Record<string, unknown>>;
+};
+
+type Usage = {
+  entries?: Array<Record<string, unknown>>;
+  summary?: Record<string, unknown>;
 };
 
 function useData<T>(key: string[], path: string, enabled = true) {
@@ -79,6 +100,7 @@ function Shell({ children }: { children: ReactNode }) {
           <Link to="/projects">Projects</Link>
           <Link to="/tasks/new">New task</Link>
           <Link to="/approvals">Approvals</Link>
+          <Link to="/providers">Providers</Link>
         </nav>
         <i className={live ? 'live' : ''}>{live ? 'DAEMON LINKED' : 'CONNECTING'}</i>
       </header>
@@ -93,6 +115,22 @@ function Home() {
     '/api/health',
   );
   const { data: tasks = [] } = useData<Task[]>(['tasks'], '/api/tasks');
+  const { data: approvals = [] } = useData<Approval[]>(['approvals'], '/api/approvals');
+  const { data: usage } = useQuery({
+    queryKey: ['usage-summary'],
+    queryFn: async () => {
+      try {
+        return await api.request<Record<string, unknown>>('/api/usage/summary');
+      } catch {
+        return undefined;
+      }
+    },
+    refetchInterval: 2000,
+  });
+  const stateCounts = tasks.reduce<Record<string, number>>((counts, task) => {
+    counts[task.state] = (counts[task.state] ?? 0) + 1;
+    return counts;
+  }, {});
   return (
     <Shell>
       <section className="hero">
@@ -108,6 +146,32 @@ function Home() {
             : '○ Checking local daemon'}
         </div>
       </section>
+      <div className="status-strip" aria-label="Flock status">
+        <div>
+          <span>Daemon</span>
+          <b>{health?.ok ? 'Healthy' : 'Checking'}</b>
+        </div>
+        <div>
+          <span>Pending approvals</span>
+          <b>{approvals.length}</b>
+        </div>
+        <div>
+          <span>Tasks</span>
+          <b>
+            {Object.entries(stateCounts).length
+              ? Object.entries(stateCounts)
+                  .map(([state, count]) => `${count} ${state}`)
+                  .join(' · ')
+              : 'No tasks'}
+          </b>
+        </div>
+        {usage ? (
+          <div>
+            <span>Usage</span>
+            <b>{formatUsage(usage)}</b>
+          </div>
+        ) : null}
+      </div>
       <Section title="Recent flights">
         {tasks.length ? (
           tasks.map((task) => <TaskCard key={task.id} task={task} />)
@@ -122,7 +186,18 @@ function Home() {
 function Projects() {
   const { data: projects = [], refetch } = useData<Project[]>(['projects'], '/api/projects');
   const [path, setPath] = useState('');
+  const [name, setName] = useState('');
+  const [nameTouched, setNameTouched] = useState(false);
   const [error, setError] = useState('');
+  const [choosing, setChoosing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+
+  const suggestNameFromPath = (repoPath: string) => {
+    const parts = repoPath.replace(/\/+$/, '').split('/').filter(Boolean);
+    return parts[parts.length - 1] ?? '';
+  };
+
   return (
     <Shell>
       <Section title="Projects">
@@ -134,31 +209,133 @@ function Projects() {
             try {
               await api.request('/api/projects', {
                 method: 'POST',
-                body: JSON.stringify({ path }),
+                body: JSON.stringify({
+                  path,
+                  name: name.trim() || undefined,
+                }),
               });
               setPath('');
+              setName('');
+              setNameTouched(false);
               void refetch();
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Failed to register');
             }
           }}
         >
+          <label className="field-label" htmlFor="repo-name">
+            Display name
+          </label>
           <input
-            placeholder="/absolute/path/to/git/repository"
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            required
+            id="repo-name"
+            placeholder="e.g. Tilaqa Web"
+            value={name}
+            onChange={(e) => {
+              setNameTouched(true);
+              setName(e.target.value);
+            }}
           />
-          <button type="submit">Register local repository</button>
+          <label className="field-label" htmlFor="repo-path">
+            Local path
+          </label>
+          <div className="path-row">
+            <input
+              id="repo-path"
+              placeholder="Select or paste a Git repository path"
+              value={path}
+              onChange={(e) => {
+                const next = e.target.value;
+                setPath(next);
+                if (!nameTouched) setName(suggestNameFromPath(next));
+              }}
+              required
+            />
+            <button
+              type="button"
+              className="quiet"
+              disabled={choosing}
+              onClick={async () => {
+                setError('');
+                setChoosing(true);
+                try {
+                  const result = await api.request<{ path: string | null; cancelled: boolean }>(
+                    '/api/dialogs/choose-directory',
+                    { method: 'POST' },
+                  );
+                  if (!result.cancelled && result.path) {
+                    setPath(result.path);
+                    if (!nameTouched) setName(suggestNameFromPath(result.path));
+                  }
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Folder picker failed');
+                } finally {
+                  setChoosing(false);
+                }
+              }}
+            >
+              {choosing ? 'Choosing…' : 'Choose…'}
+            </button>
+          </div>
+          <button type="submit">Add repository</button>
           {error ? <p className="error">{error}</p> : null}
         </form>
         {projects.map((project) => (
           <article className="row" key={project.id}>
-            <div>
-              <b>{project.name}</b>
-              <small>{project.resolvedPath}</small>
+            <div className="project-meta">
+              {editingId === project.id ? (
+                <form
+                  className="rename-row"
+                  onSubmit={async (event: FormEvent) => {
+                    event.preventDefault();
+                    try {
+                      await api.request(`/api/projects/${project.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ name: editName }),
+                      });
+                      setEditingId(null);
+                      void refetch();
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : 'Rename failed');
+                    }
+                  }}
+                >
+                  <input
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    autoFocus
+                    required
+                  />
+                  <button type="submit">Save</button>
+                  <button
+                    type="button"
+                    className="quiet"
+                    onClick={() => setEditingId(null)}
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <b>{project.name}</b>
+                  <small>{project.resolvedPath}</small>
+                </>
+              )}
             </div>
-            <em>{project.status}</em>
+            <div className="row-actions">
+              {editingId === project.id ? null : (
+                <button
+                  type="button"
+                  className="quiet"
+                  onClick={() => {
+                    setEditingId(project.id);
+                    setEditName(project.name);
+                  }}
+                >
+                  Rename
+                </button>
+              )}
+              <em>{project.status}</em>
+            </div>
           </article>
         ))}
       </Section>
@@ -168,31 +345,53 @@ function Projects() {
 
 function NewTask() {
   const { data: projects = [] } = useData<Project[]>(['projects'], '/api/projects');
+  const { data: workflows = [] } = useData<
+    Array<{ id: string; label: string; description: string }>
+  >(['workflows'], '/api/workflows');
   const navigate = useNavigate();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
   const [form, setForm] = useState({
     projectId: '',
     title: '',
     brief: '',
     expectedBehaviour: '',
     actualBehaviour: '',
+    mode: 'bug_fix',
     maxAttempts: 3,
     maxActualCostUsd: 1,
   });
   return (
     <Shell>
-      <Section title="New verified bug fix">
+      <Section title="New task">
         <form
-          className="stack"
+          className="stack task-form"
           onSubmit={async (event: FormEvent) => {
             event.preventDefault();
-            const task = await api.request<Task>('/api/tasks', {
-              method: 'POST',
-              body: JSON.stringify({ ...form, type: 'bug_fix' }),
-            });
-            navigate(`/tasks/${task.id}`);
+            setError('');
+            setSubmitting(true);
+            try {
+              const task = await api.request<Task>('/api/tasks', {
+                method: 'POST',
+                body: JSON.stringify({
+                  ...form,
+                  type: form.mode === 'bug_fix' ? 'bug_fix' : 'feature',
+                }),
+              });
+              // Land on task detail so Start is the obvious next action.
+              navigate(`/tasks/${task.id}`);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Failed to create task');
+            } finally {
+              setSubmitting(false);
+            }
           }}
         >
+          <label className="field-label" htmlFor="task-project">
+            Project
+          </label>
           <select
+            id="task-project"
             required
             value={form.projectId}
             onChange={(e) => setForm({ ...form, projectId: e.target.value })}
@@ -204,45 +403,106 @@ function NewTask() {
               </option>
             ))}
           </select>
+          <label className="field-label" htmlFor="workflow-mode">
+            Workflow mode
+          </label>
+          <select
+            id="workflow-mode"
+            value={form.mode}
+            onChange={(e) => setForm({ ...form, mode: e.target.value })}
+          >
+            {(workflows.length
+              ? workflows
+              : [
+                  { id: 'bug_fix', label: 'Verified Bug Fix', description: '' },
+                  { id: 'direct', label: 'Direct', description: '' },
+                  { id: 'fast', label: 'Fast', description: '' },
+                  { id: 'standard', label: 'Standard', description: '' },
+                ]
+            ).map((workflow) => (
+              <option key={workflow.id} value={workflow.id}>
+                {workflow.label}
+              </option>
+            ))}
+          </select>
+          <small className="hint">
+            {workflows.find((workflow) => workflow.id === form.mode)?.description ??
+              'Choose the smallest sufficient execution path.'}
+          </small>
+          <label className="field-label" htmlFor="task-title">
+            Title
+          </label>
           <input
+            id="task-title"
             required
             placeholder="Short task title"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
           />
+          <label className="field-label" htmlFor="task-brief">
+            Brief
+          </label>
           <textarea
+            id="task-brief"
+            className="compact"
             required
-            placeholder="Brief"
+            placeholder="What should the flock fix or build?"
             value={form.brief}
             onChange={(e) => setForm({ ...form, brief: e.target.value })}
           />
-          <textarea
-            placeholder="Expected behaviour"
-            value={form.expectedBehaviour}
-            onChange={(e) => setForm({ ...form, expectedBehaviour: e.target.value })}
-          />
-          <textarea
-            placeholder="Actual behaviour"
-            value={form.actualBehaviour}
-            onChange={(e) => setForm({ ...form, actualBehaviour: e.target.value })}
-          />
-          <label>
-            Max attempts
-            <input
-              type="number"
-              value={form.maxAttempts}
-              onChange={(e) => setForm({ ...form, maxAttempts: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            Budget USD
-            <input
-              type="number"
-              value={form.maxActualCostUsd}
-              onChange={(e) => setForm({ ...form, maxActualCostUsd: Number(e.target.value) })}
-            />
-          </label>
-          <button type="submit">Send to flock</button>
+          <div className="two-col">
+            <div>
+              <label className="field-label" htmlFor="task-expected">
+                Expected behaviour
+              </label>
+              <textarea
+                id="task-expected"
+                className="compact"
+                placeholder="Optional"
+                value={form.expectedBehaviour}
+                onChange={(e) => setForm({ ...form, expectedBehaviour: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="field-label" htmlFor="task-actual">
+                Actual behaviour
+              </label>
+              <textarea
+                id="task-actual"
+                className="compact"
+                placeholder="Optional"
+                value={form.actualBehaviour}
+                onChange={(e) => setForm({ ...form, actualBehaviour: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="two-col">
+            <label>
+              Max attempts
+              <input
+                type="number"
+                min={1}
+                value={form.maxAttempts}
+                onChange={(e) => setForm({ ...form, maxAttempts: Number(e.target.value) })}
+              />
+            </label>
+            <label>
+              Budget USD
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.maxActualCostUsd}
+                onChange={(e) => setForm({ ...form, maxActualCostUsd: Number(e.target.value) })}
+              />
+            </label>
+          </div>
+          {error ? <p className="error">{error}</p> : null}
+          <div className="form-actions">
+            <button type="submit" disabled={submitting || !form.projectId}>
+              {submitting ? 'Sending…' : 'Send to flock'}
+            </button>
+          </div>
         </form>
       </Section>
     </Shell>
@@ -252,12 +512,22 @@ function NewTask() {
 function TaskDetail() {
   const { id = '' } = useParams();
   const qc = useQueryClient();
+  const [actionError, setActionError] = useState('');
+  const [starting, setStarting] = useState(false);
   const { data: task } = useData<Task>(['task', id], `/api/tasks/${id}`, Boolean(id));
-  const { data: execution } = useData<ActiveExecution>(
+  const { data: execution } = useData<ActiveExecution | null>(
     ['execution', id],
     `/api/tasks/${id}/active-execution`,
     Boolean(id),
   );
+  const { data: pending = [] } = useData<Approval[]>(
+    ['task-approvals', id],
+    `/api/tasks/${id}/approvals`,
+    Boolean(id),
+  );
+  const { data: evidence } = useData<{
+    findings?: Array<{ severity: string; summary: string; details?: string }>;
+  }>(['evidence', id], `/api/evidence/tasks/${id}`, Boolean(id));
   if (!task) {
     return (
       <Shell>
@@ -265,15 +535,91 @@ function TaskDetail() {
       </Shell>
     );
   }
-  const action = async (name: string) => {
-    await api.request(`/api/tasks/${id}/${name}`, { method: 'POST' });
+  const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['task', id] });
     void qc.invalidateQueries({ queryKey: ['execution', id] });
+    void qc.invalidateQueries({ queryKey: ['task-approvals', id] });
+    void qc.invalidateQueries({ queryKey: ['approvals'] });
+    void qc.invalidateQueries({ queryKey: ['evidence', id] });
   };
+  const action = async (name: string) => {
+    setActionError('');
+    if (name === 'start') setStarting(true);
+    try {
+      await api.request(`/api/tasks/${id}/${name}`, { method: 'POST' });
+      refresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Action failed');
+      refresh();
+    } finally {
+      setStarting(false);
+    }
+  };
+  const decide = async (approvalId: string, decision: 'approve' | 'reject') => {
+    setActionError('');
+    try {
+      await api.request(`/api/approvals/${approvalId}/${decision}`, { method: 'POST' });
+      refresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Decision failed');
+    }
+  };
+  const waiting =
+    task.state === 'awaiting_confirmation' || task.state === 'awaiting_acceptance' || pending.length > 0;
+  const latestError = [...(evidence?.findings ?? [])]
+    .reverse()
+    .find((finding) => finding.severity === 'error');
   return (
     <Shell>
       <Section title={task.title}>
         <p className="lede">{task.brief}</p>
+        {actionError || latestError ? (
+          <p className="error">
+            {actionError || latestError?.details || latestError?.summary}
+          </p>
+        ) : null}
+        {pending.length > 0 ? (
+          <article className="pending-banner">
+            <p className="eyebrow">PENDING CONFIRMATION</p>
+            <h3>Reviewer is waiting for your decision</h3>
+            {pending.map((approval) => (
+              <div key={approval.id} className="pending-item">
+                <p>
+                  <b>{approval.requestType}</b> — {approval.rationale}
+                </p>
+                <div className="actions">
+                  <button type="button" onClick={() => void decide(approval.id, 'approve')}>
+                    Approve & continue
+                  </button>
+                  <button
+                    type="button"
+                    className="quiet"
+                    onClick={() => void decide(approval.id, 'reject')}
+                  >
+                    Reject
+                  </button>
+                  <Link className="quiet buttonish" to="/approvals">
+                    Open inbox
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </article>
+        ) : null}
+        {task.state === 'awaiting_acceptance' && pending.length === 0 ? (
+          <article className="pending-banner">
+            <p className="eyebrow">HUMAN ACCEPTANCE</p>
+            <h3>Verification finished — accept or reject the change</h3>
+            <div className="actions">
+              <button type="button" onClick={() => void action('accept')}>
+                Accept
+              </button>
+              <button type="button" className="quiet" onClick={() => void action('reject')}>
+                Reject
+              </button>
+            </div>
+          </article>
+        ) : null}
         <article className="execution">
           <p className="eyebrow">ACTIVE EXECUTION</p>
           <h2>{execution?.phase ?? task.state}</h2>
@@ -293,6 +639,7 @@ function TaskDetail() {
                   'Cost',
                   `$${(execution?.actualCost ?? 0).toFixed(2)} / shadow $${(execution?.shadowCost ?? 0).toFixed(2)}`,
                 ],
+                ['Workflow', task.workflowGraphVersionId],
               ] as const
             ).map(([label, value]) => (
               <div key={label}>
@@ -302,20 +649,30 @@ function TaskDetail() {
             ))}
           </dl>
           <div className="actions">
-            <button type="button" onClick={() => void action('start')}>
-              Start
-            </button>
-            <button type="button" className="quiet" onClick={() => void action('pause')}>
-              Pause
-            </button>
+            {task.state === 'ready' || task.state === 'failed' ? (
+              <button type="button" disabled={starting} onClick={() => void action('start')}>
+                {starting ? 'Starting…' : task.state === 'failed' ? 'Retry' : 'Start'}
+              </button>
+            ) : null}
+            {!waiting && task.state === 'running' ? (
+              <>
+                <button type="button" className="quiet" onClick={() => void action('pause')}>
+                  Pause
+                </button>
+                <button type="button" className="quiet" onClick={() => void action('stop')}>
+                  Stop
+                </button>
+                <button
+                  type="button"
+                  className="quiet"
+                  onClick={() => void action('force-terminate')}
+                >
+                  Force
+                </button>
+              </>
+            ) : null}
             <button type="button" className="quiet" onClick={() => void action('cancel')}>
               Cancel
-            </button>
-            <button type="button" onClick={() => void action('accept')}>
-              Accept
-            </button>
-            <button type="button" className="quiet" onClick={() => void action('reject')}>
-              Reject
             </button>
             <Link className="quiet buttonish" to={`/tasks/${id}/evidence`}>
               Evidence
@@ -338,7 +695,9 @@ function Approvals() {
               <div>
                 <b>{approval.requestType}</b>
                 <small>{approval.rationale}</small>
+                <small>risk {approval.riskClass}</small>
                 <small>fingerprint {approval.fingerprint.slice(0, 12)}…</small>
+                {approval.taskId ? <Link to={`/tasks/${approval.taskId}`}>Open task</Link> : null}
               </div>
               <div className="actions">
                 <button
@@ -373,15 +732,148 @@ function Approvals() {
 
 function Evidence() {
   const { id = '' } = useParams();
-  const { data } = useData<unknown>(['evidence', id], `/api/evidence/tasks/${id}`, Boolean(id));
-  const { data: usage } = useData<unknown>(['usage', id], `/api/usage/tasks/${id}`, Boolean(id));
+  const { data } = useData<EvidenceBundle>(
+    ['evidence', id],
+    `/api/evidence/tasks/${id}`,
+    Boolean(id),
+  );
+  const { data: usage } = useData<Usage>(['usage', id], `/api/usage/tasks/${id}`, Boolean(id));
   return (
     <Shell>
       <Section title="Evidence ledger">
-        <pre>{JSON.stringify({ evidence: data, usage }, null, 2)}</pre>
+        <EvidenceSection title="Findings" items={data?.findings ?? []} />
+        <EvidenceSection title="Test runs" items={data?.testRuns ?? []} />
+        <EvidenceSection title="Artefacts / diff" items={data?.artefacts ?? []} />
+        <EvidenceSection
+          title="Usage"
+          items={usage ? [usage.summary ?? usage, ...(usage.entries ?? [])] : []}
+        />
+        <EvidenceSection title="Disclosures" items={data?.disclosures ?? []} />
+        <details className="raw-json">
+          <summary>Raw JSON</summary>
+          <pre>{JSON.stringify({ evidence: data, usage }, null, 2)}</pre>
+        </details>
       </Section>
     </Shell>
   );
+}
+
+function Providers() {
+  const { data: providers = [] } = useData<Provider[]>(['providers'], '/api/providers');
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [health, setHealth] = useState<Record<string, string>>({});
+  return (
+    <Shell>
+      <Section title="Providers">
+        <p className="lede">Local connections available to the flock. Missing providers are not configured.</p>
+        {providers.length ? (
+          providers.map((provider) => (
+            <article className="provider-card" key={provider.id}>
+              <div className="row">
+                <div>
+                  <b>{provider.displayName}</b>
+                  <small>id {provider.id}</small>
+                  <small>status {provider.status}</small>
+                </div>
+                <div className="actions compact-actions">
+                  <button
+                    type="button"
+                    className="quiet"
+                    onClick={async () => {
+                      setHealth((current) => ({ ...current, [provider.id]: 'Checking…' }));
+                      try {
+                        const result = await api.request<{ healthy: boolean }>(
+                          `/api/providers/${provider.id}/health-check`,
+                          { method: 'POST' },
+                        );
+                        setHealth((current) => ({
+                          ...current,
+                          [provider.id]: result.healthy ? 'Healthy' : 'Unhealthy',
+                        }));
+                      } catch (error) {
+                        setHealth((current) => ({
+                          ...current,
+                          [provider.id]: error instanceof Error ? error.message : 'Health check failed',
+                        }));
+                      }
+                    }}
+                  >
+                    Check health
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpanded((current) => ({ ...current, [provider.id]: !current[provider.id] }))}
+                  >
+                    {expanded[provider.id] ? 'Hide details' : 'Show details'}
+                  </button>
+                </div>
+              </div>
+              <div className="capabilities">
+                {Object.entries(provider.capabilities).map(([name, enabled]) => (
+                  <span key={name} className={enabled ? 'capability enabled' : 'capability'}>
+                    {name}: {enabled ? 'yes' : 'no'}
+                  </span>
+                ))}
+              </div>
+              {health[provider.id] ? <p className="hint">Health: {health[provider.id]}</p> : null}
+              {expanded[provider.id] ? <ProviderModels providerId={provider.id} /> : null}
+            </article>
+          ))
+        ) : (
+          <Empty message="No providers are configured. Claude and other external providers are currently missing." />
+        )}
+      </Section>
+    </Shell>
+  );
+}
+
+function ProviderModels({ providerId }: { providerId: string }) {
+  const { data: models = [], isLoading, isError } = useData<Array<{ id: string; displayName: string }>>(
+    ['provider-models', providerId],
+    `/api/providers/${providerId}/models`,
+  );
+  if (isLoading) return <p className="hint">Loading configured models…</p>;
+  if (isError) return <p className="error">Configured models could not be loaded.</p>;
+  return models.length ? (
+    <p className="hint">
+      Models: {models.map((model) => `${model.displayName} (${model.id})`).join(', ')}
+    </p>
+  ) : (
+    <p className="hint">No models are configured for this provider.</p>
+  );
+}
+
+function EvidenceSection({ title, items }: { title: string; items: Array<Record<string, unknown>> }) {
+  return (
+    <section className="evidence-section">
+      <h3>{title}</h3>
+      {items.length ? (
+        items.map((item, index) => (
+          <article className="evidence-item" key={String(item.id ?? index)}>
+            {Object.entries(item).map(([key, value]) => (
+              <p key={key}>
+                <span>{key.replace(/_/g, ' ')}</span> {formatValue(value)}
+              </p>
+            ))}
+          </article>
+        ))
+      ) : (
+        <Empty message={`No ${title.toLowerCase()} recorded yet.`} />
+      )}
+    </section>
+  );
+}
+
+function formatValue(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value);
+}
+
+function formatUsage(usage: Record<string, unknown>): string {
+  const actual = usage.actualCostUsd ?? usage.actual_cost_usd;
+  const shadow = usage.shadowCostUsd ?? usage.shadow_cost_usd;
+  return actual !== undefined || shadow !== undefined
+    ? `$${String(actual ?? 0)} actual · $${String(shadow ?? 0)} shadow`
+    : 'Available';
 }
 
 function TaskCard({ task }: { task: Task }) {
@@ -420,6 +912,7 @@ function App() {
       <Route path="/tasks/:id" element={<TaskDetail />} />
       <Route path="/tasks/:id/evidence" element={<Evidence />} />
       <Route path="/approvals" element={<Approvals />} />
+      <Route path="/providers" element={<Providers />} />
     </Routes>
   );
 }

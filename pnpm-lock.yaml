@@ -50,9 +50,18 @@ importers:
       '@roleflock/graph-runtime':
         specifier: workspace:*
         version: link:../../packages/graph-runtime
+      '@roleflock/provider-claude':
+        specifier: workspace:*
+        version: link:../../packages/provider-claude
+      '@roleflock/provider-codex':
+        specifier: workspace:*
+        version: link:../../packages/provider-codex
       '@roleflock/provider-core':
         specifier: workspace:*
         version: link:../../packages/provider-core
+      '@roleflock/provider-cursor':
+        specifier: workspace:*
+        version: link:../../packages/provider-cursor
       '@roleflock/repository-runtime':
         specifier: workspace:*
         version: link:../../packages/repository-runtime

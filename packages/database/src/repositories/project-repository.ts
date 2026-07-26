@@ -55,6 +55,15 @@ export class ProjectRepository {
       .get(id) as Record<string, string> | undefined;
     return row ? mapProject(row) : undefined;
   }
+
+  updateName(id: string, name: string, updatedAt: string): ProjectRecord | undefined {
+    const trimmed = name.trim();
+    if (!trimmed) throw new Error('Project name is required');
+    this.db
+      .prepare(`UPDATE projects SET name = ?, updated_at = ? WHERE id = ?`)
+      .run(trimmed, updatedAt, id);
+    return this.get(id);
+  }
 }
 
 function mapProject(row: Record<string, string>): ProjectRecord {
