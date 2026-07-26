@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { MIGRATION_001 } from './migrations/001_initial.js';
+import { MIGRATION_002 } from './migrations/002_task_documents.js';
 
 export type SqliteDb = Database.Database;
 
@@ -38,7 +39,7 @@ export function migrate(db: SqliteDb): void {
       .map((row) => (row as { version: number }).version),
   );
 
-  const migrations = [MIGRATION_001];
+  const migrations = [MIGRATION_001, MIGRATION_002];
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;
     const tx = db.transaction(() => {

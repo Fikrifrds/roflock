@@ -84,6 +84,89 @@ describe('daemon boundary', () => {
     expect(quota.statusCode).toBe(200);
     expect((quota.json() as Array<{ confidence: string }>)[0]?.confidence).toBe('unknown');
   });
+  it('stores supporting documents with hash without requiring them to start', async () => {
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { execFileSync } = await import('node:child_process');
+    const dataDir = await mkdtemp(join(tmpdir(), 'rf-doc-data-'));
+    const repoDir = await mkdtemp(join(tmpdir(), 'rf-doc-repo-'));
+    execFileSync('git', ['init'], { cwd: repoDir });
+    execFileSync('git', ['config', 'user.email', 'test@roleflock.local'], { cwd: repoDir });
+    execFileSync('git', ['config', 'user.name', 'RoleFlock'], { cwd: repoDir });
+    await writeFile(join(repoDir, 'README.md'), '# fixture\n');
+    execFileSync('git', ['add', 'README.md'], { cwd: repoDir });
+    execFileSync('git', ['commit', '-m', 'init'], { cwd: repoDir });
+
+    const session = { token: 'test-token', csrf: 'test-csrf' };
+    const instance = await createServer({ dataDir, session });
+    const headers = {
+      'x-roleflock-token': session.token,
+      'x-roleflock-csrf': session.csrf,
+      'content-type': 'application/json',
+    };
+    try {
+      const project = await instance.app.inject({
+        method: 'POST',
+        url: '/api/projects',
+        headers,
+        payload: { path: repoDir },
+      });
+      expect(project.statusCode).toBe(201);
+      const projectId = (project.json() as { id: string }).id;
+
+      const task = await instance.app.inject({
+        method: 'POST',
+        url: '/api/tasks',
+        headers,
+        payload: {
+          projectId,
+          type: 'feature',
+          title: 'With docs',
+          brief: 'Attach a PRD optionally',
+          mode: 'direct',
+        },
+      });
+      expect(task.statusCode).toBe(201);
+      const taskId = (task.json() as { id: string }).id;
+
+      const empty = await instance.app.inject({
+        method: 'GET',
+        url: `/api/tasks/${taskId}/documents`,
+        headers,
+      });
+      expect(empty.statusCode).toBe(200);
+      expect(empty.json()).toEqual([]);
+
+      const uploaded = await instance.app.inject({
+        method: 'POST',
+        url: `/api/tasks/${taskId}/documents`,
+        headers,
+        payload: {
+          fileName: 'prd.md',
+          kind: 'prd',
+          authority: 'reference',
+          content: '# Product\nShip local docs.\n',
+          mimeType: 'text/markdown',
+        },
+      });
+      expect(uploaded.statusCode).toBe(201);
+      const doc = uploaded.json() as { sha256: string; hasExtractedText: boolean };
+      expect(doc.sha256).toHaveLength(64);
+      expect(doc.hasExtractedText).toBe(true);
+
+      const listed = await instance.app.inject({
+        method: 'GET',
+        url: `/api/tasks/${taskId}/documents`,
+        headers,
+      });
+      expect((listed.json() as unknown[]).length).toBe(1);
+    } finally {
+      await instance.app.close();
+      await rm(dataDir, { recursive: true, force: true });
+      await rm(repoDir, { recursive: true, force: true });
+    }
+  });
   it('exposes authenticated choose-directory dialog endpoint', async () => {
     const { app } = await server();
     expect(

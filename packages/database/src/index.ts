@@ -24,6 +24,14 @@ export type {
   PriceCardRow,
   QuotaSnapshotRow,
 } from './repositories/pricing-repository.js';
+export {
+  TaskDocumentRepository,
+} from './repositories/task-document-repository.js';
+export type {
+  TaskDocument,
+  DocumentAuthority,
+  DocumentKind,
+} from './repositories/task-document-repository.js';
 export { EvidenceRepository } from './repositories/evidence-repository.js';
 export { ControlCommandRepository } from './repositories/control-command-repository.js';
 export { ProcessHandleRepository } from './repositories/process-handle-repository.js';

@@ -13,11 +13,12 @@ import { EventBus } from './services/event-bus.js';
 import { Orchestrator } from './services/orchestrator.js';
 import { seedPricingDefaults } from './services/pricing.js';
 import { ProviderRegistry } from './services/provider-registry.js';
+import { DocumentService } from './services/documents.js';
 
 export interface ServerOptions { dataDir?: string; host?: string; port?: number; session?: Session; }
 export async function createServer(options: ServerOptions = {}): Promise<{ app: FastifyInstance; session: Session; host: string; port: number }> {
   const dataDir = options.dataDir ?? process.env.ROLEFLOCK_DATA_DIR ?? join(homedir(), '.roleflock'); mkdirSync(dataDir, { recursive: true });
-  const session = options.session ?? createSession(); const app = fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' } });
+  const session = options.session ?? createSession(); const app = fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, bodyLimit: 3 * 1024 * 1024 });
   await app.register(cookie);
   app.addHook('onRequest', async (request, reply) => {
     if (request.url === '/api/health' || request.url === '/api/runtime/info' || !request.url.startsWith('/api/')) return;
@@ -32,8 +33,15 @@ export async function createServer(options: ServerOptions = {}): Promise<{ app: 
   reconcileOrphanedProcesses(db);
   const bus = new EventBus();
   const providers = new ProviderRegistry();
-  const orchestrator = new Orchestrator(db, bus, join(dataDir, 'worktrees'), providers);
-  registerApi(app, db, session, bus, orchestrator, providers);
+  const documents = new DocumentService(db, join(dataDir, 'documents'));
+  const orchestrator = new Orchestrator(
+    db,
+    bus,
+    join(dataDir, 'worktrees'),
+    providers,
+    documents,
+  );
+  registerApi(app, db, session, bus, orchestrator, providers, documents);
   const webDist = join(process.cwd(), 'apps', 'web', 'dist');
   if (existsSync(webDist)) await app.register(statik, { root: webDist, wildcard: false });
   app.addHook('onClose', async () => db.close());

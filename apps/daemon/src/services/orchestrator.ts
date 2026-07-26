@@ -30,6 +30,10 @@ import { FakeProvider, type ProviderAdapter } from '@roleflock/provider-core';
 import { CursorWriterAdapter } from '@roleflock/provider-cursor';
 import { budgetStatus, estimateInvocationCost } from '@roleflock/usage-ledger';
 import { EventBus } from './event-bus.js';
+import {
+  authoritativeConflictMessage,
+  type DocumentService,
+} from './documents.js';
 import { loadPriceCards } from './pricing.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import { routeRole, type RoleRoute, type RoutedRole } from './role-routing.js';
@@ -62,13 +66,16 @@ export class Orchestrator {
   private readonly invocations: InvocationRepository;
   private readonly worktreeBaseDir: string;
   private readonly providers?: ProviderRegistry;
+  private readonly documents?: DocumentService;
   private readonly forceFake: boolean;
+  private readonly documentConflictResolved = new Set<string>();
 
   constructor(
     private readonly db: SqliteDb,
     private readonly bus: EventBus,
     worktreeBaseDir: string,
     providers?: ProviderRegistry,
+    documents?: DocumentService,
   ) {
     this.tasks = new TaskRepository(db);
     this.executions = new ActiveExecutionRepository(db);
@@ -81,6 +88,7 @@ export class Orchestrator {
     this.invocations = new InvocationRepository(db);
     this.worktreeBaseDir = worktreeBaseDir;
     this.providers = providers;
+    this.documents = documents;
     this.forceFake = process.env.ROLEFLOCK_FORCE_FAKE === '1';
     mkdirSync(worktreeBaseDir, { recursive: true });
   }
@@ -278,20 +286,30 @@ export class Orchestrator {
         startedAt: now(),
       });
 
-      const disclosure = buildDisclosureManifest([
+      const disclosureEntries = [
         {
           id: `task:${task.id}`,
           content: task.brief,
           source: 'task.brief',
-          sensitivity: 'internal',
+          sensitivity: 'internal' as const,
         },
         {
           id: `worktree:${worktreePath}`,
           content: worktreePath,
           source: 'worktree.path',
-          sensitivity: 'internal',
+          sensitivity: 'internal' as const,
         },
-      ]);
+        ...(this.documents?.list(task.id) ?? [])
+          .filter((doc) => doc.extractedText)
+          .slice(0, 5)
+          .map((doc) => ({
+            id: `document:${doc.id}`,
+            content: doc.extractedText!.slice(0, 2_000),
+            source: `document:${doc.fileName}`,
+            sensitivity: 'internal' as const,
+          })),
+      ];
+      const disclosure = buildDisclosureManifest(disclosureEntries);
       this.evidence.addDisclosureManifest({
         id: randomUUID(),
         invocationId,
@@ -361,6 +379,7 @@ export class Orchestrator {
         const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
         if (decision === 'rejected') throw new Error('Confirmation rejected');
       } else if (role === 'writer') {
+        await this.assertDocumentConflictsResolved(task, graphRunId, nodeRunId, baseCommit, controller);
         const lease = new WriterLease(worktreePath, nodeRunId);
         if (!lease.acquire()) throw new Error('Writer lease unavailable');
         this.worktrees.setWriterLease(task.id, nodeRunId);
@@ -511,6 +530,46 @@ export class Orchestrator {
       createdAt: now(),
     });
     this.bus.publish('task.failed', { taskId, error: details });
+  }
+
+  private async assertDocumentConflictsResolved(
+    task: Task,
+    graphRunId: string,
+    nodeRunId: string,
+    baseCommit: string,
+    controller: AbortController,
+  ): Promise<void> {
+    if (!this.documents || this.documentConflictResolved.has(task.id)) return;
+    const conflict = authoritativeConflictMessage(this.documents.list(task.id));
+    if (!conflict) return;
+
+    const confirmation = createConfirmationRequest({
+      taskId: task.id,
+      graphRunId,
+      nodeRunId,
+      requestType: 'clarify_requirement',
+      rationale: conflict,
+      exactAction: {
+        kind: 'scope',
+        verb: 'confirm',
+        target: 'supporting-documents',
+        paths: this.documents.list(task.id).map((doc) => doc.fileName),
+        sideEffectClass: 'none',
+      },
+      affectedPaths: this.documents.list(task.id).map((doc) => doc.fileName),
+      riskClass: 'high',
+      stateHash: baseCommit,
+    });
+    this.confirmations.create(confirmation);
+    this.setTaskState(task.id, 'awaiting_confirmation');
+    this.updateExecution(task, graphRunId, nodeRunId, 'writer', 'awaiting_confirmation');
+    this.bus.publish('approval.requested', confirmation);
+    const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
+    if (decision === 'rejected') {
+      throw new Error('Authoritative document conflict was rejected');
+    }
+    this.documentConflictResolved.add(task.id);
+    this.setTaskState(task.id, 'running');
   }
 
   private async resolveRoute(role: RoutedRole): Promise<RoleRoute> {

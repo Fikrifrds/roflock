@@ -324,6 +324,34 @@ textarea.compact {
   color: #edae49;
 }
 
+.doc-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.doc-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-bottom: 1px solid #ffffff14;
+}
+
+.doc-list small {
+  display: block;
+  color: #9aa4a1;
+  margin-top: 4px;
+}
+
+.documents-panel {
+  margin-top: 24px;
+  padding-top: 8px;
+}
+
 @media (max-width: 700px) {
   .intent-grid {
     grid-template-columns: 1fr;

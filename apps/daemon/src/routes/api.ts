@@ -13,8 +13,21 @@ import {
 } from '../services/directory-picker.js';
 import { Orchestrator } from '../services/orchestrator.js';
 import { ProviderRegistry } from '../services/provider-registry.js';
+import {
+  DocumentService,
+  isDocumentAuthority,
+  isDocumentKind,
+} from '../services/documents.js';
 
-export function registerApi(app: FastifyInstance, db: SqliteDb, session: Session, bus: EventBus, orchestrator: Orchestrator, providers: ProviderRegistry): void {
+export function registerApi(
+  app: FastifyInstance,
+  db: SqliteDb,
+  session: Session,
+  bus: EventBus,
+  orchestrator: Orchestrator,
+  providers: ProviderRegistry,
+  documents: DocumentService,
+): void {
   const projects = new ProjectRepository(db), tasks = new TaskRepository(db), approvals = new ConfirmationRepository(db), evidence = new EvidenceRepository(db), usage = new UsageRepository(db);
   app.get('/api/health', async () => ({
     ok: true,
@@ -154,6 +167,107 @@ export function registerApi(app: FastifyInstance, db: SqliteDb, session: Session
   app.get('/api/tasks/:id/approvals', async (request) =>
     approvals.listPendingByTask((request.params as { id: string }).id),
   );
+  app.get('/api/tasks/:id/documents', async (request, reply) => {
+    const task = tasks.get((request.params as { id: string }).id);
+    if (!task) return reply.code(404).send({ error: 'Task not found' });
+    return documents.list(task.id).map((doc) => ({
+      id: doc.id,
+      taskId: doc.taskId,
+      kind: doc.kind,
+      authority: doc.authority,
+      fileName: doc.fileName,
+      mimeType: doc.mimeType,
+      byteSize: doc.byteSize,
+      sha256: doc.sha256,
+      extractedTextPreview: doc.extractedText?.slice(0, 280),
+      hasExtractedText: Boolean(doc.extractedText),
+      createdAt: doc.createdAt,
+    }));
+  });
+  app.post('/api/tasks/:id/documents', async (request, reply) => {
+    const task = tasks.get((request.params as { id: string }).id);
+    if (!task) return reply.code(404).send({ error: 'Task not found' });
+    const body = request.body as {
+      fileName?: string;
+      mimeType?: string;
+      authority?: string;
+      kind?: string;
+      contentBase64?: string;
+      content?: string;
+    };
+    if (!body.fileName || !body.authority || !body.kind) {
+      return reply.code(400).send({ error: 'fileName, authority, and kind are required' });
+    }
+    if (!isDocumentAuthority(body.authority)) {
+      return reply.code(400).send({ error: 'Invalid document authority' });
+    }
+    if (!isDocumentKind(body.kind)) {
+      return reply.code(400).send({ error: 'Invalid document kind' });
+    }
+    let bytes: Buffer;
+    try {
+      if (body.contentBase64) bytes = Buffer.from(body.contentBase64, 'base64');
+      else if (typeof body.content === 'string') bytes = Buffer.from(body.content, 'utf8');
+      else return reply.code(400).send({ error: 'content or contentBase64 is required' });
+    } catch {
+      return reply.code(400).send({ error: 'Invalid document content encoding' });
+    }
+    try {
+      const stored = documents.add({
+        taskId: task.id,
+        fileName: body.fileName,
+        mimeType: body.mimeType,
+        authority: body.authority,
+        kind: body.kind,
+        bytes,
+      });
+      evidence.addArtefact({
+        id: randomUUID(),
+        taskId: task.id,
+        kind: 'supporting_document',
+        path: stored.storagePath,
+        contentRef: stored.extractedText?.slice(0, 4_000),
+        metadata: {
+          documentId: stored.id,
+          fileName: stored.fileName,
+          authority: stored.authority,
+          kind: stored.kind,
+          sha256: stored.sha256,
+          byteSize: stored.byteSize,
+          citation: stored.extractedText
+            ? {
+                documentId: stored.id,
+                fileName: stored.fileName,
+                excerpt: stored.extractedText.slice(0, 240),
+              }
+            : undefined,
+        },
+        createdAt: now(),
+      });
+      bus.publish('document.attached', {
+        taskId: task.id,
+        documentId: stored.id,
+        fileName: stored.fileName,
+        authority: stored.authority,
+      });
+      return reply.code(201).send({
+        id: stored.id,
+        taskId: stored.taskId,
+        kind: stored.kind,
+        authority: stored.authority,
+        fileName: stored.fileName,
+        mimeType: stored.mimeType,
+        byteSize: stored.byteSize,
+        sha256: stored.sha256,
+        hasExtractedText: Boolean(stored.extractedText),
+        createdAt: stored.createdAt,
+      });
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : 'Failed to store document',
+      });
+    }
+  });
   app.post('/api/tasks/:id/start', async (request, reply) => {
     const task = tasks.get((request.params as { id: string }).id);
     if (!task) return reply.code(404).send({ error: 'Task not found' });

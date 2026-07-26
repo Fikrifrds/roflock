@@ -54,6 +54,18 @@ type Approval = {
   fingerprint: string;
 };
 
+type TaskDocument = {
+  id: string;
+  fileName: string;
+  kind: string;
+  authority: string;
+  sha256: string;
+  byteSize: number;
+  hasExtractedText?: boolean;
+  extractedTextPreview?: string;
+  createdAt: string;
+};
+
 type Provider = {
   id: string;
   displayName: string;
@@ -372,6 +384,13 @@ function NewTask() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [modeTouched, setModeTouched] = useState(false);
+  const [pendingDocs, setPendingDocs] = useState<
+    Array<{ fileName: string; kind: string; authority: string; content: string }>
+  >([]);
+  const [docDraft, setDocDraft] = useState({
+    kind: 'prd',
+    authority: 'reference',
+  });
   const [form, setForm] = useState({
     projectId: '',
     type: 'bug_fix',
@@ -428,6 +447,12 @@ function NewTask() {
                   maxActualCostUsd: form.maxActualCostUsd,
                 }),
               });
+              for (const doc of pendingDocs) {
+                await api.request(`/api/tasks/${task.id}/documents`, {
+                  method: 'POST',
+                  body: JSON.stringify(doc),
+                });
+              }
               navigate(`/tasks/${task.id}`);
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Failed to create task');
@@ -608,6 +633,86 @@ function NewTask() {
               />
             </div>
           </div>
+          <p className="field-label">Supporting documents (optional)</p>
+          <small className="hint">
+            Original files are stored locally with SHA-256 hashes. A task can start with none.
+          </small>
+          <div className="two-col">
+            <div>
+              <label className="field-label" htmlFor="doc-kind">
+                Kind
+              </label>
+              <select
+                id="doc-kind"
+                value={docDraft.kind}
+                onChange={(e) => setDocDraft({ ...docDraft, kind: e.target.value })}
+              >
+                <option value="prd">PRD</option>
+                <option value="implementation_plan">Implementation plan</option>
+                <option value="architecture">Architecture</option>
+                <option value="api_spec">API spec</option>
+                <option value="ticket">Ticket</option>
+                <option value="research">Research</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="doc-authority">
+                Authority
+              </label>
+              <select
+                id="doc-authority"
+                value={docDraft.authority}
+                onChange={(e) => setDocDraft({ ...docDraft, authority: e.target.value })}
+              >
+                <option value="authoritative_requirement">Authoritative requirement</option>
+                <option value="approved_plan">Approved plan</option>
+                <option value="reference">Reference</option>
+                <option value="inspiration_only">Inspiration only</option>
+              </select>
+            </div>
+          </div>
+          <label className="field-label" htmlFor="doc-file">
+            Attach text file
+          </label>
+          <input
+            id="doc-file"
+            type="file"
+            accept=".md,.txt,.json,.yaml,.yml,.csv"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const content = await file.text();
+              setPendingDocs((current) => [
+                ...current,
+                {
+                  fileName: file.name,
+                  kind: docDraft.kind,
+                  authority: docDraft.authority,
+                  content,
+                },
+              ]);
+              e.target.value = '';
+            }}
+          />
+          {pendingDocs.length ? (
+            <ul className="doc-list">
+              {pendingDocs.map((doc, index) => (
+                <li key={`${doc.fileName}-${index}`}>
+                  {doc.fileName} · {doc.kind} · {doc.authority}
+                  <button
+                    type="button"
+                    className="quiet"
+                    onClick={() =>
+                      setPendingDocs((current) => current.filter((_, i) => i !== index))
+                    }
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
           {error ? <p className="error">{error}</p> : null}
           <div className="form-actions">
             <button type="submit" disabled={submitting || !form.projectId}>
@@ -640,6 +745,12 @@ function TaskDetail() {
     `/api/tasks/${id}/approvals`,
     Boolean(id),
   );
+  const { data: taskDocuments = [] } = useData<TaskDocument[]>(
+    ['task-documents', id],
+    `/api/tasks/${id}/documents`,
+    Boolean(id),
+  );
+  const [docDraft, setDocDraft] = useState({ kind: 'prd', authority: 'reference' });
   const { data: evidence } = useData<{
     findings?: Array<{ severity: string; summary: string; details?: string }>;
   }>(['evidence', id], `/api/evidence/tasks/${id}`, Boolean(id));
@@ -656,6 +767,7 @@ function TaskDetail() {
     void qc.invalidateQueries({ queryKey: ['task-approvals', id] });
     void qc.invalidateQueries({ queryKey: ['approvals'] });
     void qc.invalidateQueries({ queryKey: ['evidence', id] });
+    void qc.invalidateQueries({ queryKey: ['task-documents', id] });
   };
   const action = async (name: string) => {
     setActionError('');
@@ -735,6 +847,77 @@ function TaskDetail() {
             </div>
           </article>
         ) : null}
+        <article className="documents-panel">
+          <p className="eyebrow">SUPPORTING DOCUMENTS</p>
+          {taskDocuments.length ? (
+            <ul className="doc-list">
+              {taskDocuments.map((doc) => (
+                <li key={doc.id}>
+                  <div>
+                    <b>{doc.fileName}</b>
+                    <small>
+                      {doc.kind} · {doc.authority} · sha256 {doc.sha256.slice(0, 12)}…
+                    </small>
+                    {doc.extractedTextPreview ? (
+                      <small>{doc.extractedTextPreview}</small>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="hint">No documents attached. Optional — tasks can start without them.</p>
+          )}
+          <div className="two-col">
+            <select
+              value={docDraft.kind}
+              onChange={(e) => setDocDraft({ ...docDraft, kind: e.target.value })}
+            >
+              <option value="prd">PRD</option>
+              <option value="implementation_plan">Implementation plan</option>
+              <option value="architecture">Architecture</option>
+              <option value="api_spec">API spec</option>
+              <option value="ticket">Ticket</option>
+              <option value="research">Research</option>
+              <option value="other">Other</option>
+            </select>
+            <select
+              value={docDraft.authority}
+              onChange={(e) => setDocDraft({ ...docDraft, authority: e.target.value })}
+            >
+              <option value="authoritative_requirement">Authoritative requirement</option>
+              <option value="approved_plan">Approved plan</option>
+              <option value="reference">Reference</option>
+              <option value="inspiration_only">Inspiration only</option>
+            </select>
+          </div>
+          <input
+            type="file"
+            accept=".md,.txt,.json,.yaml,.yml,.csv"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              try {
+                const content = await file.text();
+                await api.request(`/api/tasks/${id}/documents`, {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    fileName: file.name,
+                    kind: docDraft.kind,
+                    authority: docDraft.authority,
+                    content,
+                    mimeType: file.type || 'text/plain',
+                  }),
+                });
+                refresh();
+              } catch (error) {
+                setActionError(error instanceof Error ? error.message : 'Upload failed');
+              } finally {
+                e.target.value = '';
+              }
+            }}
+          />
+        </article>
         {workflow ? (
           <ol className="workflow-steps" aria-label="Workflow graph">
             {workflow.roles.map((role) => {
