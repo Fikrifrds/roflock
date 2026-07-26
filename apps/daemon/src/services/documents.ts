@@ -96,7 +96,7 @@ export class DocumentService {
     if (input.bytes.byteLength > MAX_BYTES) {
       throw new Error(`Document exceeds ${MAX_BYTES} byte limit`);
     }
-    const safeName = basename(input.fileName).replace(/[^\w.\-]+/g, '_');
+    const safeName = basename(input.fileName).replace(/[^\w.-]+/g, '_');
     if (!safeName) throw new Error('fileName is required');
 
     const id = randomUUID();

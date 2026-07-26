@@ -140,10 +140,10 @@ export function parseCursorAgentStatus(raw: unknown): {
   const email = parsed.email ?? parsed.user?.email;
   const loggedIn = Boolean(
     parsed.isAuthenticated ||
-      parsed.loggedIn ||
-      parsed.hasAccessToken ||
-      parsed.status === 'authenticated' ||
-      email,
+    parsed.loggedIn ||
+    parsed.hasAccessToken ||
+    parsed.status === 'authenticated' ||
+    email,
   );
   return { loggedIn, email, message: parsed.message };
 }
@@ -188,10 +188,7 @@ export async function runProviderAuthAction(
     providerId,
     command: login.command,
     launched: login.launched,
-    detail:
-      action === 'switch'
-        ? `Logged out previous session. ${login.detail}`
-        : login.detail,
+    detail: action === 'switch' ? `Logged out previous session. ${login.detail}` : login.detail,
   };
 }
 
@@ -347,7 +344,7 @@ async function getCursorAccount(): Promise<ProviderAccount> {
 
   let loggedIn = false;
   let email: string | undefined;
-  let detail = `CLI binary ready (${discovery.binary}).`;
+  let detail: string;
   try {
     const { stdout } = await execFileAsync(discovery.binary, ['status', '--format', 'json'], {
       timeout: 8_000,
@@ -386,7 +383,9 @@ async function getCursorAccount(): Promise<ProviderAccount> {
   };
 }
 
-async function runLogout(providerId: string): Promise<{ ok: boolean; command: string; detail: string }> {
+async function runLogout(
+  providerId: string,
+): Promise<{ ok: boolean; command: string; detail: string }> {
   if (providerId === 'claude') {
     const binary = (await whichBinary(process.env.CLAUDE_PATH ?? 'claude')) ?? 'claude';
     const command = `${binary} auth logout`;

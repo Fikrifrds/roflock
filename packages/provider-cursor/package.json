@@ -14,11 +14,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "clean": "rm -rf dist"
   },
-  "dependencies": {"@roleflock/contracts":"workspace:*","@roleflock/provider-core":"workspace:*"},
+  "dependencies": {
+    "@roleflock/contracts": "workspace:*",
+    "@roleflock/provider-core": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
