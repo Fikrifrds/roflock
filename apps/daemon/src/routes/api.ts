@@ -191,11 +191,40 @@ export function registerApi(app: FastifyInstance, db: SqliteDb, session: Session
   app.post('/api/approval-grants', async () => ({ id: randomUUID(), accepted: true }));
   app.post('/api/approval-grants/:id/revoke', async () => ({ accepted: true }));
   app.get('/api/providers', async () => providers.list());
-  app.post('/api/providers', async () => ({ id: randomUUID(), accepted: true }));
+  app.post('/api/providers', async (request, reply) => {
+    const body = request.body as {
+      displayName?: string;
+      endpoint?: string;
+      apiKey?: string;
+      model?: string;
+      id?: string;
+    };
+    if (!body.displayName || !body.endpoint || !body.model) {
+      return reply
+        .code(400)
+        .send({ error: 'displayName, endpoint, and model are required' });
+    }
+    try {
+      const registered = providers.registerCustom({
+        id: body.id,
+        displayName: body.displayName,
+        endpoint: body.endpoint,
+        apiKey: body.apiKey ?? '',
+        model: body.model,
+      });
+      bus.publish('provider.registered', registered);
+      return reply.code(201).send(registered);
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : 'Failed to register provider',
+      });
+    }
+  });
   app.post('/api/providers/:id/health-check', async (request, reply) => {
     const id = (request.params as { id: string }).id;
     try {
-      return await providers.healthCheck(id);
+      const health = await providers.healthCheck(id);
+      return { ...health, healthy: health.status === 'ready' };
     } catch {
       return reply.code(404).send({ error: 'Provider not found' });
     }

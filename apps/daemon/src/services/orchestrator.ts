@@ -28,6 +28,8 @@ import {
 } from '@roleflock/repository-runtime';
 import { FakeProvider } from '@roleflock/provider-core';
 import { EventBus } from './event-bus.js';
+import type { ProviderRegistry } from './provider-registry.js';
+import { routeRole, type RoleRoute, type RoutedRole } from './role-routing.js';
 
 interface PreparedRun {
   graphRunId: string;
@@ -56,11 +58,14 @@ export class Orchestrator {
   private readonly confirmations: ConfirmationRepository;
   private readonly invocations: InvocationRepository;
   private readonly worktreeBaseDir: string;
+  private readonly providers?: ProviderRegistry;
+  private readonly forceFake: boolean;
 
   constructor(
     private readonly db: SqliteDb,
     private readonly bus: EventBus,
     worktreeBaseDir: string,
+    providers?: ProviderRegistry,
   ) {
     this.tasks = new TaskRepository(db);
     this.executions = new ActiveExecutionRepository(db);
@@ -72,6 +77,8 @@ export class Orchestrator {
     this.confirmations = new ConfirmationRepository(db);
     this.invocations = new InvocationRepository(db);
     this.worktreeBaseDir = worktreeBaseDir;
+    this.providers = providers;
+    this.forceFake = process.env.ROLEFLOCK_FORCE_FAKE === '1';
     mkdirSync(worktreeBaseDir, { recursive: true });
   }
 
@@ -214,20 +221,27 @@ export class Orchestrator {
     controller: AbortController,
   ): Promise<void> {
     const { graphRunId, graph, worktreePath, baseCommit } = prepared;
-    const provider = new FakeProvider('fake', [
-      { type: 'phase.changed', phase: 'reasoning' },
-      { type: 'heartbeat', at: now() },
-      { type: 'invocation.completed', output: { summary: `Completed ${task.title}` } },
-    ]);
+    let attempt = 0;
 
     const results = await runSequentialGraph(graph, async (role) => {
       if (controller.signal.aborted) throw new Error('Cancelled by operator');
+      attempt += 1;
+      if (attempt > task.maxAttempts * graph.nodes.length) {
+        throw new Error(`Exceeded max attempts budget (${task.maxAttempts})`);
+      }
+      this.assertBudget(task);
+
       const nodeRunId = randomUUID();
       this.db
         .prepare(
           'INSERT INTO node_runs (id, graph_run_id, node_key, state, started_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
         )
         .run(nodeRunId, graphRunId, role, 'running', now(), now());
+
+      const route =
+        role === 'planner' || role === 'reviewer' || role === 'writer' || role === 'verifier'
+          ? await this.resolveRoute(role)
+          : undefined;
 
       const phase =
         role === 'test'
@@ -237,15 +251,21 @@ export class Orchestrator {
             : role === 'accept' || role === 'reviewer'
               ? 'awaiting_confirmation'
               : 'reasoning';
-      this.updateExecution(task, graphRunId, nodeRunId, role, phase);
-      this.appendEvent(task.id, `node.${role}.started`, { graphRunId, nodeRunId, role });
+      this.updateExecution(task, graphRunId, nodeRunId, role, phase, route);
+      this.appendEvent(task.id, `node.${role}.started`, {
+        graphRunId,
+        nodeRunId,
+        role,
+        providerId: route?.providerId,
+        fallbackUsed: route?.fallbackUsed,
+      });
 
       const invocationId = randomUUID();
       this.invocations.create({
         id: invocationId,
         nodeRunId,
-        providerConnectionId: 'fake',
-        configuredModelId: 'phase0-fake',
+        providerConnectionId: route?.providerId ?? 'deterministic',
+        configuredModelId: route?.modelId ?? 'command-runner',
         status: 'running',
         startedAt: now(),
       });
@@ -267,16 +287,24 @@ export class Orchestrator {
       this.evidence.addDisclosureManifest({
         id: randomUUID(),
         invocationId,
-        providerConnectionId: 'fake',
+        providerConnectionId: route?.providerId ?? 'deterministic',
         selectedContext: disclosure.entries,
         exclusions: ['.env', '**/*.pem', '**/*.key'],
         createdAt: now(),
       });
 
       if (role === 'planner' || role === 'verifier') {
-        for await (const event of provider.invoke({
+        const adapter =
+          route?.adapter ??
+          new FakeProvider('fake', [
+            { type: 'phase.changed', phase: 'reasoning' },
+            { type: 'heartbeat', at: now() },
+            { type: 'invocation.completed', output: { summary: `Completed ${task.title}` } },
+          ]);
+        let output = '';
+        for await (const event of adapter.invoke({
           invocationId,
-          prompt: `${role}: ${task.brief}`,
+          prompt: `${role.toUpperCase()} for RoleFlock task "${task.title}":\n${task.brief}\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}`,
           cwd: worktreePath,
           signal: controller.signal,
         })) {
@@ -287,17 +315,31 @@ export class Orchestrator {
               this.executions.upsert(execution);
             }
           }
+          if (event.type === 'model.output.delta') output += event.text;
+          if (event.type === 'invocation.failed') {
+            throw new Error(event.error.message);
+          }
         }
         this.evidence.addFinding({
           id: randomUUID(),
           taskId: task.id,
           nodeRunId,
           severity: 'info',
-          summary: `${role} completed with configured model phase0-fake`,
-          details: task.brief,
+          summary: `${role} via ${route?.providerDisplayName ?? 'fake'} / ${route?.modelDisplayName ?? 'phase0-fake'}`,
+          details: output || task.brief,
           createdAt: now(),
         });
       } else if (role === 'reviewer') {
+        if (route && route.providerId !== 'fake') {
+          for await (const event of route.adapter.invoke({
+            invocationId,
+            prompt: `Review plan for: ${task.brief}`,
+            cwd: worktreePath,
+            signal: controller.signal,
+          })) {
+            if (event.type === 'invocation.failed') throw new Error(event.error.message);
+          }
+        }
         const confirmation = createConfirmationRequest({
           taskId: task.id,
           graphRunId,
@@ -317,7 +359,7 @@ export class Orchestrator {
         });
         this.confirmations.create(confirmation);
         this.setTaskState(task.id, 'awaiting_confirmation');
-        this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation');
+        this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation', route);
         this.bus.publish('approval.requested', confirmation);
         const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
         if (decision === 'rejected') throw new Error('Confirmation rejected');
@@ -326,10 +368,12 @@ export class Orchestrator {
         if (!lease.acquire()) throw new Error('Writer lease unavailable');
         this.worktrees.setWriterLease(task.id, nodeRunId);
         try {
+          // Deterministic sandbox write remains the security boundary for Phase 0/1.
+          // Cursor CLI may be selected for attribution when ready, but writes stay leased.
           const target = join(worktreePath, 'ROLEFLOCK_FIX.md');
           await writeFile(
             target,
-            `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\n`,
+            `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'fake'}\n`,
           );
           const diff = await captureDiff(worktreePath);
           this.evidence.addArtefact({
@@ -338,7 +382,11 @@ export class Orchestrator {
             kind: 'diff',
             path: target,
             contentRef: diff.patch,
-            metadata: { changedFiles: diff.changedFiles, status: diff.status },
+            metadata: {
+              changedFiles: diff.changedFiles,
+              status: diff.status,
+              providerId: route?.providerId,
+            },
             createdAt: now(),
           });
         } finally {
@@ -371,20 +419,27 @@ export class Orchestrator {
         if (decision === 'rejected') throw new Error('Human rejected the change');
       }
 
+      const costs = this.usage.summarize(task.id);
       this.invocations.updateStatus(invocationId, 'completed', 'success', now());
       this.usage.append({
         id: randomUUID(),
         taskId: task.id,
         invocationId,
-        providerConnectionId: 'fake',
-        modelId: 'phase0-fake',
-        inputTokens: 100,
-        outputTokens: 50,
-        actualCostUsd: 0,
+        providerConnectionId: route?.providerId ?? 'deterministic',
+        modelId: route?.modelId ?? 'command-runner',
+        inputTokens: route?.providerId === 'fake' || !route ? 100 : 250,
+        outputTokens: route?.providerId === 'fake' || !route ? 50 : 120,
+        actualCostUsd: route && route.providerId !== 'fake' ? 0.02 : 0,
         shadowCostUsd: 0.01,
-        confidence: 'exact',
+        confidence: route && route.providerId !== 'fake' ? 'estimated' : 'exact',
         createdAt: now(),
       });
+      const execution = this.executions.getByNodeRun(nodeRunId);
+      if (execution) {
+        execution.actualCost = costs.actualCostUsd;
+        execution.shadowCost = costs.shadowCostUsd + 0.01;
+        this.executions.upsert(execution);
+      }
       this.db
         .prepare('UPDATE node_runs SET state = ?, completed_at = ?, outcome = ? WHERE id = ?')
         .run('completed', now(), 'success', nodeRunId);
@@ -424,6 +479,32 @@ export class Orchestrator {
       createdAt: now(),
     });
     this.bus.publish('task.failed', { taskId, error: details });
+  }
+
+  private async resolveRoute(role: RoutedRole): Promise<RoleRoute> {
+    if (!this.providers) {
+      const fake = new FakeProvider();
+      return {
+        role,
+        providerId: 'fake',
+        providerDisplayName: 'Phase 0 Fake Provider',
+        modelId: 'phase0-fake',
+        modelDisplayName: 'Phase 0 Fake',
+        adapter: fake,
+        fallbackUsed: true,
+      };
+    }
+    return routeRole(this.providers, role, { forceFake: this.forceFake });
+  }
+
+  private assertBudget(task: Task): void {
+    if (task.maxActualCostUsd === undefined) return;
+    const summary = this.usage.summarize(task.id);
+    if (summary.actualCostUsd >= task.maxActualCostUsd) {
+      throw new Error(
+        `Hard budget reached: actual $${summary.actualCostUsd.toFixed(4)} >= max $${task.maxActualCostUsd.toFixed(4)}`,
+      );
+    }
   }
 
   private waitForAcceptance(
@@ -478,8 +559,10 @@ export class Orchestrator {
     nodeRunId: string,
     role: string,
     phase: ActiveExecution['phase'],
+    route?: RoleRoute,
   ): void {
     const timestamp = now();
+    const costs = this.usage.summarize(task.id);
     const roleModels: Record<string, { provider: string; model: string }> = {
       planner: { provider: 'Claude (fake)', model: 'phase0-fake-planner' },
       reviewer: { provider: 'Custom (fake)', model: 'phase0-fake-reviewer' },
@@ -495,22 +578,24 @@ export class Orchestrator {
       taskId: task.id,
       roleId: role,
       roleDisplayName: role,
-      providerConnectionId: 'fake',
-      providerDisplayName: mapping.provider,
-      configuredModelId: mapping.model,
-      configuredModelDisplayName: mapping.model,
+      providerConnectionId: route?.providerId ?? (role === 'test' ? 'deterministic' : 'fake'),
+      providerDisplayName: route?.providerDisplayName ?? mapping.provider,
+      configuredModelId: route?.modelId ?? mapping.model,
+      configuredModelDisplayName: route?.modelDisplayName ?? mapping.model,
       effort: 'standard',
       phase,
       permissionProfileId: role === 'writer' ? 'worktree-write' : 'read-only',
-      currentActivity: `${role} executing`,
+      currentActivity: route?.fallbackUsed
+        ? `${role} executing (fallback)`
+        : `${role} executing`,
       activeCommandPreview: role === 'test' ? 'node -e deterministic-test' : undefined,
       startedAt: timestamp,
       lastHeartbeatAt: timestamp,
       attempt: 1,
       maxAttempts: task.maxAttempts,
-      actualCost: 0,
-      shadowCost: 0.01,
-      usageConfidence: 'exact',
+      actualCost: costs.actualCostUsd,
+      shadowCost: costs.shadowCostUsd,
+      usageConfidence: route && route.providerId !== 'fake' ? 'estimated' : 'exact',
       pauseRequested: false,
       stopRequested: false,
       forceTerminationAvailable: true,

@@ -1,4 +1,4 @@
-export type GraphMode = 'direct' | 'fast' | 'standard' | 'bug_fix';
+export type GraphMode = 'direct' | 'fast' | 'standard' | 'bug_fix' | 'critical';
 
 export type WorkflowRole =
   | 'planner'
@@ -67,11 +67,21 @@ export const standardGraph: WorkflowGraph = {
   nodes: bugFixGraph.nodes,
 };
 
+/** Critical feature: same as bug fix but labeled for higher-risk work */
+export const criticalGraph: WorkflowGraph = {
+  id: 'critical',
+  label: 'Critical Feature',
+  description:
+    'High-risk path: planner → reviewer → writer → test → verifier → human accept',
+  nodes: bugFixGraph.nodes,
+};
+
 export const workflowGraphs: Record<GraphMode, WorkflowGraph> = {
   direct: directGraph,
   fast: fastGraph,
   standard: standardGraph,
   bug_fix: bugFixGraph,
+  critical: criticalGraph,
 };
 
 export function getWorkflowGraph(mode: string): WorkflowGraph {

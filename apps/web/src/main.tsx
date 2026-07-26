@@ -41,6 +41,7 @@ type ActiveExecution = {
   attempt: number;
   actualCost?: number;
   shadowCost?: number;
+  usageConfidence?: string;
 };
 
 type Approval = {
@@ -56,6 +57,8 @@ type Provider = {
   id: string;
   displayName: string;
   status: string;
+  connectionType?: string;
+  health?: { status: string; detail?: string };
   capabilities: Record<string, boolean>;
 };
 
@@ -418,6 +421,7 @@ function NewTask() {
                   { id: 'direct', label: 'Direct', description: '' },
                   { id: 'fast', label: 'Fast', description: '' },
                   { id: 'standard', label: 'Standard', description: '' },
+                  { id: 'critical', label: 'Critical Feature', description: '' },
                 ]
             ).map((workflow) => (
               <option key={workflow.id} value={workflow.id}>
@@ -639,6 +643,7 @@ function TaskDetail() {
                   'Cost',
                   `$${(execution?.actualCost ?? 0).toFixed(2)} / shadow $${(execution?.shadowCost ?? 0).toFixed(2)}`,
                 ],
+                ['Usage confidence', execution?.usageConfidence ?? 'exact'],
                 ['Workflow', task.workflowGraphVersionId],
               ] as const
             ).map(([label, value]) => (
@@ -759,13 +764,44 @@ function Evidence() {
 }
 
 function Providers() {
+  const queryClient = useQueryClient();
   const { data: providers = [] } = useData<Provider[]>(['providers'], '/api/providers');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [health, setHealth] = useState<Record<string, string>>({});
+  const [form, setForm] = useState({
+    displayName: '',
+    endpoint: '',
+    apiKey: '',
+    model: '',
+  });
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  async function onRegister(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setFormError(null);
+    try {
+      await api.request('/api/providers', {
+        method: 'POST',
+        body: JSON.stringify(form),
+      });
+      setForm({ displayName: '', endpoint: '', apiKey: '', model: '' });
+      await queryClient.invalidateQueries({ queryKey: ['providers'] });
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Failed to register provider');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <Shell>
       <Section title="Providers">
-        <p className="lede">Local connections available to the flock. Missing providers are not configured.</p>
+        <p className="lede">
+          Local CLI discovery plus optional OpenAI-compatible HTTP endpoints. Missing CLIs stay
+          listed so you can install them later.
+        </p>
         {providers.length ? (
           providers.map((provider) => (
             <article className="provider-card" key={provider.id}>
@@ -773,7 +809,10 @@ function Providers() {
                 <div>
                   <b>{provider.displayName}</b>
                   <small>id {provider.id}</small>
-                  <small>status {provider.status}</small>
+                  <small>
+                    {provider.connectionType ?? 'cli'} · {provider.status}
+                  </small>
+                  {provider.health?.detail ? <small>{provider.health.detail}</small> : null}
                 </div>
                 <div className="actions compact-actions">
                   <button
@@ -782,18 +821,22 @@ function Providers() {
                     onClick={async () => {
                       setHealth((current) => ({ ...current, [provider.id]: 'Checking…' }));
                       try {
-                        const result = await api.request<{ healthy: boolean }>(
-                          `/api/providers/${provider.id}/health-check`,
-                          { method: 'POST' },
-                        );
+                        const result = await api.request<{
+                          healthy: boolean;
+                          status: string;
+                          detail?: string;
+                        }>(`/api/providers/${provider.id}/health-check`, { method: 'POST' });
                         setHealth((current) => ({
                           ...current,
-                          [provider.id]: result.healthy ? 'Healthy' : 'Unhealthy',
+                          [provider.id]: result.detail
+                            ? `${result.status}: ${result.detail}`
+                            : result.status,
                         }));
                       } catch (error) {
                         setHealth((current) => ({
                           ...current,
-                          [provider.id]: error instanceof Error ? error.message : 'Health check failed',
+                          [provider.id]:
+                            error instanceof Error ? error.message : 'Health check failed',
                         }));
                       }
                     }}
@@ -802,7 +845,12 @@ function Providers() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setExpanded((current) => ({ ...current, [provider.id]: !current[provider.id] }))}
+                    onClick={() =>
+                      setExpanded((current) => ({
+                        ...current,
+                        [provider.id]: !current[provider.id],
+                      }))
+                    }
                   >
                     {expanded[provider.id] ? 'Hide details' : 'Show details'}
                   </button>
@@ -820,8 +868,62 @@ function Providers() {
             </article>
           ))
         ) : (
-          <Empty message="No providers are configured. Claude and other external providers are currently missing." />
+          <Empty message="No providers are configured yet." />
         )}
+      </Section>
+      <Section title="Add OpenAI-compatible provider">
+        <p className="lede">
+          Point RoleFlock at any OpenAI-compatible chat completions endpoint for the reviewer
+          role.
+        </p>
+        <form className="stack" onSubmit={(event) => void onRegister(event)}>
+          <label className="field-label" htmlFor="provider-name">
+            Display name
+          </label>
+          <input
+            id="provider-name"
+            required
+            placeholder="Local OpenAI-compatible"
+            value={form.displayName}
+            onChange={(e) => setForm({ ...form, displayName: e.target.value })}
+          />
+          <label className="field-label" htmlFor="provider-endpoint">
+            Endpoint
+          </label>
+          <input
+            id="provider-endpoint"
+            required
+            placeholder="http://127.0.0.1:11434/v1"
+            value={form.endpoint}
+            onChange={(e) => setForm({ ...form, endpoint: e.target.value })}
+          />
+          <label className="field-label" htmlFor="provider-model">
+            Model
+          </label>
+          <input
+            id="provider-model"
+            required
+            placeholder="gpt-4o-mini"
+            value={form.model}
+            onChange={(e) => setForm({ ...form, model: e.target.value })}
+          />
+          <label className="field-label" htmlFor="provider-key">
+            API key
+          </label>
+          <input
+            id="provider-key"
+            type="password"
+            placeholder="Optional for local endpoints"
+            value={form.apiKey}
+            onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+          />
+          {formError ? <p className="error">{formError}</p> : null}
+          <div className="form-actions">
+            <button type="submit" disabled={saving}>
+              {saving ? 'Saving…' : 'Register provider'}
+            </button>
+          </div>
+        </form>
       </Section>
     </Shell>
   );

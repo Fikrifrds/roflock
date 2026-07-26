@@ -29,8 +29,8 @@ export async function createServer(options: ServerOptions = {}): Promise<{ app: 
   const db = openMigratedDatabase(join(dataDir, 'roleflock.db'));
   reconcileOrphanedProcesses(db);
   const bus = new EventBus();
-  const orchestrator = new Orchestrator(db, bus, join(dataDir, 'worktrees'));
   const providers = new ProviderRegistry();
+  const orchestrator = new Orchestrator(db, bus, join(dataDir, 'worktrees'), providers);
   registerApi(app, db, session, bus, orchestrator, providers);
   const webDist = join(process.cwd(), 'apps', 'web', 'dist');
   if (existsSync(webDist)) await app.register(statik, { root: webDist, wildcard: false });

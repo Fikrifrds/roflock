@@ -62,6 +62,9 @@ importers:
       '@roleflock/provider-cursor':
         specifier: workspace:*
         version: link:../../packages/provider-cursor
+      '@roleflock/provider-custom':
+        specifier: workspace:*
+        version: link:../../packages/provider-custom
       '@roleflock/repository-runtime':
         specifier: workspace:*
         version: link:../../packages/repository-runtime

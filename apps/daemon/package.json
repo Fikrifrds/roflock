@@ -26,6 +26,7 @@
     "@roleflock/provider-codex": "workspace:*",
     "@roleflock/provider-core": "workspace:*",
     "@roleflock/provider-cursor": "workspace:*",
+    "@roleflock/provider-custom": "workspace:*",
     "@roleflock/repository-runtime": "workspace:*",
     "@roleflock/run-control": "workspace:*",
     "fastify": "^5.2.1"
