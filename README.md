@@ -14,13 +14,15 @@ Implemented and covered by automated tests:
 
 - Verified bug-fix flow (planner → approval → writer → verification → verifier → accept)
 - Optional verification command (`npm test`, custom argv, or artefact check)
-- Direct / Fast / Standard / Bug Fix workflow modes
+- Direct / Fast / Standard / Bug Fix / Critical workflow modes, pinned to an immutable graph version
+- Graph runtime: typed failure edges, bounded retry loops, concurrency limits, one writer per worktree
+- Read-only run graph on Task detail, showing live node state and failure routes
 - Folder picker + custom project names
 - Approval inbox, grant reuse, knowledge base UI
 - Providers page with real CLI discovery + account/login/switch + local usage
 - Evidence, context inspector, export/privacy/backup/delete
-- Daemon restart recovery — [`docs/crash-recovery.md`](docs/crash-recovery.md)
-- Localhost-only bind, session token, CSRF, no shell endpoint
+- Daemon restart recovery that resumes completed nodes — [`docs/crash-recovery.md`](docs/crash-recovery.md)
+- Localhost-only bind, file-delivered session token, CSRF, origin allow-list, no shell endpoint
 - Version/update check without repository data
 
 Manual checklist: [`docs/test-plans/manual-test-checklist.md`](docs/test-plans/manual-test-checklist.md)  
@@ -34,6 +36,8 @@ Requires Node 24+ and pnpm 11+.
 ```bash
 pnpm install
 pnpm build
+pnpm lint       # ESLint 9 flat config
+pnpm typecheck
 pnpm test
 ```
 
@@ -47,11 +51,26 @@ pnpm dev
 pnpm dev:web
 ```
 
-Open http://127.0.0.1:5173
+**Open the URL the daemon prints**, not a bare `localhost`:
+
+```
+Open the UI:    http://127.0.0.1:4178/?rft=<token>
+Vite dev UI:    http://127.0.0.1:5173/?rft=<token>
+```
+
+That `rft` parameter is the one-time handoff of the session token. The UI stores it
+and strips it from the address bar; after the first visit a plain
+`http://127.0.0.1:5173` works. Lost the link? Run `pnpm url`.
+
+The token lives in `~/.roleflock/session.json` (mode `0600`) and is stable across
+restarts, so the link keeps working. `ROLEFLOCK_ROTATE_TOKEN=1 pnpm dev` mints a new
+one and invalidates the old. The daemon never serves the token over HTTP — loopback is
+shared with every other OS account on the machine, so the file mode is what keeps a
+second local user out.
 
 State: `~/.roleflock/roleflock.db` (override with `ROLEFLOCK_DATA_DIR`).
 
-**Important:** restart both daemon and web after pulling new code. If Start fails, the UI now shows the error text.
+**Important:** restart both daemon and web after pulling new code. If Start fails, the UI shows the error text.
 
 ## Suggested first test path
 
@@ -70,23 +89,28 @@ Use `ROLEFLOCK_FORCE_FAKE=1 pnpm dev` for a deterministic first pass without liv
 - Claude / Codex / Cursor appear on Providers with `ready` or `missing` based on PATH; login via provider auth actions.
 - **Cursor writer:** sandboxed filesystem writes under a permission envelope + writer lease — full Cursor Agent CLI loop still deferred.
 - Planner/verifier may invoke Claude/Codex when discovered and not forced fake.
+- Provider discovery spawns the real CLIs and caches the result for 15s, so the Providers page does not respawn subprocesses on every poll.
+- `pnpm url` reprints the launch URL; `ROLEFLOCK_ROTATE_TOKEN=1` rotates the session token.
 - Public site copy (draft): [`docs/public/README.md`](docs/public/README.md), [`docs/public/privacy.md`](docs/public/privacy.md)
 - Baseline benchmark: `pnpm benchmark` → [`docs/benchmarks/baseline.md`](docs/benchmarks/baseline.md)
 
 ## Safety invariants
 
 - Browser never executes shell commands
-- Daemon binds to localhost by default
+- Daemon binds to localhost by default, and no API route hands out the session token
 - No raw shell or arbitrary filesystem-read HTTP endpoints
-- One writer lease per task worktree
+- One writer lease per task worktree; the scheduler never runs two writers at once
+- No validated graph can loop forever, or reach `accept` without its required checks
+- A running task keeps the graph version it started with
 - Secret/symlink escape paths denied
 - Unknown billable outcomes are not auto-retried
+- Actual and shadow cost are never presented as one bill
 - Update checks never send repository paths or contents
 
 ## Workspace
 
 ```text
-apps/web          Local React control UI
+apps/web          Local React control UI (routes/, components/, lib/, test/)
 apps/daemon       Fastify local daemon + orchestrator
 packages/*        Contracts, database, runtime, providers, approvals
 docs/product      PRD + implementation plan
