@@ -1644,7 +1644,15 @@ function Privacy() {
 
 function Providers() {
   const queryClient = useQueryClient();
-  const { data: providers = [] } = useData<Provider[]>(['providers'], '/api/providers');
+  const {
+    data: providers = [],
+    isLoading: providersLoading,
+    isFetching: providersFetching,
+  } = useQuery({
+    queryKey: ['providers'],
+    queryFn: () => api.request<Provider[]>('/api/providers'),
+    refetchInterval: 15_000,
+  });
   const { data: projects = [] } = useData<Project[]>(['projects'], '/api/projects');
   const { data: disclosureGrants = [], refetch: refetchDisclosure } = useData<DisclosureGrant[]>(
     ['disclosure-grants'],
@@ -1723,8 +1731,16 @@ function Providers() {
           Real CLI discovery plus optional OpenAI-compatible endpoints. Sign in per CLI, switch
           accounts when needed, and track RoleFlock local usage for each connection.
         </p>
-        {visible.length ? (
-          visible.map((provider) => (
+        {providersLoading ? (
+          <Empty message="Loading providers…" />
+        ) : visible.length ? (
+          <>
+            {providersFetching ? (
+              <p className="hint" aria-live="polite">
+                Updating providers…
+              </p>
+            ) : null}
+            {visible.map((provider) => (
             <article className="provider-card" key={provider.id}>
               <div className="row">
                 <div>
@@ -1861,7 +1877,8 @@ function Providers() {
               {authNote[provider.id] ? <p className="hint">{authNote[provider.id]}</p> : null}
               {expanded[provider.id] ? <ProviderModels providerId={provider.id} /> : null}
             </article>
-          ))
+          ))}
+          </>
         ) : (
           <Empty message="No providers are configured yet." />
         )}

@@ -178,7 +178,7 @@ export class ProviderRegistry {
       return base;
     }
     if (connectionTypes[id] === 'cli' || ['claude', 'codex', 'cursor'].includes(id)) {
-      const account = await getProviderAccount(id);
+      const account = await getProviderAccount(id, { fresh: true });
       return mergeAccountIntoHealth(base, account);
     }
     return base;
