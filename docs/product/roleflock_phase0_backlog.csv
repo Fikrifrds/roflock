@@ -1,0 +1,45 @@
+ID,Epic,Title,Priority,Story Points,Status,Dependencies
+RF-P0-001,Repository Bootstrap,Create pnpm monorepo and package boundaries,P0,3,Not started,Milestone 0
+RF-P0-002,Repository Bootstrap,"Add lint, typecheck, test, build and CI",P0,3,Not started,RF-P0-001
+RF-P0-003,Local Runtime,Add Fastify daemon bound to 127.0.0.1:4178,P0,3,Not started,RF-P0-001
+RF-P0-004,Local Runtime,Add local web shell and daemon health status,P0,3,Not started,RF-P0-003
+RF-P0-005,Security,Implement local session token and origin/CSRF policy,P0,5,Not started,RF-P0-003
+RF-P0-006,Contracts,"Define event envelope, task, graph, node and invocation schemas",P0,5,Not started,RF-P0-001
+RF-P0-007,Database,Create SQLite schema and migration runner,P0,5,Not started,RF-P0-006
+RF-P0-008,Event Store,Implement append-only event repository,P0,8,Not started,RF-P0-007
+RF-P0-009,Event Store,"Implement reducers, snapshots and replay",P0,8,Not started,RF-P0-008
+RF-P0-010,Event Store,Add idempotency and crash-boundary tests,P0,5,Not started,RF-P0-009
+RF-P0-011,Repository Runtime,Register and validate a local Git repository,P0,5,Not started,RF-P0-007
+RF-P0-012,Repository Runtime,"Implement path policy, realpath and symlink protection",P0,8,Not started,RF-P0-011
+RF-P0-013,Repository Runtime,Implement task worktree lifecycle,P0,8,Not started,RF-P0-011
+RF-P0-014,Repository Runtime,Implement one-writer lease,P0,5,Not started,RF-P0-013
+RF-P0-015,Repository Runtime,"Capture diff, changed files and Git evidence",P0,5,Not started,RF-P0-013
+RF-P0-016,Run Control,"Define RuntimeLease, ProcessHandle and ActiveExecution",P0,5,Not started,RF-P0-006
+RF-P0-017,Run Control,Implement child process supervision and heartbeat,P0,8,Not started,RF-P0-016
+RF-P0-018,Run Control,Implement cooperative stop and forced termination,P0,8,Not started,RF-P0-017
+RF-P0-019,Run Control,Implement cancellation and emergency stop,P0,5,Not started,RF-P0-018
+RF-P0-020,Run Control,Implement daemon restart and orphan reconciliation,P0,8,Not started,RF-P0-017
+RF-P0-021,Provider Core,Define provider capabilities and normalised events,P0,5,Not started,RF-P0-006
+RF-P0-022,Provider Core,Implement fake provider and fake CLI fixtures,P0,5,Not started,RF-P0-021
+RF-P0-023,Custom Provider,Implement generic HTTP provider adapter,P0,8,Not started,RF-P0-021
+RF-P0-024,Custom Provider,Implement usage and disclosure manifest,P0,5,Not started,RF-P0-023
+RF-P0-025,Codex,Implement Codex App Server transport,P0,8,Not started,RF-P0-021
+RF-P0-026,Codex,"Implement Codex events, approvals and interrupt",P0,8,Not started,RF-P0-025
+RF-P0-027,Claude,Implement Claude Code discovery and health,P0,5,Not started,RF-P0-021
+RF-P0-028,Claude,Implement Claude structured execution and planner profile,P0,8,Not started,RF-P0-027
+RF-P0-029,Cursor,Implement Cursor discovery and writer invocation,P0,8,Not started,RF-P0-021
+RF-P0-030,Cursor,Implement writer permission envelope and sandbox checks,P0,8,Not started,"RF-P0-029,RF-P0-014"
+RF-P0-031,Approvals,Define ConfirmationRequest and StructuredAction,P0,5,Not started,RF-P0-006
+RF-P0-032,Approvals,Implement fingerprint canonicalisation,P0,8,Not started,RF-P0-031
+RF-P0-033,Approvals,Implement Approval Inbox persistence and decisions,P0,8,Not started,RF-P0-032
+RF-P0-034,Approvals,Implement grouped identical approvals,P0,5,Not started,RF-P0-033
+RF-P0-035,Approvals,"Implement scoped grants, expiry and revocation",P0,8,Not started,RF-P0-033
+RF-P0-036,UI,Build active execution status and SSE updates,P0,8,Not started,"RF-P0-004,RF-P0-016"
+RF-P0-037,UI,"Add pause, stop, force and cancel controls",P0,5,Not started,"RF-P0-036,RF-P0-018"
+RF-P0-038,UI,Build minimal Approval Inbox,P0,8,Not started,"RF-P0-033,RF-P0-004"
+RF-P0-039,Evidence,Implement deterministic command/test node,P0,8,Not started,RF-P0-013
+RF-P0-040,Evidence,Implement final evidence bundle,P0,5,Not started,"RF-P0-015,RF-P0-039"
+RF-P0-041,Walking Skeleton,Implement Verified Bug Fix orchestration,P0,13,Not started,"RF-P0-023,RF-P0-026,RF-P0-028,RF-P0-030,RF-P0-038,RF-P0-039"
+RF-P0-042,Recovery,Run forced daemon restart acceptance scenario,P0,8,Not started,"RF-P0-041,RF-P0-020"
+RF-P0-043,Security,"Run mandatory path, secret, injection and approval tests",P0,8,Not started,RF-P0-041
+RF-P0-044,Exit Gate,Produce Phase 0 test report and go/no-go decision,P0,5,Not started,"RF-P0-042,RF-P0-043"

@@ -1,0 +1,29 @@
+# RoleFlock local configuration example
+# Copy to ~/.roleflock/config.yaml or project .roleflock/config.yaml
+
+runtime:
+  host: 127.0.0.1
+  port: 4178
+  dataDir: ~/.roleflock
+
+security:
+  requireLocalOrigin: true
+  csrfProtection: true
+
+repository:
+  deniedPathGlobs:
+    - "**/.env"
+    - "**/.env.*"
+    - "**/*secret*"
+    - "**/*credential*"
+    - "**/id_rsa*"
+    - "**/*.pem"
+    - "**/*.key"
+
+providers: []
+
+roles: []
+
+budget:
+  defaultMaxActualCostUsd: 5
+  defaultMaxAttempts: 3

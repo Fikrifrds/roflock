@@ -1,0 +1,28 @@
+{
+  "name": "roleflock",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RoleFlock by Mlola — governed agent graph for multi-model software engineering",
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter=./packages/* build && pnpm -r --filter=./apps/* build",
+    "dev": "pnpm --filter @roleflock/daemon dev",
+    "dev:web": "pnpm --filter @roleflock/web dev",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r --filter=./packages/* test && pnpm -r --filter=./apps/* test",
+    "test:unit": "pnpm -r --filter=./packages/* test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "clean": "pnpm -r clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}
