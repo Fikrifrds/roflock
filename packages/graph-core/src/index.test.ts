@@ -1,20 +1,41 @@
 import { describe, expect, it } from 'vitest';
 import {
+  GRAPH_SCHEMA_VERSION,
   bugFixGraph,
   criticalGraph,
   directGraph,
   fastGraph,
   getWorkflowGraph,
+  graphVersionId,
   recommendWorkflow,
   standardGraph,
   validateGraph,
+  type GraphNode,
   type WorkflowGraph,
 } from './index.js';
+
+function node(id: string, dependsOn: string[] = [], extra: Partial<GraphNode> = {}): GraphNode {
+  return { id, role: 'writer', kind: 'agent', dependsOn, ...extra } as GraphNode;
+}
+
+function graph(nodes: GraphNode[], overrides: Partial<WorkflowGraph> = {}): WorkflowGraph {
+  return {
+    id: 'direct',
+    version: graphVersionId('direct'),
+    label: 'test',
+    description: 'test',
+    nodes,
+    edges: [],
+    maxConcurrency: 1,
+    maxLoopIterations: 1,
+    ...overrides,
+  };
+}
 
 describe('workflow graphs', () => {
   it('validates bug_fix sequence', () => {
     expect(validateGraph(bugFixGraph)).toEqual([]);
-    expect(bugFixGraph.nodes.map((node) => node.id)).toEqual([
+    expect(bugFixGraph.nodes.map((n) => n.id)).toEqual([
       'planner',
       'reviewer',
       'writer',
@@ -29,40 +50,109 @@ describe('workflow graphs', () => {
     expect(validateGraph(fastGraph)).toEqual([]);
     expect(validateGraph(standardGraph)).toEqual([]);
     expect(validateGraph(criticalGraph)).toEqual([]);
-    expect(getWorkflowGraph('direct').nodes.map((n) => n.id)).toEqual([
-      'writer',
-      'test',
-      'accept',
-    ]);
+    expect(getWorkflowGraph('direct').nodes.map((n) => n.id)).toEqual(['writer', 'test', 'accept']);
     expect(getWorkflowGraph('fast').nodes[0]?.id).toBe('planner');
     expect(getWorkflowGraph('critical').id).toBe('critical');
   });
 
-  it('rejects parallel writers and missing accept', () => {
-    const parallel: WorkflowGraph = {
-      id: 'direct',
-      label: 'bad',
-      description: 'bad',
-      nodes: [
-        { id: 'writer', dependsOn: [] },
-        { id: 'writer', dependsOn: [] },
-        { id: 'accept', dependsOn: ['writer'] },
+  it('pins a graph to an immutable version', () => {
+    expect(getWorkflowGraph(`bug_fix@${GRAPH_SCHEMA_VERSION}`).id).toBe('bug_fix');
+    expect(() => getWorkflowGraph('bug_fix@0')).toThrow(/no longer available/);
+    expect(() => getWorkflowGraph('nonsense')).toThrow(/Unknown workflow mode/);
+    // Every template carries its own version so a run can be replayed exactly.
+    expect(bugFixGraph.version).toBe(`bug_fix@${GRAPH_SCHEMA_VERSION}`);
+    expect(standardGraph.version).not.toBe(bugFixGraph.version);
+  });
+
+  it('rejects parallel writers, duplicates, and a missing accept node', () => {
+    expect(
+      validateGraph(
+        graph([
+          node('writer', [], { writer: true }),
+          node('writer', [], { writer: true }),
+          node('accept', ['writer'], { role: 'accept', kind: 'human_approval' }),
+        ]),
+      ),
+    ).toEqual(expect.arrayContaining(['duplicate node id', 'parallel writers are not allowed']));
+
+    expect(
+      validateGraph(
+        graph([node('writer', [], { writer: true }), node('test', ['writer'], { role: 'test' })]),
+      ),
+    ).toContain('graph requires a terminal accept node');
+  });
+
+  it('rejects an unbounded cycle but allows a bounded retry loop', () => {
+    const unbounded = graph(
+      [
+        node('writer', ['test'], { writer: true }),
+        node('test', ['writer'], { role: 'test' }),
+        node('accept', ['test'], { role: 'accept', kind: 'human_approval' }),
       ],
-    };
-    expect(validateGraph(parallel)).toEqual(
-      expect.arrayContaining(['duplicate node id', 'parallel writers are not allowed']),
+      { edges: [{ from: 'test', to: 'writer', when: 'always' }] },
+    );
+    expect(validateGraph(unbounded).some((e) => e.includes('cycle'))).toBe(true);
+
+    // The shipped templates loop test → writer, and that must stay legal.
+    expect(validateGraph(bugFixGraph)).toEqual([]);
+    expect(bugFixGraph.edges).toContainEqual({ from: 'test', to: 'writer', when: 'on_fail' });
+  });
+
+  it('rejects a pass path that bypasses a required check', () => {
+    const bypass = graph([
+      node('writer', [], { writer: true }),
+      node('test', ['writer'], { role: 'test', required: true }),
+      node('accept', ['writer'], { role: 'accept', kind: 'human_approval' }),
+    ]);
+    expect(validateGraph(bypass)).toContain('accept can be reached without required check test');
+  });
+
+  it('rejects incompatible fallbacks', () => {
+    const straightToAccept = graph(
+      [
+        node('writer', [], { writer: true, maxAttempts: 2 }),
+        node('test', ['writer'], { role: 'test', required: true }),
+        node('accept', ['test'], { role: 'accept', kind: 'human_approval' }),
+      ],
+      { edges: [{ from: 'test', to: 'accept', when: 'on_fail' }] },
+    );
+    expect(validateGraph(straightToAccept)).toContain(
+      'incompatible fallback: test routes on_fail straight to accept',
     );
 
-    const noAccept: WorkflowGraph = {
-      id: 'direct',
-      label: 'bad',
-      description: 'bad',
-      nodes: [
-        { id: 'writer', dependsOn: [] },
-        { id: 'test', dependsOn: ['writer'] },
+    const needsChangesToNonWriter = graph(
+      [
+        node('writer', [], { writer: true, maxAttempts: 2 }),
+        node('test', ['writer'], { role: 'test', required: true }),
+        node('verifier', ['test'], { role: 'verifier' }),
+        node('accept', ['verifier'], { role: 'accept', kind: 'human_approval' }),
       ],
-    };
-    expect(validateGraph(noAccept)).toContain('graph requires a terminal accept node');
+      { edges: [{ from: 'verifier', to: 'test', when: 'on_needs_changes' }] },
+    );
+    expect(
+      validateGraph(needsChangesToNonWriter).some((e) =>
+        e.includes('routes on_needs_changes to non-writer'),
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects invalid state references and non-finite budgets', () => {
+    const bad = graph(
+      [
+        node('writer', [], { writer: true }),
+        node('test', ['writer'], { role: 'test', required: true }),
+        node('accept', ['test'], { role: 'accept', kind: 'human_approval' }),
+      ],
+      {
+        edges: [{ from: 'ghost', to: 'writer', when: 'on_fail' }],
+        maxConcurrency: 0,
+        maxLoopIterations: Number.POSITIVE_INFINITY,
+      },
+    );
+    const errors = validateGraph(bad);
+    expect(errors).toContain('edge from unknown node ghost');
+    expect(errors).toContain('maxConcurrency must be a finite integer >= 1');
+    expect(errors).toContain('maxLoopIterations must be a finite integer >= 0');
   });
 
   it('recommends smallest sufficient modes from task intent', () => {
@@ -72,6 +162,7 @@ describe('workflow graphs', () => {
     expect(recommendWorkflow({ type: 'feature', risk: 'medium' }).mode).toBe('standard');
     expect(recommendWorkflow({ type: 'new_product' }).mode).toBe('critical');
     expect(recommendWorkflow({ type: 'security_fix' }).mode).toBe('critical');
-    expect(directGraph.nodes.some((n) => n.id === 'reviewer')).toBe(false);
+    // Direct mode must not drag in a reviewer the user did not ask for.
+    expect(directGraph.nodes.some((n) => n.role === 'reviewer')).toBe(false);
   });
 });

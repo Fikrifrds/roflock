@@ -1,17 +1,40 @@
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer } from '../src/server.js';
 
 const servers: Awaited<ReturnType<typeof createServer>>[] = [];
-afterEach(async () => { await Promise.all(servers.splice(0).map(({ app }) => app.close())); });
-async function server() { const instance = await createServer({ dataDir: await mkdtemp(join(tmpdir(), 'roleflock-')), session: { token: 'test-token', csrf: 'test-csrf' } }); servers.push(instance); return instance; }
+afterEach(async () => {
+  await Promise.all(servers.splice(0).map(({ app }) => app.close()));
+});
+async function server() {
+  const instance = await createServer({
+    dataDir: await mkdtemp(join(tmpdir(), 'roleflock-')),
+    session: { token: 'test-token', csrf: 'test-csrf' },
+  });
+  servers.push(instance);
+  return instance;
+}
 
 describe('daemon boundary', () => {
   it('defaults to loopback-only bind', async () => expect((await server()).host).toBe('127.0.0.1'));
-  it('has no raw shell execution endpoint', async () => { const { app } = await server(); expect((await app.inject({ method: 'POST', url: '/api/shell', headers: { 'x-roleflock-token': 'test-token', 'x-roleflock-csrf': 'test-csrf' } })).statusCode).toBe(404); });
-  it('rejects unauthenticated API requests', async () => { const { app } = await server(); expect((await app.inject({ method: 'GET', url: '/api/projects' })).statusCode).toBe(401); });
+  it('has no raw shell execution endpoint', async () => {
+    const { app } = await server();
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/api/shell',
+          headers: { 'x-roleflock-token': 'test-token', 'x-roleflock-csrf': 'test-csrf' },
+        })
+      ).statusCode,
+    ).toBe(404);
+  });
+  it('rejects unauthenticated API requests', async () => {
+    const { app } = await server();
+    expect((await app.inject({ method: 'GET', url: '/api/projects' })).statusCode).toBe(401);
+  });
   it('rejects mutations with invalid CSRF', async () => {
     const { app } = await server();
     const res = await app.inject({
@@ -50,6 +73,63 @@ describe('daemon boundary', () => {
       payload: { path: '/tmp' },
     });
     expect(res.statusCode).toBe(403);
+  });
+  it('does not hand out the session token to unauthenticated callers', async () => {
+    const { app } = await server();
+    const res = await app.inject({ method: 'GET', url: '/api/runtime/info' });
+    expect(res.statusCode).toBe(401);
+    expect(res.body).not.toContain('test-token');
+  });
+  it('never returns the session token in runtime info', async () => {
+    const { app } = await server();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/runtime/info',
+      headers: { 'x-roleflock-token': 'test-token' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toContain('test-token');
+    expect(res.json()).toMatchObject({ csrf: 'test-csrf' });
+    expect(res.headers['set-cookie']?.toString()).toMatch(/HttpOnly/i);
+  });
+  it('rejects a token supplied in the query string', async () => {
+    const { app } = await server();
+    const res = await app.inject({ method: 'GET', url: '/api/projects?token=test-token' });
+    expect(res.statusCode).toBe(401);
+  });
+  it('accepts the session cookie so the event stream needs no URL token', async () => {
+    const { app } = await server();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      cookies: { roleflock_token: 'test-token' },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+  it('rejects reads from non-local origins', async () => {
+    const { app } = await server();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      headers: { 'x-roleflock-token': 'test-token', origin: 'https://evil.example' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+  it('stores the session token in a file only this user can read', async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), 'roleflock-session-'));
+    const instance = await createServer({ dataDir });
+    servers.push(instance);
+    const file = join(dataDir, 'session.json');
+    expect((await stat(file)).mode & 0o777).toBe(0o600);
+    const stored = JSON.parse(await readFile(file, 'utf8')) as { token: string };
+    expect(stored.token).toBe(instance.session.token);
+
+    // A restart reuses the stored session so the launch URL stays valid.
+    await instance.app.close();
+    servers.splice(servers.indexOf(instance), 1);
+    const restarted = await createServer({ dataDir });
+    servers.push(restarted);
+    expect(restarted.session.token).toBe(instance.session.token);
   });
   it('exposes privacy claims for local-first onboarding', async () => {
     const { app } = await server();
