@@ -15,11 +15,13 @@ import {
   UsageRepository,
   type KnowledgeState,
   type KnowledgeType,
+  type RoleCandidateInput,
   type SqliteDb,
 } from '@roleflock/database';
 import { compileContext, ROLE_CONTRACTS, type RoleId } from '@roleflock/context-compiler';
 import { getWorkflowGraph, recommendWorkflow, workflowGraphs } from '@roleflock/graph-core';
 import { budgetStatus } from '@roleflock/usage-ledger';
+import { EFFORT_LEVELS, isEffort } from '@roleflock/provider-core';
 import { registerRepository } from '@roleflock/repository-runtime';
 import type { Session } from '../auth.js';
 import { EventBus } from '../services/event-bus.js';
@@ -33,6 +35,12 @@ import {
 } from '../services/export-service.js';
 import { getProviderAccount } from '../services/cli-account.js';
 import { Orchestrator, resolveTaskGraph } from '../services/orchestrator.js';
+import {
+  ROLE_DESCRIPTIONS,
+  ROLE_LABELS,
+  ROUTED_ROLES,
+  isRoutedRole,
+} from '../services/role-defaults.js';
 import { ProviderRegistry } from '../services/provider-registry.js';
 import { DocumentService, isDocumentAuthority, isDocumentKind } from '../services/documents.js';
 import { checkForUpdates, getLocalVersion } from '../services/version-check.js';
@@ -189,6 +197,105 @@ export function registerApi(
     bus.publish('task.created', task);
     return reply.code(201).send(task);
   });
+  /**
+   * The role roster: every role, its ordered candidate list, and the model
+   * catalogue each provider actually offers. One call so the picker never has
+   * to guess what a provider supports.
+   */
+  app.get('/api/roles', async () => {
+    const assignments = orchestrator.router.listAll();
+    const cooldowns = orchestrator.router.activeCooldowns();
+    const listed = await providers.list({ includeFake: true });
+
+    const catalogue = await Promise.all(
+      listed.map(async (provider) => ({
+        providerId: provider.id,
+        displayName: provider.displayName,
+        status: provider.status,
+        models: await providers.models(provider.id).catch(() => []),
+      })),
+    );
+
+    return {
+      roles: ROUTED_ROLES.map((role) => ({
+        id: role,
+        label: ROLE_LABELS[role],
+        description: ROLE_DESCRIPTIONS[role],
+        candidates: assignments[role].map((candidate) => ({
+          providerId: candidate.providerConnectionId,
+          modelId: candidate.modelId,
+          effort: candidate.effort,
+          enabled: candidate.enabled,
+          coolingDownUntil: cooldowns.find(
+            (item) =>
+              item.providerConnectionId === candidate.providerConnectionId &&
+              item.modelId === candidate.modelId,
+          )?.until,
+        })),
+      })),
+      providers: catalogue,
+      efforts: EFFORT_LEVELS,
+      cooldowns,
+    };
+  });
+
+  app.put('/api/roles/:role', async (request, reply) => {
+    const role = (request.params as { role: string }).role;
+    if (!isRoutedRole(role)) return reply.code(400).send({ error: `Unknown role: ${role}` });
+
+    const body = request.body as { candidates?: unknown };
+    if (!Array.isArray(body.candidates)) {
+      return reply.code(400).send({ error: 'candidates must be an array' });
+    }
+
+    const candidates: RoleCandidateInput[] = [];
+    for (const entry of body.candidates) {
+      const item = entry as Record<string, unknown>;
+      const providerId = typeof item.providerId === 'string' ? item.providerId.trim() : '';
+      const modelId = typeof item.modelId === 'string' ? item.modelId.trim() : '';
+      if (!providerId || !modelId) {
+        return reply.code(400).send({ error: 'each candidate needs providerId and modelId' });
+      }
+      if (!providers.has(providerId)) {
+        return reply.code(400).send({ error: `Unknown provider: ${providerId}` });
+      }
+      if (item.effort !== undefined && item.effort !== null && !isEffort(item.effort)) {
+        return reply
+          .code(400)
+          .send({ error: `effort must be one of ${EFFORT_LEVELS.join(', ')}` });
+      }
+      candidates.push({
+        providerConnectionId: providerId,
+        modelId,
+        effort: isEffort(item.effort) ? item.effort : undefined,
+        enabled: item.enabled !== false,
+      });
+    }
+
+    // An empty list would leave the role with nothing to route to, and the
+    // router would silently drop to the fake provider on the next run.
+    if (candidates.length === 0) {
+      return reply.code(400).send({ error: 'a role needs at least one candidate' });
+    }
+
+    return { role, candidates: orchestrator.router.replaceRole(role, candidates) };
+  });
+
+  app.post('/api/roles/:role/reset', async (request, reply) => {
+    const role = (request.params as { role: string }).role;
+    if (!isRoutedRole(role)) return reply.code(400).send({ error: `Unknown role: ${role}` });
+    return { role, candidates: orchestrator.router.resetRole(role) };
+  });
+
+  app.post('/api/cooldowns/clear', async (request, reply) => {
+    const body = request.body as { providerId?: string; modelId?: string };
+    if (!body.providerId || !body.modelId) {
+      return reply.code(400).send({ error: 'providerId and modelId are required' });
+    }
+    orchestrator.router.clearCooldown(body.providerId, body.modelId);
+    return { cleared: true, cooldowns: orchestrator.router.activeCooldowns() };
+  });
+
   app.get('/api/workflows', async () =>
     Object.values(workflowGraphs).map((graph) => ({
       id: graph.id,

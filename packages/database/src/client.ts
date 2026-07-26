@@ -6,6 +6,7 @@ import { MIGRATION_002 } from './migrations/002_task_documents.js';
 import { MIGRATION_003 } from './migrations/003_local_knowledge.js';
 import { MIGRATION_004 } from './migrations/004_disclosure_grants.js';
 import { MIGRATION_005 } from './migrations/005_task_verification_command.js';
+import { MIGRATION_006 } from './migrations/006_role_assignments.js';
 
 export type SqliteDb = Database.Database;
 
@@ -42,7 +43,14 @@ export function migrate(db: SqliteDb): void {
       .map((row) => (row as { version: number }).version),
   );
 
-  const migrations = [MIGRATION_001, MIGRATION_002, MIGRATION_003, MIGRATION_004, MIGRATION_005];
+  const migrations = [
+    MIGRATION_001,
+    MIGRATION_002,
+    MIGRATION_003,
+    MIGRATION_004,
+    MIGRATION_005,
+    MIGRATION_006,
+  ];
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;
     const tx = db.transaction(() => {

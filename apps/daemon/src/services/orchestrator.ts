@@ -37,14 +37,18 @@ import {
   registerRepository,
   WriterLease,
 } from '@roleflock/repository-runtime';
-import { FakeProvider, type ProviderAdapter } from '@roleflock/provider-core';
+import {
+  classifyProviderFailure,
+  type Effort,
+  type ProviderAdapter,
+} from '@roleflock/provider-core';
 import { CursorWriterAdapter, assertChangedPathsAllowed } from '@roleflock/provider-cursor';
 import { budgetStatus, estimateInvocationCost } from '@roleflock/usage-ledger';
 import { EventBus } from './event-bus.js';
 import { authoritativeConflictMessage, type DocumentService } from './documents.js';
 import { loadPriceCards } from './pricing.js';
-import type { ProviderRegistry } from './provider-registry.js';
-import { routeRole, type RoleRoute, type RoutedRole } from './role-routing.js';
+import { ProviderRegistry } from './provider-registry.js';
+import { RoleRouter, type RoleRoute, type RoutedRole } from './role-routing.js';
 
 interface PreparedRun {
   graphRunId: string;
@@ -87,6 +91,7 @@ export class Orchestrator {
   private readonly documents?: DocumentService;
   private readonly forceFake: boolean;
   private readonly documentConflictResolved = new Set<string>();
+  readonly router: RoleRouter;
 
   constructor(
     private readonly db: SqliteDb,
@@ -110,6 +115,9 @@ export class Orchestrator {
     this.providers = providers;
     this.documents = documents;
     this.forceFake = process.env.ROLEFLOCK_FORCE_FAKE === '1';
+    // A registry with only the fake provider still gives the router a real
+    // preference list to walk, so routing behaves identically in tests.
+    this.router = new RoleRouter(db, providers ?? new ProviderRegistry());
     mkdirSync(worktreeBaseDir, { recursive: true });
   }
 
@@ -459,13 +467,8 @@ export class Orchestrator {
         });
 
         if (role === 'planner' || role === 'verifier') {
-          const adapter =
-            route?.adapter ??
-            new FakeProvider('fake', [
-              { type: 'phase.changed', phase: 'reasoning' },
-              { type: 'heartbeat', at: now() },
-              { type: 'invocation.completed', output: { summary: `Completed ${task.title}` } },
-            ]);
+          // The adapter comes from the route invokeRole resolves per attempt, so
+          // a failover mid-turn swaps the adapter too.
           const prompt =
             role === 'verifier'
               ? [
@@ -480,16 +483,28 @@ export class Orchestrator {
                 ].join('\n')
               : `PLANNER for RoleFlock task "${task.title}" (read-only).\nDo not modify files.\n\n${compiled.promptBlock}`;
 
-          const output = await this.consumeInvocation({
-            adapter,
-            invocationId,
+          const invoked = await this.invokeRole({
+            role,
+            task,
+            graphRunId,
             nodeRunId,
+            invocationId,
             prompt,
             cwd: worktreePath,
             signal: controller.signal,
+            // A failover mid-turn changes who is running; reflect that in the
+            // live view rather than leaving the original provider on screen.
+            onRoute: (next) =>
+              this.updateExecution(task, graphRunId, nodeRunId, role, phase, next),
           });
+          const output = invoked.output;
+          const served = invoked.route;
 
-          const provenance = `${role} via ${route?.providerDisplayName ?? 'fake'} / ${route?.modelDisplayName ?? 'phase0-fake'} · ${compiled.disclosure.totalTokens} ctx tokens`;
+          const provenance = `${role} via ${served.providerDisplayName} / ${served.modelDisplayName}${
+            served.effort ? ` (${served.effort})` : ''
+          } · ${compiled.disclosure.totalTokens} ctx tokens${
+            served.fallbackUsed ? ' · fallback' : ''
+          }`;
 
           if (role === 'verifier') {
             const rejection = await this.verifierRejection(worktreePath, output);
@@ -525,10 +540,12 @@ export class Orchestrator {
           });
         } else if (role === 'reviewer') {
           if (route && route.providerId !== 'fake') {
-            await this.consumeInvocation({
-              adapter: route.adapter,
-              invocationId,
+            await this.invokeRole({
+              role,
+              task,
+              graphRunId,
               nodeRunId,
+              invocationId,
               prompt: `Review plan and confirm whether writing ROLEFLOCK_FIX.md is an appropriate scope.\n\n${compiled.promptBlock}`,
               cwd: worktreePath,
               signal: controller.signal,
@@ -624,14 +641,18 @@ export class Orchestrator {
                 'Stay inside this workspace. Prefer editing existing source over adding docs.',
                 'Do not invent secrets or reach outside the worktree.',
               ].join('\n');
-              await this.consumeInvocation({
-                adapter: route.adapter,
-                invocationId,
+              await this.invokeRole({
+                role,
+                task,
+                graphRunId,
                 nodeRunId,
+                invocationId,
                 prompt,
                 cwd: worktreePath,
                 signal: controller.signal,
                 permissionEnvelope: envelope,
+                onRoute: (next) =>
+                  this.updateExecution(task, graphRunId, nodeRunId, role, phase, next),
               });
             } else {
               const content = `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'fake'}\nVerification: ${task.verificationCommand ?? 'artefact-present / npm test / ROLEFLOCK_FORCE_FAKE'}\nMode: leased-fs-fallback\n`;
@@ -899,19 +920,102 @@ export class Orchestrator {
   }
 
   private async resolveRoute(role: RoutedRole): Promise<RoleRoute> {
-    if (!this.providers) {
-      const fake = new FakeProvider();
-      return {
-        role,
-        providerId: 'fake',
-        providerDisplayName: 'Phase 0 Fake Provider',
-        modelId: 'phase0-fake',
-        modelDisplayName: 'Phase 0 Fake',
-        adapter: fake,
-        fallbackUsed: true,
-      };
+    return this.router.route(role, { forceFake: this.forceFake });
+  }
+
+  /**
+   * Runs a role turn, moving down its candidate list when a provider refuses in
+   * a way a retry cannot fix.
+   *
+   * The distinction that matters: an exhausted quota, an unknown model, or a
+   * dead session are all failures of *this candidate*, not of the task. Each
+   * parks that provider+model and re-routes, so the run continues on the next
+   * choice the user configured. Anything else — a genuine error from a healthy
+   * provider — propagates, because silently trying a different model would hide
+   * a real problem behind a worse answer.
+   */
+  private async invokeRole(input: {
+    role: RoutedRole;
+    task: Task;
+    graphRunId: string;
+    nodeRunId: string;
+    invocationId: string;
+    prompt: string;
+    cwd: string;
+    signal: AbortSignal;
+    permissionEnvelope?: { worktree: string; allowedPaths: string[]; allowCommands?: boolean };
+    onRoute?: (route: RoleRoute) => void;
+  }): Promise<{ output: string; route: RoleRoute }> {
+    const attempted = new Set<string>();
+
+    for (;;) {
+      const route = await this.resolveRoute(input.role);
+      const key = `${route.providerId}:${route.modelId}`;
+
+      // The router can only skip what it knows is unavailable. If it hands back
+      // a candidate this turn already tried, the list is exhausted.
+      if (attempted.has(key)) {
+        throw new Error(
+          `Every provider configured for ${input.role} refused this turn (last: ${route.providerDisplayName}).`,
+        );
+      }
+      attempted.add(key);
+      input.onRoute?.(route);
+
+      try {
+        const output = await this.consumeInvocation({
+          adapter: route.adapter,
+          invocationId: input.invocationId,
+          nodeRunId: input.nodeRunId,
+          prompt: input.prompt,
+          cwd: input.cwd,
+          signal: input.signal,
+          permissionEnvelope: input.permissionEnvelope,
+          model: route.modelId,
+          effort: route.effort,
+        });
+        return { output, route };
+      } catch (error) {
+        if (input.signal.aborted) throw error;
+
+        const message = error instanceof Error ? error.message : String(error);
+        const kind = classifyProviderFailure(message);
+        const until = this.router.recordFailure(
+          input.role,
+          route.providerId,
+          route.modelId,
+          kind,
+          message,
+        );
+        if (!until) throw error;
+
+        this.evidence.addFinding({
+          id: randomUUID(),
+          taskId: input.task.id,
+          nodeRunId: input.nodeRunId,
+          severity: 'warning',
+          summary: `${route.providerDisplayName} / ${route.modelDisplayName} unavailable (${kind.replaceAll('_', ' ')})`,
+          details: `Paused until ${until}. Falling back to the next candidate for ${input.role}. ${message.slice(0, 400)}`,
+          createdAt: now(),
+        });
+        this.appendEvent(input.task.id, 'role.failover', {
+          graphRunId: input.graphRunId,
+          nodeRunId: input.nodeRunId,
+          role: input.role,
+          from: { providerId: route.providerId, modelId: route.modelId },
+          reason: kind,
+          until,
+        });
+        this.bus.publish('role.failover', {
+          taskId: input.task.id,
+          role: input.role,
+          providerId: route.providerId,
+          modelId: route.modelId,
+          reason: kind,
+          until,
+        });
+      }
     }
-    return routeRole(this.providers, role, { forceFake: this.forceFake });
   }
 
   private providerTimeoutMs(): number {
@@ -936,6 +1040,8 @@ export class Orchestrator {
       allowedPaths: string[];
       allowCommands?: boolean;
     };
+    model?: string;
+    effort?: Effort;
   }): Promise<string> {
     let output = '';
     try {
@@ -945,6 +1051,8 @@ export class Orchestrator {
         cwd: input.cwd,
         signal: this.invocationSignal(input.signal),
         permissionEnvelope: input.permissionEnvelope,
+        model: input.model,
+        effort: input.effort,
       })) {
         if (event.type === 'heartbeat') {
           const execution = this.executions.getByNodeRun(input.nodeRunId);
