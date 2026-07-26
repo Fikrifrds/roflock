@@ -26,7 +26,8 @@ import {
   registerRepository,
   WriterLease,
 } from '@roleflock/repository-runtime';
-import { FakeProvider } from '@roleflock/provider-core';
+import { FakeProvider, type ProviderAdapter } from '@roleflock/provider-core';
+import { CursorWriterAdapter } from '@roleflock/provider-cursor';
 import { EventBus } from './event-bus.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import { routeRole, type RoleRoute, type RoutedRole } from './role-routing.js';
@@ -301,25 +302,14 @@ export class Orchestrator {
             { type: 'heartbeat', at: now() },
             { type: 'invocation.completed', output: { summary: `Completed ${task.title}` } },
           ]);
-        let output = '';
-        for await (const event of adapter.invoke({
+        const output = await this.consumeInvocation({
+          adapter,
           invocationId,
-          prompt: `${role.toUpperCase()} for RoleFlock task "${task.title}":\n${task.brief}\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}`,
+          nodeRunId,
+          prompt: `${role.toUpperCase()} for RoleFlock task "${task.title}" (read-only):\n${task.brief}\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nDo not modify files.`,
           cwd: worktreePath,
           signal: controller.signal,
-        })) {
-          if (event.type === 'heartbeat') {
-            const execution = this.executions.getByNodeRun(nodeRunId);
-            if (execution) {
-              execution.lastHeartbeatAt = event.at;
-              this.executions.upsert(execution);
-            }
-          }
-          if (event.type === 'model.output.delta') output += event.text;
-          if (event.type === 'invocation.failed') {
-            throw new Error(event.error.message);
-          }
-        }
+        });
         this.evidence.addFinding({
           id: randomUUID(),
           taskId: task.id,
@@ -331,14 +321,14 @@ export class Orchestrator {
         });
       } else if (role === 'reviewer') {
         if (route && route.providerId !== 'fake') {
-          for await (const event of route.adapter.invoke({
+          await this.consumeInvocation({
+            adapter: route.adapter,
             invocationId,
-            prompt: `Review plan for: ${task.brief}`,
+            nodeRunId,
+            prompt: `Review plan for: ${task.brief}\nConfirm whether writing ROLEFLOCK_FIX.md is an appropriate scope.`,
             cwd: worktreePath,
             signal: controller.signal,
-          })) {
-            if (event.type === 'invocation.failed') throw new Error(event.error.message);
-          }
+          });
         }
         const confirmation = createConfirmationRequest({
           taskId: task.id,
@@ -368,24 +358,30 @@ export class Orchestrator {
         if (!lease.acquire()) throw new Error('Writer lease unavailable');
         this.worktrees.setWriterLease(task.id, nodeRunId);
         try {
-          // Deterministic sandbox write remains the security boundary for Phase 0/1.
-          // Cursor CLI may be selected for attribution when ready, but writes stay leased.
-          const target = join(worktreePath, 'ROLEFLOCK_FIX.md');
-          await writeFile(
-            target,
-            `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'fake'}\n`,
-          );
+          const relativeTarget = 'ROLEFLOCK_FIX.md';
+          const content = `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'fake'}\n`;
+          const envelope = {
+            worktree: worktreePath,
+            allowedPaths: [relativeTarget],
+            allowCommands: false,
+          };
+          if (route?.adapter instanceof CursorWriterAdapter) {
+            await route.adapter.write(relativeTarget, content, envelope);
+          } else {
+            await writeFile(join(worktreePath, relativeTarget), content);
+          }
           const diff = await captureDiff(worktreePath);
           this.evidence.addArtefact({
             id: randomUUID(),
             taskId: task.id,
             kind: 'diff',
-            path: target,
+            path: join(worktreePath, relativeTarget),
             contentRef: diff.patch,
             metadata: {
               changedFiles: diff.changedFiles,
               status: diff.status,
               providerId: route?.providerId,
+              permissionEnvelope: envelope,
             },
             createdAt: now(),
           });
@@ -495,6 +491,66 @@ export class Orchestrator {
       };
     }
     return routeRole(this.providers, role, { forceFake: this.forceFake });
+  }
+
+  private providerTimeoutMs(): number {
+    const raw = Number(process.env.ROLEFLOCK_PROVIDER_TIMEOUT_MS ?? 90_000);
+    return Number.isFinite(raw) && raw > 0 ? raw : 90_000;
+  }
+
+  private invocationSignal(parent: AbortSignal): AbortSignal {
+    const timeout = AbortSignal.timeout(this.providerTimeoutMs());
+    return AbortSignal.any([parent, timeout]);
+  }
+
+  private async consumeInvocation(input: {
+    adapter: ProviderAdapter;
+    invocationId: string;
+    nodeRunId: string;
+    prompt: string;
+    cwd: string;
+    signal: AbortSignal;
+    permissionEnvelope?: {
+      worktree: string;
+      allowedPaths: string[];
+      allowCommands?: boolean;
+    };
+  }): Promise<string> {
+    let output = '';
+    try {
+      for await (const event of input.adapter.invoke({
+        invocationId: input.invocationId,
+        prompt: input.prompt,
+        cwd: input.cwd,
+        signal: this.invocationSignal(input.signal),
+        permissionEnvelope: input.permissionEnvelope,
+      })) {
+        if (event.type === 'heartbeat') {
+          const execution = this.executions.getByNodeRun(input.nodeRunId);
+          if (execution) {
+            execution.lastHeartbeatAt = event.at;
+            this.executions.upsert(execution);
+            this.bus.publish('execution.updated', execution);
+          }
+        }
+        if (event.type === 'model.output.delta') output += event.text;
+        if (event.type === 'invocation.failed') {
+          throw new Error(event.error.message);
+        }
+        if (event.type === 'invocation.interrupted') {
+          throw new Error(event.reason);
+        }
+      }
+    } catch (error) {
+      if (input.signal.aborted) throw new Error('Cancelled by operator');
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(
+          `Provider invocation timed out after ${this.providerTimeoutMs()}ms (set ROLEFLOCK_PROVIDER_TIMEOUT_MS to adjust)`,
+        );
+      }
+      throw error;
+    }
+    return output;
   }
 
   private assertBudget(task: Task): void {

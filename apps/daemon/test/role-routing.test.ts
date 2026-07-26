@@ -32,4 +32,11 @@ describe('role routing', () => {
     expect(['fake', 'claude']).toContain(route.providerId);
     if (route.providerId === 'fake') expect(route.fallbackUsed).toBe(true);
   });
+
+  it('routes writer through the sandboxed Cursor adapter', async () => {
+    const registry = new ProviderRegistry();
+    const route = await routeRole(registry, 'writer', { forceFake: false });
+    expect(route.providerId).toBe('cursor');
+    expect(route.fallbackUsed).toBe(false);
+  });
 });

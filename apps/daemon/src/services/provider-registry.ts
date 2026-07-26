@@ -8,7 +8,7 @@ import {
 } from '@roleflock/provider-core';
 import { ClaudeAdapter } from '@roleflock/provider-claude';
 import { CodexAdapter } from '@roleflock/provider-codex';
-import { CursorWriterAdapter } from '@roleflock/provider-cursor';
+import { CursorWriterAdapter, createFsCursorWriter } from '@roleflock/provider-cursor';
 import { OpenAiCompatibleAdapter } from '@roleflock/provider-custom';
 
 export interface RegisteredProvider {
@@ -54,7 +54,7 @@ export class ProviderRegistry {
     this.adapters.register(new FakeProvider());
     this.adapters.register(new ClaudeAdapter());
     this.adapters.register(new CodexAdapter());
-    this.adapters.register(new CursorWriterAdapter());
+    this.adapters.register(new CursorWriterAdapter(createFsCursorWriter()));
 
     void Promise.all(this.adapters.list().map((adapter) => this.healthCheck(adapter.id))).catch(
       () => undefined,
