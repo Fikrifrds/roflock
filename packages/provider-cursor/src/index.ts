@@ -79,14 +79,22 @@ export function assertChangedPathsAllowed(
   }
 }
 
+const INSTALL_HINT = 'Install with: curl https://cursor.com/install -fsS | bash';
+
+/** Other vendors also ship a bare `agent` binary; never mistake one for Cursor. */
+function isForeignAgent(binary: string): boolean {
+  return /[\\/]\.(grok|gemini|qwen)[\\/]/.test(binary);
+}
+
 async function looksLikeCursorAgent(binary: string): Promise<boolean> {
-  if (binary.includes('.grok/')) return false;
+  if (isForeignAgent(binary)) return false;
   try {
     const { stdout, stderr } = await execFileAsync(binary, ['--help'], {
       timeout: 8_000,
       env: process.env,
     });
     const text = `${stdout}\n${stderr}`;
+    if (/\bgrok\b|\bxai\b/i.test(text)) return false;
     return (
       /--print\b/.test(text) &&
       (/--force\b/.test(text) || /--yolo\b/.test(text) || /cursor/i.test(text))
@@ -97,31 +105,42 @@ async function looksLikeCursorAgent(binary: string): Promise<boolean> {
 }
 
 /**
- * Discover the Cursor Agent CLI (`agent` / `cursor-agent`), never Grok's `agent`.
+ * Discover the Cursor Agent CLI (`agent` / `cursor-agent`), never another vendor's `agent`.
+ *
+ * An explicitly configured binary — the `binary` argument, `CURSOR_AGENT_PATH`, or
+ * `CURSOR_PATH` — is authoritative: if it is missing or is not the Cursor Agent CLI the
+ * result is `missing`. Falling back to PATH there would silently run a different binary
+ * than the one the operator configured.
  */
 export async function discoverCursor(
   binary?: string,
 ): Promise<Pick<ProviderHealth, 'binary' | 'version' | 'status' | 'detail'>> {
-  const candidates: string[] = [];
-  if (binary) candidates.push(binary);
-  if (process.env.CURSOR_AGENT_PATH) candidates.push(process.env.CURSOR_AGENT_PATH);
-  if (process.env.CURSOR_PATH) candidates.push(process.env.CURSOR_PATH);
-  candidates.push('cursor-agent', 'agent');
+  const configured = binary ?? process.env.CURSOR_AGENT_PATH ?? process.env.CURSOR_PATH;
 
-  const seen = new Set<string>();
-  for (const candidate of candidates) {
-    if (!candidate || seen.has(candidate)) continue;
-    seen.add(candidate);
+  if (configured) {
+    const resolved = await resolveCandidate(configured);
+    if (!resolved) {
+      return { status: 'missing', detail: `Configured Cursor binary not found: ${configured}` };
+    }
+    if (!(await looksLikeCursorAgent(resolved))) {
+      return {
+        status: 'missing',
+        detail: `Configured binary is not the Cursor Agent CLI: ${resolved}`,
+      };
+    }
+    return { status: 'ready', binary: resolved };
+  }
+
+  for (const candidate of ['cursor-agent', 'agent']) {
     const resolved = await resolveCandidate(candidate);
     if (!resolved) continue;
-    if (resolved.includes('.grok/')) continue;
     if (!(await looksLikeCursorAgent(resolved))) continue;
     return { status: 'ready', binary: resolved };
   }
+
   return {
     status: 'missing',
-    detail:
-      'Cursor Agent CLI was not found on PATH. Install with: curl https://cursor.com/install -fsS | bash',
+    detail: `Cursor Agent CLI was not found on PATH. ${INSTALL_HINT}`,
   };
 }
 
