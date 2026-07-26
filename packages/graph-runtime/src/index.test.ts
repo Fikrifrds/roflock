@@ -83,6 +83,27 @@ describe('graph runtime', () => {
     expect(visited.filter((id) => id === 'planner')).toHaveLength(1);
   });
 
+  it('routes a verifier rejection back to the writer, not to accept', async () => {
+    const visited: string[] = [];
+    let rejections = 0;
+    const result = await runGraph(bugFixGraph, async ({ node: n }) => {
+      visited.push(n.id);
+      if (n.id !== 'verifier') return n.id;
+      rejections += 1;
+      if (rejections === 1) {
+        throw new NodeFailure('Verifier requested changes: missing null check', 'needs_changes');
+      }
+      return 'approved';
+    });
+
+    expect(result.state).toBe('completed');
+    expect(result.loopIterations).toBe(1);
+    expect(visited.filter((id) => id === 'writer')).toHaveLength(2);
+    // Accept may only run after the second verifier pass.
+    expect(visited.lastIndexOf('accept')).toBeGreaterThan(visited.lastIndexOf('verifier'));
+    expect(visited.filter((id) => id === 'accept')).toHaveLength(1);
+  });
+
   it('a required deterministic failure blocks acceptance', async () => {
     const visited: string[] = [];
     const result = await runGraph(directGraph, async ({ node: n }) => {

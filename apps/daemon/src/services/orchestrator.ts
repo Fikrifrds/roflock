@@ -278,6 +278,36 @@ export class Orchestrator {
   }
 
   /**
+   * Decides whether the verifier is sending the work back, returning the reason
+   * or `undefined` to accept.
+   *
+   * Two independent grounds. The deterministic one comes first: if the worktree
+   * has no changes, the writer produced nothing regardless of how confidently it
+   * reported success, and no model opinion should be able to wave that through.
+   * The second is the verifier's own verdict.
+   *
+   * A reply with no parseable verdict is *not* treated as a rejection. The
+   * required deterministic check already gates acceptance, so failing a run over
+   * a formatting quirk would cost the user a loop for nothing; the missing
+   * verdict is recorded on the finding instead.
+   */
+  private async verifierRejection(
+    worktreePath: string,
+    output: string,
+  ): Promise<string | undefined> {
+    const diff = await captureDiff(worktreePath).catch(() => undefined);
+    if (diff && diff.changedFiles.length === 0) {
+      return 'Verifier found no changes in the worktree — the writer reported success without editing any file.';
+    }
+
+    const verdict = parseVerifierVerdict(output);
+    if (verdict.decision === 'needs_changes') {
+      return `Verifier requested changes: ${verdict.reason ?? 'no reason given'}`;
+    }
+    return undefined;
+  }
+
+  /**
    * Node ids that finished on the most recent interrupted run of this task.
    * Only nodes that still exist in the pinned graph are eligible, so a version
    * mismatch can never resurrect a node the current graph does not have.
@@ -436,20 +466,60 @@ export class Orchestrator {
               { type: 'heartbeat', at: now() },
               { type: 'invocation.completed', output: { summary: `Completed ${task.title}` } },
             ]);
+          const prompt =
+            role === 'verifier'
+              ? [
+                  `VERIFIER for RoleFlock task "${task.title}" (read-only). Do not modify files.`,
+                  'Judge whether the writer\'s change actually satisfies the brief.',
+                  'End your reply with exactly one line:',
+                  '  VERDICT: PASS',
+                  'or',
+                  '  VERDICT: NEEDS_CHANGES — <one sentence on what is missing>',
+                  '',
+                  compiled.promptBlock,
+                ].join('\n')
+              : `PLANNER for RoleFlock task "${task.title}" (read-only).\nDo not modify files.\n\n${compiled.promptBlock}`;
+
           const output = await this.consumeInvocation({
             adapter,
             invocationId,
             nodeRunId,
-            prompt: `${role.toUpperCase()} for RoleFlock task "${task.title}" (read-only).\nDo not modify files.\n\n${compiled.promptBlock}`,
+            prompt,
             cwd: worktreePath,
             signal: controller.signal,
           });
+
+          const provenance = `${role} via ${route?.providerDisplayName ?? 'fake'} / ${route?.modelDisplayName ?? 'phase0-fake'} · ${compiled.disclosure.totalTokens} ctx tokens`;
+
+          if (role === 'verifier') {
+            const rejection = await this.verifierRejection(worktreePath, output);
+            if (rejection) {
+              this.evidence.addFinding({
+                id: randomUUID(),
+                taskId: task.id,
+                nodeRunId,
+                severity: 'warning',
+                summary: `Verifier asked for changes — ${provenance}`,
+                details: rejection,
+                createdAt: now(),
+              });
+              this.appendEvent(task.id, 'node.verifier.needs_changes', {
+                graphRunId,
+                nodeRunId,
+                reason: rejection,
+              });
+              // Classified so the runtime follows the verifier → writer edge
+              // instead of failing the run outright.
+              throw new NodeFailure(rejection, 'needs_changes');
+            }
+          }
+
           this.evidence.addFinding({
             id: randomUUID(),
             taskId: task.id,
             nodeRunId,
             severity: 'info',
-            summary: `${role} via ${route?.providerDisplayName ?? 'fake'} / ${route?.modelDisplayName ?? 'phase0-fake'} · ${compiled.disclosure.totalTokens} ctx tokens`,
+            summary: provenance,
             details: output || task.brief,
             createdAt: now(),
           });
@@ -1082,6 +1152,26 @@ export class Orchestrator {
 }
 
 const now = () => new Date().toISOString();
+
+export interface VerifierVerdict {
+  decision: 'pass' | 'needs_changes' | 'inconclusive';
+  reason?: string;
+}
+
+/**
+ * Reads the verdict line the verifier prompt asks for. The last verdict wins:
+ * a model that restates the required format before answering would otherwise
+ * have its example parsed as the answer.
+ */
+export function parseVerifierVerdict(output: string | undefined): VerifierVerdict {
+  const matches = [...(output ?? '').matchAll(/VERDICT:\s*(PASS|NEEDS[_\s]CHANGES)\b[^\S\n]*(?:[—–:-]\s*)?([^\n]*)/gi)];
+  const last = matches.at(-1);
+  if (!last) return { decision: 'inconclusive' };
+
+  const decision = /needs/i.test(last[1] ?? '') ? 'needs_changes' : 'pass';
+  const reason = last[2]?.trim();
+  return { decision, reason: reason || undefined };
+}
 
 const GRAPH_MODES: readonly GraphMode[] = ['direct', 'fast', 'standard', 'bug_fix', 'critical'];
 
