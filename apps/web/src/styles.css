@@ -761,3 +761,226 @@ pre {
     margin-top: 12px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Accessibility
+   Every interactive element needs a visible focus ring; the amber accent is the
+   only colour in the palette that clears 3:1 against every surface here.
+   --------------------------------------------------------------------------- */
+
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #edae49;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10;
+  padding: 10px 16px;
+  background: #edae49;
+  color: #101619;
+  font-weight: 700;
+}
+
+.skip-link:focus {
+  left: 12px;
+  top: 12px;
+}
+
+.offline {
+  color: #e57d6a;
+}
+
+.code-block {
+  display: inline-block;
+  margin: 18px 0 8px;
+  padding: 10px 16px;
+  background: #ffffff0d;
+  border: 1px solid #ffffff1f;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #edae49;
+}
+
+.intent-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 12px 0 0;
+  min-width: 0;
+}
+
+.intent-fieldset legend {
+  padding: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Read-only graph run view
+   --------------------------------------------------------------------------- */
+
+.graph-run {
+  margin-top: 4px;
+}
+
+.graph-nodes {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.graph-node {
+  padding: 12px 14px;
+  border: 1px solid #ffffff1a;
+  border-left-width: 3px;
+  border-left-color: #ffffff2e;
+  background: #ffffff08;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.graph-node small {
+  color: #9aa4a1;
+  overflow-wrap: anywhere;
+}
+
+.graph-node-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.graph-node-head b {
+  text-transform: capitalize;
+}
+
+.graph-node.completed {
+  border-left-color: #afcf88;
+}
+
+.graph-node.running {
+  border-left-color: #8ec5c0;
+}
+
+.graph-node.failed {
+  border-left-color: #e57d6a;
+}
+
+.graph-node.interrupted {
+  border-left-color: #edae49;
+}
+
+.graph-edges {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: #9aa4a1;
+}
+
+.graph-edges em {
+  color: #edae49;
+  font-style: normal;
+}
+
+/* ---------------------------------------------------------------------------
+   Responsive
+   Dense pages (Providers, Task detail, Evidence) get more width than the prose
+   column so tables and card grids stop wrapping mid-value.
+   --------------------------------------------------------------------------- */
+
+main {
+  width: min(1240px, 92vw);
+}
+
+.hero,
+.lede,
+.stack {
+  max-width: 68ch;
+}
+
+@media (max-width: 900px) {
+  header {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 14px 6vw;
+    gap: 14px;
+  }
+
+  header i {
+    margin-left: 0;
+  }
+
+  nav {
+    order: 3;
+    width: 100%;
+  }
+
+  .status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .path-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  main {
+    width: 92vw;
+  }
+
+  .status-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .graph-nodes {
+    grid-template-columns: 1fr;
+  }
+
+  .truncate {
+    white-space: normal;
+    max-width: none;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+  }
+}
+
+/* Wide content must scroll inside itself rather than pushing the page sideways. */
+.raw-json pre,
+.code-block {
+  max-width: 100%;
+  overflow-x: auto;
+}
