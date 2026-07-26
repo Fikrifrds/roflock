@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ActiveExecution, ConfirmationRequest, Task } from '@roleflock/contracts';
+import type {
+  ActiveExecution,
+  ConfirmationRequest,
+  Task,
+  UsageConfidence,
+} from '@roleflock/contracts';
 import { createConfirmationRequest, matchingGrant } from '@roleflock/approval-engine';
 import { buildRepositoryMap, compileContext, type RoleId } from '@roleflock/context-compiler';
 import {
@@ -40,6 +45,7 @@ import {
 import {
   classifyProviderFailure,
   type Effort,
+  type ReportedUsage,
   type ProviderAdapter,
 } from '@roleflock/provider-core';
 import { CursorWriterAdapter, assertChangedPathsAllowed } from '@roleflock/provider-cursor';
@@ -162,7 +168,28 @@ export class Orchestrator {
     repositoryPath: string,
     baseBranch: string,
   ): Promise<{ graphRunId: string }> {
-    if (this.active.has(task.id)) throw new Error('Task is already running');
+    // Resume: the graph is still alive and parked in `waitWhilePaused`, so the
+    // only thing to do is lift the pause. Starting a second run here would put
+    // two schedulers on one worktree.
+    if (this.active.has(task.id)) {
+      if (this.tasks.get(task.id)?.state !== 'paused') {
+        throw new Error('Task is already running');
+      }
+      const execution = this.executions.getByTask(task.id);
+      if (execution) {
+        execution.pauseRequested = false;
+        this.executions.upsert(execution);
+      }
+      this.setTaskState(task.id, 'running');
+      this.appendEvent(task.id, 'task.resumed', {});
+      const running = this.db
+        .prepare(
+          "SELECT id FROM graph_runs WHERE task_id = ? AND state = 'running' ORDER BY created_at DESC LIMIT 1",
+        )
+        .get(task.id) as { id: string } | undefined;
+      return { graphRunId: running?.id ?? '' };
+    }
+
     const controller = new AbortController();
     this.active.set(task.id, controller);
 
@@ -171,8 +198,16 @@ export class Orchestrator {
       void this.executeGraph(task, prepared, controller)
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Task execution failed';
+          if (controller.signal.aborted) {
+            // Stopped by the operator. Settle on a terminal state rather than
+            // leaving the task reading `stopping` forever.
+            this.appendEvent(task.id, 'task.stopped', { reason: message });
+            const current = this.tasks.get(task.id)?.state;
+            if (current !== 'cancelled') this.setTaskState(task.id, 'cancelled');
+            return;
+          }
           this.recordFailure(task.id, 'Task failed', message);
-          if (!controller.signal.aborted) this.setTaskState(task.id, 'failed');
+          this.setTaskState(task.id, 'failed');
         })
         .finally(() => {
           this.active.delete(task.id);
@@ -209,11 +244,15 @@ export class Orchestrator {
     if (commandType === 'stop' || commandType === 'cancel') {
       execution.stopRequested = true;
       this.executions.upsert(execution);
+      // `stopping` now, `cancelled` when the graph finishes unwinding. Leaving
+      // it on `running` made a stopped task keep claiming it was working.
+      this.setTaskState(taskId, 'stopping');
       this.active.get(taskId)?.abort();
     }
     if (commandType === 'force-terminate') {
       execution.stopRequested = true;
       this.executions.upsert(execution);
+      this.setTaskState(taskId, 'stopping');
       this.active.get(taskId)?.abort();
       this.forceKillTaskProcesses(taskId, execution.nodeRunId);
     }
@@ -321,6 +360,99 @@ export class Orchestrator {
   }
 
   /**
+   * Records what a provider turn actually consumed.
+   *
+   * The numbers come from the CLI or they do not exist. RoleFlock previously
+   * wrote a constant 250/120 tokens for every turn and priced that into a
+   * displayed "actual cost", which made the ledger fiction — the one thing a
+   * cost view must never be.
+   *
+   * When a provider states a price (Claude Code does) it is recorded as the
+   * actual cost with `provider_reported` confidence. When it only reports
+   * tokens, those tokens are real but the money is an estimate from a local
+   * price card, so it lands in shadow cost and actual stays zero: a
+   * subscription CLI bills a plan, not this call. When nothing is reported,
+   * the entry says so rather than guessing.
+   */
+  private recordUsage(input: {
+    task: Task;
+    nodeRunId: string;
+    invocationId: string;
+    route: RoleRoute;
+    usage?: ReportedUsage;
+  }): void {
+    const { task, route, usage } = input;
+    const tokens = {
+      inputTokens: usage?.inputTokens ?? 0,
+      outputTokens: usage?.outputTokens ?? 0,
+    };
+    const reportedNothing = usage?.inputTokens === undefined && usage?.outputTokens === undefined;
+
+    const priced = estimateInvocationCost({
+      tokens,
+      providerConnectionId: route.providerId,
+      modelId: route.modelId,
+      cards: loadPriceCards(this.db),
+    });
+
+    // `estimated` in the middle case is the honest label: the tokens came from
+    // the CLI, but the money is derived from a local price card, so the number
+    // is an estimate even though its input was measured.
+    const providerPriced = usage?.totalCostUsd !== undefined;
+    const confidence: UsageConfidence = providerPriced
+      ? 'provider_reported'
+      : reportedNothing
+        ? 'unknown'
+        : 'estimated';
+
+    this.usage.append({
+      id: randomUUID(),
+      taskId: task.id,
+      invocationId: input.invocationId,
+      providerConnectionId: route.providerId,
+      modelId: route.modelId,
+      inputTokens: tokens.inputTokens,
+      outputTokens: tokens.outputTokens,
+      // A subscription CLI that reports tokens but no price has no per-call
+      // bill to show; the money stays in shadow until a provider states one.
+      actualCostUsd: providerPriced ? usage.totalCostUsd! : 0,
+      shadowCostUsd: reportedNothing ? 0 : priced.shadowCostUsd,
+      confidence,
+      createdAt: now(),
+    });
+
+    const costs = this.usage.summarize(task.id);
+    const execution = this.executions.getByNodeRun(input.nodeRunId);
+    if (execution) {
+      execution.actualCost = costs.actualCostUsd;
+      execution.shadowCost = costs.shadowCostUsd;
+      execution.usageConfidence = confidence;
+      this.executions.upsert(execution);
+    }
+    this.applyBudgetWarning(task, input.nodeRunId);
+  }
+
+  /** Warns once when actual spend approaches the task's hard cap. */
+  private applyBudgetWarning(task: Task, nodeRunId: string): void {
+    const costs = this.usage.summarize(task.id);
+    const budget = budgetStatus({
+      actualCostUsd: costs.actualCostUsd,
+      maxActualCostUsd: task.maxActualCostUsd,
+    });
+    if (!budget.warning) return;
+
+    this.evidence.addFinding({
+      id: randomUUID(),
+      taskId: task.id,
+      nodeRunId,
+      severity: 'warning',
+      summary: 'Approaching hard budget',
+      details: `Actual $${costs.actualCostUsd.toFixed(4)} of max $${task.maxActualCostUsd?.toFixed(4)} (shadow $${costs.shadowCostUsd.toFixed(4)} tracked separately).`,
+      createdAt: now(),
+    });
+  }
+
+  /**
    * Decides whether the verifier is sending the work back, returning the reason
    * or `undefined` to accept.
    *
@@ -390,6 +522,8 @@ export class Orchestrator {
       async ({ node }) => {
         const role = node.role;
         if (controller.signal.aborted) throw new Error('Cancelled by operator');
+        // Honour a pause before spending anything on the next node.
+        await this.waitWhilePaused(task.id, controller.signal);
         executions += 1;
         if (executions > task.maxAttempts * graph.nodes.length) {
           throw new Error(`Exceeded max attempts budget (${task.maxAttempts})`);
@@ -574,7 +708,7 @@ export class Orchestrator {
             createdAt: now(),
           });
         } else if (role === 'reviewer') {
-          if (route && route.providerId !== 'fake') {
+          if (route) {
             await this.invokeRole({
               role,
               task,
@@ -690,7 +824,7 @@ export class Orchestrator {
                   this.updateExecution(task, graphRunId, nodeRunId, role, phase, next),
               });
             } else {
-              const content = `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'fake'}\nVerification: ${task.verificationCommand ?? 'artefact-present / npm test / ROLEFLOCK_FORCE_FAKE'}\nMode: leased-fs-fallback\n`;
+              const content = `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'leased filesystem writer'}\nVerification: ${task.verificationCommand ?? 'artefact-present / npm test / ROLEFLOCK_FORCE_FAKE'}\nMode: leased-fs-fallback\n`;
               if (route?.adapter instanceof CursorWriterAdapter) {
                 await route.adapter.write(relativeTarget, content, envelope);
               } else {
@@ -776,56 +910,11 @@ export class Orchestrator {
           if (decision === 'rejected') throw new Error('Human rejected the change');
         }
 
-        const costsBefore = this.usage.summarize(task.id);
         this.invocations.updateStatus(invocationId, 'completed', 'success', now());
-        const providerConnectionId = route?.providerId ?? 'deterministic';
-        const modelId = route?.modelId ?? 'command-runner';
-        const tokens = {
-          inputTokens: providerConnectionId === 'fake' || !route ? 100 : 250,
-          outputTokens: providerConnectionId === 'fake' || !route ? 50 : 120,
-        };
-        const priced = estimateInvocationCost({
-          tokens,
-          providerConnectionId,
-          modelId,
-          cards: loadPriceCards(this.db),
-        });
-        this.usage.append({
-          id: randomUUID(),
-          taskId: task.id,
-          invocationId,
-          providerConnectionId,
-          modelId,
-          inputTokens: tokens.inputTokens,
-          outputTokens: tokens.outputTokens,
-          actualCostUsd: priced.actualCostUsd,
-          shadowCostUsd: priced.shadowCostUsd,
-          confidence: priced.confidence,
-          createdAt: now(),
-        });
-        const costs = this.usage.summarize(task.id);
-        const budget = budgetStatus({
-          actualCostUsd: costs.actualCostUsd,
-          maxActualCostUsd: task.maxActualCostUsd,
-        });
-        if (budget.warning && costsBefore.actualCostUsd < costs.actualCostUsd) {
-          this.evidence.addFinding({
-            id: randomUUID(),
-            taskId: task.id,
-            nodeRunId,
-            severity: 'warning',
-            summary: 'Approaching hard budget',
-            details: `Actual $${costs.actualCostUsd.toFixed(4)} of max $${task.maxActualCostUsd?.toFixed(4)} (shadow $${costs.shadowCostUsd.toFixed(4)} tracked separately).`,
-            createdAt: now(),
-          });
-        }
-        const execution = this.executions.getByNodeRun(nodeRunId);
-        if (execution) {
-          execution.actualCost = costs.actualCostUsd;
-          execution.shadowCost = costs.shadowCostUsd;
-          execution.usageConfidence = priced.confidence;
-          this.executions.upsert(execution);
-        }
+        // Deterministic nodes spend no provider quota, so nothing is metered
+        // for them. Provider turns record their own usage in `invokeRole`,
+        // where the CLI's reported numbers are still in hand.
+        this.applyBudgetWarning(task, nodeRunId);
         this.db
           .prepare('UPDATE node_runs SET state = ?, completed_at = ?, outcome = ? WHERE id = ?')
           .run('completed', now(), 'success', nodeRunId);
@@ -1009,7 +1098,7 @@ export class Orchestrator {
     signal: AbortSignal;
     permissionEnvelope?: { worktree: string; allowedPaths: string[]; allowCommands?: boolean };
     onRoute?: (route: RoleRoute) => void;
-  }): Promise<{ output: string; route: RoleRoute }> {
+  }): Promise<{ output: string; route: RoleRoute; usage?: ReportedUsage }> {
     const attempted = new Set<string>();
     const refusals: ProviderRefusal[] = [];
 
@@ -1049,7 +1138,7 @@ export class Orchestrator {
       input.onRoute?.(route);
 
       try {
-        const output = await this.consumeInvocation({
+        const invoked = await this.consumeInvocation({
           adapter: route.adapter,
           invocationId: input.invocationId,
           nodeRunId: input.nodeRunId,
@@ -1060,7 +1149,14 @@ export class Orchestrator {
           model: route.modelId,
           effort: route.effort,
         });
-        return { output, route };
+        this.recordUsage({
+          task: input.task,
+          nodeRunId: input.nodeRunId,
+          invocationId: input.invocationId,
+          route,
+          usage: invoked.usage,
+        });
+        return { output: invoked.output, route, usage: invoked.usage };
       } catch (error) {
         if (input.signal.aborted) throw error;
 
@@ -1138,8 +1234,9 @@ export class Orchestrator {
     };
     model?: string;
     effort?: Effort;
-  }): Promise<string> {
+  }): Promise<{ output: string; usage?: ReportedUsage }> {
     let output = '';
+    let usage: ReportedUsage | undefined;
     try {
       for await (const event of input.adapter.invoke({
         invocationId: input.invocationId,
@@ -1149,6 +1246,20 @@ export class Orchestrator {
         permissionEnvelope: input.permissionEnvelope,
         model: input.model,
         effort: input.effort,
+        onSpawn: (pid) => {
+          this.processHandles.create({
+            id: randomUUID(),
+            nodeRunId: input.nodeRunId,
+            invocationId: input.invocationId,
+            pid,
+            // No pgid: these children are not spawned detached, so they share
+            // the daemon's process group. Killing "their" group would signal
+            // the daemon itself.
+            status: 'running',
+            startedAt: now(),
+            lastHeartbeatAt: now(),
+          });
+        },
       })) {
         if (event.type === 'heartbeat') {
           const execution = this.executions.getByNodeRun(input.nodeRunId);
@@ -1159,6 +1270,9 @@ export class Orchestrator {
           }
         }
         if (event.type === 'model.output.delta') output += event.text;
+        // The CLI's own numbers. Anything shown as a token count or a cost has
+        // to come from here rather than from a plausible-looking constant.
+        if (event.type === 'usage.updated') usage = event.usage as ReportedUsage;
         if (event.type === 'invocation.failed') {
           throw new Error(event.error.message);
         }
@@ -1167,6 +1281,7 @@ export class Orchestrator {
         }
       }
     } catch (error) {
+      this.closeProcessHandles(input.nodeRunId, 'unknown');
       if (input.signal.aborted) throw new Error('Cancelled by operator', { cause: error });
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error(
@@ -1176,7 +1291,33 @@ export class Orchestrator {
       }
       throw error;
     }
-    return output;
+    this.closeProcessHandles(input.nodeRunId, 'terminated');
+    return { output, usage };
+  }
+
+  /** Marks any handle for a node as finished, so it is not reconciled later. */
+  private closeProcessHandles(nodeRunId: string, status: 'terminated' | 'unknown'): void {
+    for (const handle of this.processHandles.listRunning()) {
+      if (handle.nodeRunId === nodeRunId) {
+        this.processHandles.setStatus(handle.id, status, now());
+      }
+    }
+  }
+
+  /**
+   * Waits while the operator has the task paused.
+   *
+   * Pause previously set a flag nothing read: the projection said "paused" and
+   * the graph kept spending quota. It is checked between nodes rather than
+   * mid-turn because a provider turn cannot be suspended — stopping one means
+   * killing it, which is what Stop is for.
+   */
+  private async waitWhilePaused(taskId: string, signal: AbortSignal): Promise<void> {
+    for (;;) {
+      if (signal.aborted) throw new Error('Cancelled by operator');
+      if (this.tasks.get(taskId)?.state !== 'paused') return;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    }
   }
 
   private forceKillTaskProcesses(taskId: string, nodeRunId: string): void {
@@ -1313,7 +1454,7 @@ export class Orchestrator {
       taskId: task.id,
       roleId: role,
       roleDisplayName: role,
-      providerConnectionId: route?.providerId ?? (role === 'test' ? 'deterministic' : 'fake'),
+      providerConnectionId: route?.providerId ?? 'deterministic',
       providerDisplayName: route?.providerDisplayName ?? mapping.provider,
       configuredModelId: route?.modelId ?? mapping.model,
       configuredModelDisplayName: route?.modelDisplayName ?? mapping.model,
@@ -1328,7 +1469,9 @@ export class Orchestrator {
       maxAttempts: task.maxAttempts,
       actualCost: costs.actualCostUsd,
       shadowCost: costs.shadowCostUsd,
-      usageConfidence: route && route.providerId !== 'fake' ? 'estimated' : 'exact',
+      // A deterministic node spends no provider quota, so its cost really is
+      // exactly zero. A provider turn overwrites this from what the CLI reported.
+      usageConfidence: route ? 'estimated' : 'exact',
       pauseRequested: false,
       stopRequested: false,
       forceTerminationAvailable: true,

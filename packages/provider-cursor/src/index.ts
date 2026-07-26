@@ -8,6 +8,7 @@ import type { InvocationEvent } from '@roleflock/contracts';
 import {
   classifyProviderFailure,
   isEffort,
+  parseReportedUsage,
   refusalInOutput,
   whichBinary,
   type InvocationRequest,
@@ -184,6 +185,16 @@ export function parseCursorModelList(stdout: string): ProviderModel[] {
   return models;
 }
 
+/** Cursor reports real token counts on its closing `result` frame. */
+function extractStreamUsage(line: string): ReturnType<typeof parseReportedUsage> {
+  try {
+    const json = JSON.parse(line) as Record<string, unknown>;
+    return parseReportedUsage(json.usage);
+  } catch {
+    return undefined;
+  }
+}
+
 function extractStreamText(line: string): string | undefined {
   try {
     const json = JSON.parse(line) as Record<string, unknown>;
@@ -337,14 +348,29 @@ export class CursorWriterAdapter implements ProviderAdapter {
         signal: request.signal,
         env: process.env,
       });
+      if (child.pid) request.onSpawn?.(child.pid);
       let stderr = '';
       child.stderr.on('data', (d: Buffer) => {
         stderr += d;
       });
+      // Aborting a spawned child makes Node emit `error` on it. With no listener
+        // that is an unhandled error event, which takes the whole daemon down —
+        // pressing Stop killed the process that was meant to do the stopping.
+      let aborted = false;
+      child.on('error', (error: NodeJS.ErrnoException) => {
+        if (error.name === 'AbortError') aborted = true;
+        else stderr += `\n${error.message}`;
+      });
+
+      // stdin is never written to; leaving the pipe open makes the CLI wait on
+      // input that will never arrive.
+      child.stdin?.end();
 
       for await (const chunk of child.stdout) {
         yield { type: 'heartbeat', at: new Date().toISOString() };
         for (const line of String(chunk).split('\n').filter(Boolean)) {
+          const usage = extractStreamUsage(line);
+          if (usage) yield { type: 'usage.updated', usage: { ...usage } };
           const text = extractStreamText(line);
           if (text) yield { type: 'model.output.delta', text };
         }
@@ -353,6 +379,10 @@ export class CursorWriterAdapter implements ProviderAdapter {
       const code: number = await new Promise((resolve) =>
         child.on('close', (value) => resolve(value ?? 1)),
       );
+      if (aborted || request.signal?.aborted) {
+        yield { type: 'invocation.interrupted', reason: 'Cancelled by operator' };
+        return;
+      }
       // Cursor Agent reports an unusable model on stderr and still exits 0, so
       // the exit code alone cannot be trusted to mean the work happened.
       const refusal = code === 0 ? refusalInOutput(stderr) : classifyProviderFailure(stderr);

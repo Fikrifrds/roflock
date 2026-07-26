@@ -25,7 +25,7 @@ export function seedPricingDefaults(db: SqliteDb): void {
   }
 
   const quotas = new QuotaSnapshotRepository(db);
-  for (const providerId of ['fake', 'claude', 'codex', 'cursor']) {
+  for (const providerId of ['claude', 'codex', 'cursor']) {
     const placeholder = localQuotaPlaceholder(providerId);
     quotas.upsert({
       id: placeholder.id,

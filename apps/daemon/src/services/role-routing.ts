@@ -268,7 +268,7 @@ export class RoleRouter {
   }
 
   private async displayName(providerId: string): Promise<string> {
-    const listed = await this.registry.list({ includeFake: true }).catch(() => []);
+    const listed = await this.registry.list().catch(() => []);
     return listed.find((item) => item.id === providerId)?.displayName ?? providerId;
   }
 
@@ -278,17 +278,26 @@ export class RoleRouter {
   }
 
   /**
-   * Only reached through `forceFake`, which is an explicit offline/test mode.
-   * It is deliberately not a fallback: see `route`.
+   * Only reached through `forceFake`, an explicit offline/test mode. It is
+   * deliberately not a fallback: see `route`.
+   *
+   * Returns null when the stand-in is not registered, so asking for it without
+   * enabling it stops the run rather than crashing mid-turn.
    */
-  private fakeRoute(role: RoutedRole, skipped: SkippedCandidate[]): RoleRoute {
+  private fakeRoute(role: RoutedRole, skipped: SkippedCandidate[]): RoleRoute | null {
+    let adapter: ProviderAdapter;
+    try {
+      adapter = this.registry.get('fake');
+    } catch {
+      return null;
+    }
     return {
       role,
       providerId: 'fake',
-      providerDisplayName: 'Phase 0 Fake Provider',
+      providerDisplayName: 'Deterministic stand-in',
       modelId: 'phase0-fake',
-      modelDisplayName: 'Phase 0 Fake',
-      adapter: this.registry.get('fake'),
+      modelDisplayName: 'Deterministic stand-in',
+      adapter,
       fallbackUsed: skipped.length > 0,
       skipped,
     };

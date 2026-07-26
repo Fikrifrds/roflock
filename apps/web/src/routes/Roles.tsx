@@ -380,8 +380,8 @@ export function Roles() {
                     edit(role.id, [
                       ...candidates,
                       {
-                        providerId: provider?.providerId ?? 'fake',
-                        modelId: provider?.models[0]?.id ?? 'phase0-fake',
+                        providerId: provider?.providerId ?? '',
+                        modelId: provider?.models[0]?.id ?? '',
                         enabled: true,
                       },
                     ]);

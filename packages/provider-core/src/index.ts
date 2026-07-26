@@ -64,6 +64,14 @@ export interface InvocationRequest {
   /** Provider-specific model id. Omitted means the CLI's own default. */
   model?: string;
   effort?: Effort;
+  /**
+   * Called with the pid of any process this turn spawns.
+   *
+   * Aborting the request already kills the child, but only while the daemon is
+   * alive to do it. Reporting the pid is what lets a run be reconciled after a
+   * crash, instead of leaving a CLI running against a worktree nobody owns.
+   */
+  onSpawn?: (pid: number) => void;
 }
 
 export interface PermissionEnvelope { worktree: string; allowedPaths: string[]; allowCommands?: boolean; }
@@ -170,6 +178,53 @@ export function classifyProviderFailure(message: string | undefined): ProviderFa
   if (UNAUTHENTICATED_PATTERNS.some((pattern) => pattern.test(text))) return 'unauthenticated';
   if (TRANSIENT_PATTERNS.some((pattern) => pattern.test(text))) return 'transient';
   return 'unknown';
+}
+
+/**
+ * What a CLI reported about a turn it just finished.
+ *
+ * Every field is optional because "the provider did not say" is a real answer
+ * and must stay distinguishable from zero. Anything RoleFlock shows as a token
+ * count or a cost has to come from here — inventing a plausible number would
+ * make the cost ledger fiction, which is worse than an honest blank.
+ */
+export interface ReportedUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  /** Only when the provider states a price. Subscription CLIs usually do not. */
+  totalCostUsd?: number;
+}
+
+function positive(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+/**
+ * Reads a usage object out of a CLI's final JSON frame.
+ *
+ * The three CLIs spell the same fields differently — Cursor uses camelCase,
+ * Claude and Codex snake_case, and each names its cache counters its own way —
+ * so both spellings are accepted for each field.
+ */
+export function parseReportedUsage(raw: unknown): ReportedUsage | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const usage = raw as Record<string, unknown>;
+
+  const result: ReportedUsage = {
+    inputTokens: positive(usage.inputTokens ?? usage.input_tokens),
+    outputTokens: positive(usage.outputTokens ?? usage.output_tokens),
+    cacheReadTokens: positive(
+      usage.cacheReadTokens ?? usage.cache_read_input_tokens ?? usage.cached_input_tokens,
+    ),
+    cacheWriteTokens: positive(
+      usage.cacheWriteTokens ?? usage.cache_creation_input_tokens ?? usage.cache_write_input_tokens,
+    ),
+    totalCostUsd: positive(usage.totalCostUsd ?? usage.total_cost_usd),
+  };
+
+  return Object.values(result).some((value) => value !== undefined) ? result : undefined;
 }
 
 /** Resolves a command from PATH without assuming a bare command name exists. */

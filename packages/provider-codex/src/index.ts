@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import type { InvocationEvent } from '@roleflock/contracts';
 import {
   classifyProviderFailure,
+  parseReportedUsage,
   whichBinary,
   type InvocationRequest,
   type ProviderAdapter,
@@ -70,7 +71,9 @@ export class CodexAdapter implements ProviderAdapter {
     yield { type: 'invocation.started', invocationId: request.invocationId };
     yield { type: 'heartbeat', at: new Date().toISOString() };
 
-    const args = ['exec', '--json'];
+    // `--skip-git-repo-check` because RoleFlock runs inside a git worktree the
+    // CLI has not been told to trust; without it `codex exec` refuses to start.
+    const args = ['exec', '--json', '--skip-git-repo-check'];
     if (request.model && request.model !== 'default') args.push('-m', request.model);
     // Codex takes reasoning effort as a config override rather than a flag.
     if (request.effort) args.push('-c', `model_reasoning_effort="${request.effort}"`);
@@ -80,17 +83,37 @@ export class CodexAdapter implements ProviderAdapter {
       cwd: request.cwd,
       signal: request.signal,
     });
+    if (child.pid) request.onSpawn?.(child.pid);
     let stderr = '';
     child.stderr.on('data', (d: Buffer) => {
       stderr += d;
     });
+    // Aborting a spawned child makes Node emit `error` on it. With no listener
+    // that is an unhandled error event, which takes the whole daemon down —
+    // pressing Stop killed the process that was meant to do the stopping.
+    let aborted = false;
+    child.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.name === 'AbortError') aborted = true;
+      else stderr += `\n${error.message}`;
+    });
+
+    // `codex exec` reads additional input from stdin. With the pipe left open
+    // it waits for input that never comes, and the turn hangs until timeout.
+    child.stdin?.end();
 
     for await (const chunk of child.stdout) {
       yield { type: 'heartbeat', at: new Date().toISOString() };
       for (const line of String(chunk).split('\n').filter(Boolean)) {
         try {
           const event = JSON.parse(line) as Record<string, unknown>;
-          const text = event.delta ?? event.message ?? event.text;
+
+          const usage = parseReportedUsage(event.usage);
+          if (usage) yield { type: 'usage.updated', usage: { ...usage } };
+
+          // Codex nests the reply under `item`, so the flat field names the
+          // other CLIs use find nothing here and the output was being dropped.
+          const item = event.item as { text?: unknown } | undefined;
+          const text = item?.text ?? event.delta ?? event.message ?? event.text;
           if (typeof text === 'string') yield { type: 'model.output.delta', text };
         } catch {
           yield { type: 'model.output.delta', text: line };
@@ -101,6 +124,10 @@ export class CodexAdapter implements ProviderAdapter {
     const code: number = await new Promise((resolve) =>
       child.on('close', (value) => resolve(value ?? 1)),
     );
+    if (aborted || request.signal?.aborted) {
+      yield { type: 'invocation.interrupted', reason: 'Cancelled by operator' };
+      return;
+    }
     if (code === 0) {
       yield { type: 'invocation.completed', output: '' };
       return;

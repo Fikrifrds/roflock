@@ -205,7 +205,7 @@ export function registerApi(
   app.get('/api/roles', async () => {
     const assignments = orchestrator.router.listAll();
     const cooldowns = orchestrator.router.activeCooldowns();
-    const listed = await providers.list({ includeFake: true });
+    const listed = await providers.list();
 
     const catalogue = await Promise.all(
       listed.map(async (provider) => ({
@@ -562,7 +562,9 @@ export function registerApi(
   app.post('/api/tasks/:id/start', async (request, reply) => {
     const task = tasks.get((request.params as { id: string }).id);
     if (!task) return reply.code(404).send({ error: 'Task not found' });
-    if (task.state !== 'ready' && task.state !== 'failed') {
+    // `paused` belongs here: the UI's Resume button posts to this route, and
+    // rejecting it left Pause as a one-way door with no way back.
+    if (task.state !== 'ready' && task.state !== 'failed' && task.state !== 'paused') {
       return reply.code(409).send({ error: `Cannot start task in state ${task.state}` });
     }
     const project = projects.get(task.projectId);

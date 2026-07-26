@@ -3,6 +3,7 @@ import type { InvocationEvent } from '@roleflock/contracts';
 import {
   clampEffort,
   classifyProviderFailure,
+  parseReportedUsage,
   whichBinary,
   type InvocationRequest,
   type ProviderAdapter,
@@ -92,7 +93,17 @@ export class ClaudeAdapter implements ProviderAdapter {
     yield { type: 'heartbeat', at: new Date().toISOString() };
 
     const permissionMode = process.env.CLAUDE_PERMISSION_MODE ?? 'plan';
-    const args = ['-p', request.prompt, '--output-format', 'stream-json', '--permission-mode', permissionMode];
+    // `--verbose` is not optional: with `-p`, the CLI refuses stream-json
+    // without it. Omitting it made every Claude turn fail on startup.
+    const args = [
+      '-p',
+      request.prompt,
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--permission-mode',
+      permissionMode,
+    ];
     // `default` means "whatever the account is set to", so it is deliberately
     // not forwarded — passing it would make the CLI look for a model by that name.
     if (request.model && request.model !== 'default') args.push('--model', request.model);
@@ -101,16 +112,41 @@ export class ClaudeAdapter implements ProviderAdapter {
     if (request.effort) args.push('--effort', clampEffort(request.effort, 'max'));
 
     const child = spawn(health.binary!, args, { cwd: request.cwd, signal: request.signal });
+    if (child.pid) request.onSpawn?.(child.pid);
     let stderr = '';
     child.stderr.on('data', (d: Buffer) => {
       stderr += d;
     });
+    // Aborting a spawned child makes Node emit `error` on it. With no listener
+    // that is an unhandled error event, which takes the whole daemon down —
+    // pressing Stop killed the process that was meant to do the stopping.
+    let aborted = false;
+    child.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.name === 'AbortError') aborted = true;
+      else stderr += `\n${error.message}`;
+    });
+
+    // stdin is never written to. Leaving the pipe open makes some CLIs wait on
+    // input that will never arrive.
+    child.stdin?.end();
 
     for await (const chunk of child.stdout) {
       yield { type: 'heartbeat', at: new Date().toISOString() };
       for (const line of String(chunk).split('\n').filter(Boolean)) {
         try {
           const json = JSON.parse(line) as Record<string, unknown>;
+          const usage = parseReportedUsage(json.usage);
+          if (usage) {
+            yield {
+              type: 'usage.updated',
+              usage: {
+                ...usage,
+                // Claude Code prices the turn itself, which beats any estimate
+                // RoleFlock could derive from a price card.
+                ...(usage.totalCostUsd !== undefined ? { confidence: 'provider_reported' } : {}),
+              },
+            };
+          }
           const text = json.delta ?? json.text ?? json.result;
           if (typeof text === 'string') yield { type: 'model.output.delta', text };
         } catch {
@@ -122,6 +158,10 @@ export class ClaudeAdapter implements ProviderAdapter {
     const code: number = await new Promise((resolve) =>
       child.on('close', (value) => resolve(value ?? 1)),
     );
+    if (aborted || request.signal?.aborted) {
+      yield { type: 'invocation.interrupted', reason: 'Cancelled by operator' };
+      return;
+    }
     if (code === 0) {
       yield { type: 'invocation.completed', output: '' };
       return;

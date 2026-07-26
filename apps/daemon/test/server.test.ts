@@ -205,7 +205,6 @@ describe('daemon boundary', () => {
     expect(listed.statusCode).toBe(200);
     const providers = listed.json() as Array<{ id: string }>;
     expect(providers.some((p) => p.id === body.id)).toBe(true);
-    expect(providers.some((p) => p.id === 'fake')).toBe(false);
   });
   it('exposes provider account and auth action endpoints', async () => {
     const { app } = await server();

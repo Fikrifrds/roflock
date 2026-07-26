@@ -44,7 +44,7 @@ export interface CustomProviderInput {
 }
 
 const providerNames: Record<string, string> = {
-  fake: 'Phase 0 Fake Provider',
+  fake: 'Deterministic stand-in (test mode)',
   claude: 'Claude CLI',
   codex: 'Codex CLI',
   cursor: 'Cursor Agent CLI',
@@ -57,8 +57,17 @@ const connectionTypes: Record<string, RegisteredProvider['connectionType']> = {
   cursor: 'cli',
 };
 
-function includeFakeProvider(): boolean {
-  return process.env.ROLEFLOCK_INCLUDE_FAKE === '1';
+/**
+ * The deterministic stand-in exists for tests and for an offline first run. It
+ * is not a provider in the ordinary sense — its output is fabricated — so it is
+ * only registered when explicitly asked for. Leaving it registered made it
+ * pickable on the Roles page, where choosing it would quietly turn a real run
+ * into a scripted one.
+ */
+function fakeProviderEnabled(): boolean {
+  return (
+    process.env.ROLEFLOCK_FORCE_FAKE === '1' || process.env.ROLEFLOCK_INCLUDE_FAKE === '1'
+  );
 }
 
 function mergeAccountIntoHealth(
@@ -102,7 +111,7 @@ export class ProviderRegistry {
   private readonly discovery = new Map<string, { at: number; value: Promise<unknown> }>();
 
   constructor() {
-    this.adapters.register(new FakeProvider());
+    if (fakeProviderEnabled()) this.adapters.register(new FakeProvider());
     this.adapters.register(new ClaudeAdapter());
     this.adapters.register(new CodexAdapter());
     this.adapters.register(new CursorWriterAdapter(createFsCursorWriter()));
@@ -174,12 +183,14 @@ export class ProviderRegistry {
     };
   }
 
-  async list(
-    options: { includeFake?: boolean; fresh?: boolean } = {},
-  ): Promise<RegisteredProvider[]> {
-    const showFake = options.includeFake ?? includeFakeProvider();
+  /**
+   * Everything registered. There is no hidden set: a provider that can be
+   * routed to must be visible, or the Providers page would disagree with what
+   * actually runs. The stand-in is kept out by not registering it at all.
+   */
+  async list(options: { fresh?: boolean } = {}): Promise<RegisteredProvider[]> {
     const fresh = options.fresh ?? false;
-    const adapters = this.adapters.list().filter((adapter) => showFake || adapter.id !== 'fake');
+    const adapters = this.adapters.list();
     return Promise.all(
       adapters.map(async (adapter) => {
         const [health, capabilities, account] = await Promise.all([

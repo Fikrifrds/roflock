@@ -99,10 +99,10 @@ Shipping defaults:
 | Reviewer | Cursor · `gpt-5.6-terra-medium` | `claude-opus-5-low`, then Codex `gpt-5.6-terra` |
 | Verifier | Cursor · `gpt-5.6-terra-high` | `claude-opus-5-medium`, then Codex `gpt-5.6-terra` |
 
-The fake provider is deliberately not in any list. If every candidate for a role
-refuses, the run **stops** and shows what each provider said — fabricating
-plausible output when a real model was asked for would hide the one thing you
-need to act on. Use `ROLEFLOCK_FORCE_FAKE=1` to run without a CLI on purpose.
+There is no fake provider. It is not in any list and it is not even registered
+unless `ROLEFLOCK_FORCE_FAKE=1` or `ROLEFLOCK_INCLUDE_FAKE=1` asks for it, so it
+cannot be picked by accident. If every candidate for a role refuses, the run
+**stops** and shows what each provider said.
 
 Where a model is reachable through two providers it appears twice on purpose —
 Cursor and Codex meter separately, so an exhausted plan costs the run a
@@ -146,7 +146,9 @@ documents is clamped rather than forwarded.
 - A running task keeps the graph version it started with
 - Secret/symlink escape paths denied
 - Unknown billable outcomes are not auto-retried
+- Token counts and costs come from the CLI or are marked unknown — never invented
 - Actual and shadow cost are never presented as one bill
+- Stopping a task kills its provider process and settles the task on a terminal state
 - Update checks never send repository paths or contents
 
 ## Workspace

@@ -46,6 +46,8 @@ Not implemented: user-authored graphs. Templates are the only graph source, whic
 - The verifier rejects on two grounds: an empty worktree diff, and its own `VERDICT: NEEDS_CHANGES` line. A reply with no parseable verdict is inconclusive rather than a rejection, since the required deterministic check already gates acceptance.
 - Roles are an ordered provider+model list per role, editable at `/roles`. A candidate that reports exhausted quota, an unknown model, or a dead session is parked on a cooldown and the router moves to the next entry; the substitution is recorded as evidence and in the audit log.
 - Cursor Agent reports an unusable model on stderr while exiting 0. The adapter inspects output as well as the exit code, so a mistyped model id fails over instead of producing an empty run that reports success.
+- Usage is what the CLI reported: Cursor, Claude Code, and Codex all emit token counts, and Claude Code also prices the turn. A turn that reports nothing is recorded with `unknown` confidence and zero cost rather than an estimate from invented tokens.
+- Pause halts between nodes; a provider turn already in flight finishes, because a CLI cannot be suspended — stopping one means killing it, which is what Stop does.
 - Effort is expressed differently per provider — Cursor encodes it in the model id, Claude and Codex take it as a separate setting — and levels above what a CLI documents are clamped rather than forwarded.
 - Vendor account-wide quota dashboards are not scraped; Providers show RoleFlock local usage + CLI account identity + vendor usage buttons.
 - Provider discovery shells out to the real CLIs. Results are cached for 15s; a cold probe on a machine with all three installed still takes a few seconds.

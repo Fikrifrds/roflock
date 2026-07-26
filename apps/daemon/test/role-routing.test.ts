@@ -6,6 +6,7 @@ import { openMigratedDatabase, ProviderCooldownRepository } from '@roleflock/dat
 import {
   FakeProvider,
   classifyProviderFailure,
+  parseReportedUsage,
   refusalInOutput,
 } from '@roleflock/provider-core';
 import { ProviderRegistry } from '../src/services/provider-registry.js';
@@ -300,5 +301,33 @@ describe('ProviderUnavailableError', () => {
     expect(new ProviderUnavailableError('writer', []).message).toContain(
       'no candidate was reachable',
     );
+  });
+});
+
+describe('reported usage', () => {
+  it('reads the token counts each CLI actually sends', () => {
+    // Cursor's spelling.
+    expect(
+      parseReportedUsage({ inputTokens: 7930, outputTokens: 14, cacheReadTokens: 5248 }),
+    ).toMatchObject({ inputTokens: 7930, outputTokens: 14, cacheReadTokens: 5248 });
+
+    // Codex's spelling.
+    expect(
+      parseReportedUsage({ input_tokens: 14748, cached_input_tokens: 11008, output_tokens: 5 }),
+    ).toMatchObject({ inputTokens: 14748, cacheReadTokens: 11008, outputTokens: 5 });
+
+    // Claude Code additionally prices the turn, which beats any local estimate.
+    expect(
+      parseReportedUsage({ input_tokens: 2, output_tokens: 4, total_cost_usd: 0.0752 }),
+    ).toMatchObject({ inputTokens: 2, outputTokens: 4, totalCostUsd: 0.0752 });
+  });
+
+  it('keeps "not reported" distinguishable from zero', () => {
+    // A fabricated token count would make the cost ledger fiction, so absence
+    // has to survive as absence rather than collapsing to 0.
+    expect(parseReportedUsage(undefined)).toBeUndefined();
+    expect(parseReportedUsage({})).toBeUndefined();
+    expect(parseReportedUsage({ inputTokens: 'lots' })).toBeUndefined();
+    expect(parseReportedUsage({ inputTokens: 0 })).toMatchObject({ inputTokens: 0 });
   });
 });
