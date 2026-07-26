@@ -152,6 +152,15 @@ describe('verified bug fix walking skeleton', () => {
       headers,
     });
     expect(usage.statusCode).toBe(200);
+    const usageBody = usage.json() as {
+      scope: string;
+      summary: { actualCostUsd: number; shadowCostUsd: number; entryCount: number };
+      entries: unknown[];
+    };
+    expect(usageBody.scope).toBe('local-daemon');
+    expect(usageBody.summary.entryCount).toBe(usageBody.entries.length);
+    expect(usageBody.summary.actualCostUsd).toBe(0);
+    expect(usageBody.summary.shadowCostUsd).toBeGreaterThan(0);
   }, 30_000);
 
   it('rejects non-local mutation origins', async () => {

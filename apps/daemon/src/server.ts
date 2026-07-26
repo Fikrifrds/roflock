@@ -11,6 +11,7 @@ import { authenticate, createSession, isLocalOrigin, type Session } from './auth
 import { registerApi } from './routes/api.js';
 import { EventBus } from './services/event-bus.js';
 import { Orchestrator } from './services/orchestrator.js';
+import { seedPricingDefaults } from './services/pricing.js';
 import { ProviderRegistry } from './services/provider-registry.js';
 
 export interface ServerOptions { dataDir?: string; host?: string; port?: number; session?: Session; }
@@ -27,6 +28,7 @@ export async function createServer(options: ServerOptions = {}): Promise<{ app: 
     }
   });
   const db = openMigratedDatabase(join(dataDir, 'roleflock.db'));
+  seedPricingDefaults(db);
   reconcileOrphanedProcesses(db);
   const bus = new EventBus();
   const providers = new ProviderRegistry();

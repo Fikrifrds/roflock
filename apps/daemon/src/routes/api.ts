@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Task } from '@roleflock/contracts';
-import { ConfirmationRepository, EvidenceRepository, ProjectRepository, TaskRepository, UsageRepository, type SqliteDb } from '@roleflock/database';
+import { ConfirmationRepository, EvidenceRepository, PriceCardRepository, ProjectRepository, QuotaSnapshotRepository, TaskRepository, UsageRepository, type SqliteDb } from '@roleflock/database';
 import { getWorkflowGraph, recommendWorkflow, workflowGraphs } from '@roleflock/graph-core';
+import { budgetStatus } from '@roleflock/usage-ledger';
 import { registerRepository } from '@roleflock/repository-runtime';
 import type { Session } from '../auth.js';
 import { EventBus } from '../services/event-bus.js';
@@ -284,7 +285,23 @@ export function registerApi(app: FastifyInstance, db: SqliteDb, session: Session
     }
   });
   app.get('/api/evidence/tasks/:taskId', async (request) => evidence.getBundle((request.params as { taskId: string }).taskId));
-  app.get('/api/usage/tasks/:taskId', async (request) => ({ entries: usage.listByTask((request.params as { taskId: string }).taskId), summary: usage.summarize((request.params as { taskId: string }).taskId) }));
+  app.get('/api/usage/tasks/:taskId', async (request) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    const task = tasks.get(taskId);
+    const summary = usage.summarize(taskId);
+    return {
+      scope: 'local-daemon',
+      note: 'Local RoleFlock usage only. Actual and shadow costs are never combined into one bill.',
+      entries: usage.listByTask(taskId),
+      summary: {
+        ...summary,
+        budget: budgetStatus({
+          actualCostUsd: summary.actualCostUsd,
+          maxActualCostUsd: task?.maxActualCostUsd,
+        }),
+      },
+    };
+  });
   app.get('/api/usage/summary', async () => {
     const summary = db.prepare(
       `SELECT COUNT(DISTINCT task_id) AS taskCount,
@@ -298,7 +315,18 @@ export function registerApi(app: FastifyInstance, db: SqliteDb, session: Session
       taskCount: number; entryCount: number; inputTokens: number; outputTokens: number;
       actualCostUsd: number; shadowCostUsd: number;
     };
-    return summary;
+    return {
+      scope: 'local-daemon',
+      note: 'Local RoleFlock daemon meter — not provider account-wide usage.',
+      ...summary,
+    };
   });
+  app.get('/api/price-cards', async () => new PriceCardRepository(db).list());
+  app.get('/api/quota', async () =>
+    new QuotaSnapshotRepository(db).list().map((row) => ({
+      ...row,
+      snapshot: JSON.parse(row.snapshotJson) as Record<string, unknown>,
+    })),
+  );
 }
 const now = () => new Date().toISOString();

@@ -16,6 +16,14 @@ export { WorktreeRepository } from './repositories/worktree-repository.js';
 export { ActiveExecutionRepository } from './repositories/active-execution-repository.js';
 export { InvocationRepository } from './repositories/invocation-repository.js';
 export { UsageRepository } from './repositories/usage-repository.js';
+export {
+  PriceCardRepository,
+  QuotaSnapshotRepository,
+} from './repositories/pricing-repository.js';
+export type {
+  PriceCardRow,
+  QuotaSnapshotRow,
+} from './repositories/pricing-repository.js';
 export { EvidenceRepository } from './repositories/evidence-repository.js';
 export { ControlCommandRepository } from './repositories/control-command-repository.js';
 export { ProcessHandleRepository } from './repositories/process-handle-repository.js';

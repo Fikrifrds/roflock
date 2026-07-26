@@ -28,7 +28,9 @@ import {
 } from '@roleflock/repository-runtime';
 import { FakeProvider, type ProviderAdapter } from '@roleflock/provider-core';
 import { CursorWriterAdapter } from '@roleflock/provider-cursor';
+import { budgetStatus, estimateInvocationCost } from '@roleflock/usage-ledger';
 import { EventBus } from './event-bus.js';
+import { loadPriceCards } from './pricing.js';
 import type { ProviderRegistry } from './provider-registry.js';
 import { routeRole, type RoleRoute, type RoutedRole } from './role-routing.js';
 
@@ -420,25 +422,54 @@ export class Orchestrator {
         if (decision === 'rejected') throw new Error('Human rejected the change');
       }
 
-      const costs = this.usage.summarize(task.id);
+      const costsBefore = this.usage.summarize(task.id);
       this.invocations.updateStatus(invocationId, 'completed', 'success', now());
+      const providerConnectionId = route?.providerId ?? 'deterministic';
+      const modelId = route?.modelId ?? 'command-runner';
+      const tokens = {
+        inputTokens: providerConnectionId === 'fake' || !route ? 100 : 250,
+        outputTokens: providerConnectionId === 'fake' || !route ? 50 : 120,
+      };
+      const priced = estimateInvocationCost({
+        tokens,
+        providerConnectionId,
+        modelId,
+        cards: loadPriceCards(this.db),
+      });
       this.usage.append({
         id: randomUUID(),
         taskId: task.id,
         invocationId,
-        providerConnectionId: route?.providerId ?? 'deterministic',
-        modelId: route?.modelId ?? 'command-runner',
-        inputTokens: route?.providerId === 'fake' || !route ? 100 : 250,
-        outputTokens: route?.providerId === 'fake' || !route ? 50 : 120,
-        actualCostUsd: route && route.providerId !== 'fake' ? 0.02 : 0,
-        shadowCostUsd: 0.01,
-        confidence: route && route.providerId !== 'fake' ? 'estimated' : 'exact',
+        providerConnectionId,
+        modelId,
+        inputTokens: tokens.inputTokens,
+        outputTokens: tokens.outputTokens,
+        actualCostUsd: priced.actualCostUsd,
+        shadowCostUsd: priced.shadowCostUsd,
+        confidence: priced.confidence,
         createdAt: now(),
       });
+      const costs = this.usage.summarize(task.id);
+      const budget = budgetStatus({
+        actualCostUsd: costs.actualCostUsd,
+        maxActualCostUsd: task.maxActualCostUsd,
+      });
+      if (budget.warning && costsBefore.actualCostUsd < costs.actualCostUsd) {
+        this.evidence.addFinding({
+          id: randomUUID(),
+          taskId: task.id,
+          nodeRunId,
+          severity: 'warning',
+          summary: 'Approaching hard budget',
+          details: `Actual $${costs.actualCostUsd.toFixed(4)} of max $${task.maxActualCostUsd?.toFixed(4)} (shadow $${costs.shadowCostUsd.toFixed(4)} tracked separately).`,
+          createdAt: now(),
+        });
+      }
       const execution = this.executions.getByNodeRun(nodeRunId);
       if (execution) {
         execution.actualCost = costs.actualCostUsd;
-        execution.shadowCost = costs.shadowCostUsd + 0.01;
+        execution.shadowCost = costs.shadowCostUsd;
+        execution.usageConfidence = priced.confidence;
         this.executions.upsert(execution);
       }
       this.db
@@ -559,11 +590,14 @@ export class Orchestrator {
   }
 
   private assertBudget(task: Task): void {
-    if (task.maxActualCostUsd === undefined) return;
     const summary = this.usage.summarize(task.id);
-    if (summary.actualCostUsd >= task.maxActualCostUsd) {
+    const status = budgetStatus({
+      actualCostUsd: summary.actualCostUsd,
+      maxActualCostUsd: task.maxActualCostUsd,
+    });
+    if (status.hardStop) {
       throw new Error(
-        `Hard budget reached: actual $${summary.actualCostUsd.toFixed(4)} >= max $${task.maxActualCostUsd.toFixed(4)}`,
+        `Hard budget reached: actual $${summary.actualCostUsd.toFixed(4)} >= max $${task.maxActualCostUsd!.toFixed(4)} (shadow $${summary.shadowCostUsd.toFixed(4)} is tracked separately and is not a bill)`,
       );
     }
   }

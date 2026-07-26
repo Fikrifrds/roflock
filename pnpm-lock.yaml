@@ -71,6 +71,9 @@ importers:
       '@roleflock/run-control':
         specifier: workspace:*
         version: link:../../packages/run-control
+      '@roleflock/usage-ledger':
+        specifier: workspace:*
+        version: link:../../packages/usage-ledger
       fastify:
         specifier: ^5.2.1
         version: 5.10.0

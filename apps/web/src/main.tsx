@@ -16,6 +16,7 @@ type Task = {
   risk: string;
   brief: string;
   maxAttempts: number;
+  maxActualCostUsd?: number;
   workflowGraphVersionId: string;
   expectedBehaviour?: string;
   actualBehaviour?: string;
@@ -70,8 +71,21 @@ type EvidenceBundle = {
 };
 
 type Usage = {
+  scope?: string;
+  note?: string;
   entries?: Array<Record<string, unknown>>;
-  summary?: Record<string, unknown>;
+  summary?: {
+    actualCostUsd?: number;
+    shadowCostUsd?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    budget?: {
+      remainingUsd?: number;
+      warning?: boolean;
+      hardStop?: boolean;
+      maxActualCostUsd?: number;
+    };
+  };
 };
 
 function useData<T>(key: string[], path: string, enabled = true) {
@@ -170,7 +184,7 @@ function Home() {
         </div>
         {usage ? (
           <div>
-            <span>Usage</span>
+            <span>Local usage</span>
             <b>{formatUsage(usage)}</b>
           </div>
         ) : null}
@@ -749,8 +763,18 @@ function TaskDetail() {
                 ['Heartbeat', execution?.lastHeartbeatAt ?? '—'],
                 ['Attempt', `${execution?.attempt ?? 0}/${task.maxAttempts}`],
                 [
-                  'Cost',
-                  `$${(execution?.actualCost ?? 0).toFixed(2)} / shadow $${(execution?.shadowCost ?? 0).toFixed(2)}`,
+                  'Actual cost',
+                  `$${(execution?.actualCost ?? 0).toFixed(4)}`,
+                ],
+                [
+                  'Shadow cost',
+                  `$${(execution?.shadowCost ?? 0).toFixed(4)} (not a bill)`,
+                ],
+                [
+                  'Budget remaining',
+                  task.maxActualCostUsd === undefined
+                    ? 'No hard cap'
+                    : `$${Math.max(0, task.maxActualCostUsd - (execution?.actualCost ?? 0)).toFixed(4)} of $${task.maxActualCostUsd.toFixed(4)}`,
                 ],
                 ['Usage confidence', execution?.usageConfidence ?? 'exact'],
                 ['Workflow', task.workflowGraphVersionId],
@@ -858,10 +882,37 @@ function Evidence() {
         <EvidenceSection title="Findings" items={data?.findings ?? []} />
         <EvidenceSection title="Test runs" items={data?.testRuns ?? []} />
         <EvidenceSection title="Artefacts / diff" items={data?.artefacts ?? []} />
-        <EvidenceSection
-          title="Usage"
-          items={usage ? [usage.summary ?? usage, ...(usage.entries ?? [])] : []}
-        />
+        <section className="evidence-section">
+          <h3>Usage</h3>
+          {usage?.summary ? (
+            <article className="evidence-item">
+              <p>
+                <span>scope</span> {usage.scope ?? 'local-daemon'}
+              </p>
+              <p>
+                <span>actual cost</span> ${(usage.summary.actualCostUsd ?? 0).toFixed(4)}
+              </p>
+              <p>
+                <span>shadow cost</span> ${(usage.summary.shadowCostUsd ?? 0).toFixed(4)} (not a
+                bill)
+              </p>
+              {usage.summary.budget ? (
+                <p>
+                  <span>budget</span>{' '}
+                  {usage.summary.budget.maxActualCostUsd === undefined
+                    ? 'uncapped'
+                    : `$${usage.summary.budget.remainingUsd?.toFixed(4) ?? '0'} remaining${
+                        usage.summary.budget.warning ? ' · warning' : ''
+                      }${usage.summary.budget.hardStop ? ' · hard stop' : ''}`}
+                </p>
+              ) : null}
+              {usage.note ? <p className="hint">{usage.note}</p> : null}
+            </article>
+          ) : (
+            <Empty message="No usage recorded yet." />
+          )}
+          <EvidenceSection title="Ledger entries" items={usage?.entries ?? []} />
+        </section>
         <EvidenceSection title="Disclosures" items={data?.disclosures ?? []} />
         <details className="raw-json">
           <summary>Raw JSON</summary>
@@ -1080,11 +1131,9 @@ function formatValue(value: unknown): string {
 }
 
 function formatUsage(usage: Record<string, unknown>): string {
-  const actual = usage.actualCostUsd ?? usage.actual_cost_usd;
-  const shadow = usage.shadowCostUsd ?? usage.shadow_cost_usd;
-  return actual !== undefined || shadow !== undefined
-    ? `$${String(actual ?? 0)} actual · $${String(shadow ?? 0)} shadow`
-    : 'Available';
+  const actual = Number(usage.actualCostUsd ?? usage.actual_cost_usd ?? 0);
+  const shadow = Number(usage.shadowCostUsd ?? usage.shadow_cost_usd ?? 0);
+  return `$${actual.toFixed(4)} actual · $${shadow.toFixed(4)} shadow`;
 }
 
 function TaskCard({ task }: { task: Task }) {

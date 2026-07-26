@@ -57,6 +57,33 @@ describe('daemon boundary', () => {
     expect(intents.statusCode).toBe(200);
     expect((intents.json() as Array<{ id: string }>).some((i) => i.id === 'bug_fix')).toBe(true);
   });
+  it('exposes local usage with separated actual and shadow costs', async () => {
+    const { app } = await server();
+    const headers = {
+      'x-roleflock-token': 'test-token',
+      'x-roleflock-csrf': 'test-csrf',
+    };
+    const summary = await app.inject({ method: 'GET', url: '/api/usage/summary', headers });
+    expect(summary.statusCode).toBe(200);
+    const body = summary.json() as {
+      scope: string;
+      actualCostUsd: number;
+      shadowCostUsd: number;
+      note: string;
+    };
+    expect(body.scope).toBe('local-daemon');
+    expect(body.note).toMatch(/not provider account-wide/i);
+    expect(typeof body.actualCostUsd).toBe('number');
+    expect(typeof body.shadowCostUsd).toBe('number');
+
+    const prices = await app.inject({ method: 'GET', url: '/api/price-cards', headers });
+    expect(prices.statusCode).toBe(200);
+    expect((prices.json() as unknown[]).length).toBeGreaterThan(0);
+
+    const quota = await app.inject({ method: 'GET', url: '/api/quota', headers });
+    expect(quota.statusCode).toBe(200);
+    expect((quota.json() as Array<{ confidence: string }>)[0]?.confidence).toBe('unknown');
+  });
   it('exposes authenticated choose-directory dialog endpoint', async () => {
     const { app } = await server();
     expect(

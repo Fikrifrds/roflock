@@ -29,6 +29,7 @@
     "@roleflock/provider-custom": "workspace:*",
     "@roleflock/repository-runtime": "workspace:*",
     "@roleflock/run-control": "workspace:*",
+    "@roleflock/usage-ledger": "workspace:*",
     "fastify": "^5.2.1"
   },
   "devDependencies": {
