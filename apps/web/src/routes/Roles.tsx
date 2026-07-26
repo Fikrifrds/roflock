@@ -293,6 +293,11 @@ export function Roles() {
                               value={candidate.modelId}
                               options={modelOptions(candidate.providerId, candidate.modelId)}
                               onChange={(modelId) => patch({ modelId })}
+                              // Catalogues are not exhaustive: the Claude CLI
+                              // publishes aliases but accepts a full model name,
+                              // and Codex forwards any id to the account.
+                              allowCustom
+                              customHint="Custom id — sent to the CLI exactly as typed"
                             />
                           )}
                         </Field>

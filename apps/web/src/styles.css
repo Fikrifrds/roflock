@@ -1477,3 +1477,15 @@ pre {
     grid-template-columns: 1fr;
   }
 }
+
+/* A custom entry is not from the provider's catalogue, so it is marked as the
+   deliberate escape hatch it is rather than blending into the list. */
+.select-option.custom b {
+  color: var(--accent);
+}
+
+.select-option.custom {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: var(--space-1);
+  padding-top: var(--space-3);
+}

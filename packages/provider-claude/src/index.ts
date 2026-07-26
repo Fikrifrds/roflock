@@ -42,17 +42,41 @@ export class ClaudeAdapter implements ProviderAdapter {
   }
 
   /**
-   * The Claude CLI has no `--list-models`, so this is the alias set its help
-   * documents plus the account default. Effort is a separate `--effort` flag
-   * here, which is why these ids carry no effort suffix.
+   * The Claude CLI has no `--list-models`, so this mirrors the aliases its
+   * `/model` picker offers. Each alias means "the latest of that family"; the
+   * CLI also accepts a full name (`claude-opus-5`) for pinning a specific
+   * version, which the Roles picker allows as a custom entry.
+   *
+   * Effort is a separate `--effort` flag here, so the same model at a different
+   * effort is one entry rather than two.
    */
   async listModels(): Promise<ProviderModel[]> {
     return [
-      { id: 'default', displayName: 'Account default', family: 'default' },
-      { id: 'opus', displayName: 'Opus (latest)', family: 'opus' },
-      { id: 'sonnet', displayName: 'Sonnet (latest)', family: 'sonnet' },
-      { id: 'haiku', displayName: 'Haiku (latest)', family: 'haiku' },
-      { id: 'fable', displayName: 'Fable (latest)', family: 'fable' },
+      {
+        id: 'default',
+        displayName: 'Default — whatever the CLI is set to',
+        family: 'default',
+      },
+      {
+        id: 'opus',
+        displayName: 'Opus — best for everyday, complex tasks',
+        family: 'opus',
+      },
+      {
+        id: 'sonnet',
+        displayName: 'Sonnet — efficient for routine tasks',
+        family: 'sonnet',
+      },
+      {
+        id: 'fable',
+        displayName: 'Fable — hardest, longest-running tasks (needs credits)',
+        family: 'fable',
+      },
+      {
+        id: 'haiku',
+        displayName: 'Haiku — fastest for quick answers',
+        family: 'haiku',
+      },
     ];
   }
 

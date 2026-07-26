@@ -234,6 +234,54 @@ describe('Select with a long list', () => {
     expect(screen.getByTestId('value')).toHaveTextContent('claude-opus-5-high');
   });
 
+  it('lets a model id outside the catalogue be committed', async () => {
+    // The Claude CLI publishes aliases but accepts a full name, and Codex
+    // forwards any id. Without this, pinning a specific version is impossible.
+    function CustomHarness() {
+      const [value, setValue] = useState('auto');
+      return (
+        <>
+          <Select value={value} options={MANY} onChange={setValue} allowCustom />
+          <output data-testid="value">{value}</output>
+        </>
+      );
+    }
+    render(<CustomHarness />);
+    await userEvent.click(screen.getByRole('button'));
+    await userEvent.keyboard('claude-opus-5-20260101');
+
+    const custom = screen.getByRole('option', { name: /Use “claude-opus-5-20260101”/ });
+    await userEvent.click(custom);
+    expect(screen.getByTestId('value')).toHaveTextContent('claude-opus-5-20260101');
+  });
+
+  it('offers the custom entry last so a real match still wins', async () => {
+    render(<Select value="auto" options={MANY} onChange={vi.fn()} allowCustom />);
+    await userEvent.click(screen.getByRole('button'));
+    await userEvent.keyboard('opus');
+
+    const options = screen.getAllByRole('option');
+    expect(options[0]).toHaveTextContent('Opus 5 1M');
+    expect(options.at(-1)).toHaveTextContent('Use “opus”');
+  });
+
+  it('does not offer a custom entry that duplicates a real one', async () => {
+    render(<Select value="auto" options={MANY} onChange={vi.fn()} allowCustom />);
+    await userEvent.click(screen.getByRole('button'));
+    await userEvent.keyboard('composer-2.5');
+
+    expect(screen.queryByRole('option', { name: /Use “/ })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+  });
+
+  it('offers no custom entry unless asked', async () => {
+    render(<Select value="auto" options={MANY} onChange={vi.fn()} />);
+    await userEvent.click(screen.getByRole('button'));
+    await userEvent.keyboard('nonsense-id');
+
+    expect(screen.getByText(/No match for/)).toBeInTheDocument();
+  });
+
   it('keeps focus on the search field and points at the active option', async () => {
     render(<LongHarness />);
     await userEvent.click(screen.getByRole('button'));

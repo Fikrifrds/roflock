@@ -20,6 +20,17 @@ export interface SelectProps {
   describedBy?: string;
   /** Force the search field on or off. Defaults to on for long lists. */
   searchable?: boolean;
+  /**
+   * Let the typed query be committed as a value of its own.
+   *
+   * For providers whose catalogue is not exhaustive — the Claude CLI publishes
+   * aliases but accepts a full model name, and Codex forwards any id — a picker
+   * limited to the listed entries would make pinning a specific version
+   * impossible.
+   */
+  allowCustom?: boolean;
+  /** Shown under a custom entry to explain what committing it does. */
+  customHint?: string;
 }
 
 /** Above this many options, scrolling stops being a reasonable way to choose. */
@@ -49,6 +60,8 @@ export function Select({
   labelledBy,
   describedBy,
   searchable,
+  allowCustom = false,
+  customHint = 'Use exactly as typed',
 }: SelectProps) {
   const generatedId = useId();
   const triggerId = id ?? generatedId;
@@ -73,15 +86,27 @@ export function Select({
   // Matching the id as well as the label matters here: model ids are what the
   // provider documents, so "opus-5-high" should find its entry.
   const visible = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return options;
-    return options.filter(
-      (option) =>
-        option.label.toLowerCase().includes(needle) ||
-        option.value.toLowerCase().includes(needle) ||
-        option.description?.toLowerCase().includes(needle),
-    );
-  }, [options, query]);
+    const typed = query.trim();
+    const needle = typed.toLowerCase();
+    const matches = needle
+      ? options.filter(
+          (option) =>
+            option.label.toLowerCase().includes(needle) ||
+            option.value.toLowerCase().includes(needle) ||
+            option.description?.toLowerCase().includes(needle),
+        )
+      : options;
+
+    // Offered last, so typing a prefix of a real entry still lands on that
+    // entry first and the custom escape hatch is a deliberate reach.
+    if (allowCustom && typed && !options.some((option) => option.value === typed)) {
+      return [
+        ...matches,
+        { value: typed, label: `Use “${typed}”`, description: customHint },
+      ];
+    }
+    return matches;
+  }, [allowCustom, customHint, options, query]);
 
   const openList = useCallback(() => {
     if (disabled) return;
@@ -225,6 +250,10 @@ export function Select({
               'select-option',
               index === activeIndex ? 'active' : '',
               option.value === value ? 'selected' : '',
+              // The custom entry is the one value not drawn from the catalogue.
+              allowCustom && !options.some((item) => item.value === option.value)
+                ? 'custom'
+                : '',
             ]
               .filter(Boolean)
               .join(' ')}
