@@ -60,7 +60,7 @@ Use **Verified Fix** (bug-fix workflow) when you want a governed path: plan → 
 
 ## Honest limits
 
-- **Cursor writer:** filesystem writes run under a permission envelope; full Cursor Agent CLI loop is still deferred.
+- **Cursor writer:** uses Cursor Agent CLI when installed (`agent -p --force`); otherwise a leased `ROLEFLOCK_FIX.md` write under the permission envelope.
 - **Fake provider:** hidden from the Providers inventory by default; use `ROLEFLOCK_FORCE_FAKE=1` or `ROLEFLOCK_INCLUDE_FAKE=1` for deterministic runs.
 - **Live CLIs:** planner/verifier may invoke Claude/Codex when discovered; failures surface in task state — read the error text on Start.
 

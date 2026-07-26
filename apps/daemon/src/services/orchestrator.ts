@@ -36,7 +36,7 @@ import {
   WriterLease,
 } from '@roleflock/repository-runtime';
 import { FakeProvider, type ProviderAdapter } from '@roleflock/provider-core';
-import { CursorWriterAdapter } from '@roleflock/provider-cursor';
+import { CursorWriterAdapter, assertChangedPathsAllowed } from '@roleflock/provider-cursor';
 import { budgetStatus, estimateInvocationCost } from '@roleflock/usage-ledger';
 import { EventBus } from './event-bus.js';
 import {
@@ -477,23 +477,63 @@ export class Orchestrator {
         this.worktrees.setWriterLease(task.id, nodeRunId);
         try {
           const relativeTarget = 'ROLEFLOCK_FIX.md';
-          const content = `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'fake'}\nVerification: ${task.verificationCommand ?? 'artefact-present / npm test / ROLEFLOCK_FORCE_FAKE'}\n`;
-          const envelope = {
-            worktree: worktreePath,
-            allowedPaths: [relativeTarget],
-            allowCommands: false,
-          };
-          if (route?.adapter instanceof CursorWriterAdapter) {
-            await route.adapter.write(relativeTarget, content, envelope);
+          const useAgent =
+            !this.forceFake &&
+            process.env.ROLEFLOCK_CURSOR_AGENT !== '0' &&
+            route?.adapter instanceof CursorWriterAdapter &&
+            (await route.adapter.hasAgentCli());
+
+          const envelope = useAgent
+            ? {
+                worktree: worktreePath,
+                allowedPaths: ['**'],
+                allowCommands: false,
+              }
+            : {
+                worktree: worktreePath,
+                allowedPaths: [relativeTarget],
+                allowCommands: false,
+              };
+
+          if (useAgent && route?.adapter instanceof CursorWriterAdapter) {
+            const prompt = [
+              'Implement the smallest sufficient bug fix in this repository worktree.',
+              `Title: ${task.title}`,
+              `Brief: ${task.brief}`,
+              `Expected: ${task.expectedBehaviour ?? 'n/a'}`,
+              `Actual: ${task.actualBehaviour ?? 'n/a'}`,
+              'Stay inside this workspace. Prefer editing existing source over adding docs.',
+              'Do not invent secrets or reach outside the worktree.',
+            ].join('\n');
+            await this.consumeInvocation({
+              adapter: route.adapter,
+              invocationId,
+              nodeRunId,
+              prompt,
+              cwd: worktreePath,
+              signal: controller.signal,
+              permissionEnvelope: envelope,
+            });
           } else {
-            await writeFile(join(worktreePath, relativeTarget), content);
+            const content = `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'fake'}\nVerification: ${task.verificationCommand ?? 'artefact-present / npm test / ROLEFLOCK_FORCE_FAKE'}\nMode: leased-fs-fallback\n`;
+            if (route?.adapter instanceof CursorWriterAdapter) {
+              await route.adapter.write(relativeTarget, content, envelope);
+            } else {
+              await writeFile(join(worktreePath, relativeTarget), content);
+            }
           }
+
           const diff = await captureDiff(worktreePath);
+          if (route?.adapter instanceof CursorWriterAdapter) {
+            assertChangedPathsAllowed(envelope, diff.changedFiles);
+          }
           this.evidence.addArtefact({
             id: randomUUID(),
             taskId: task.id,
             kind: 'diff',
-            path: join(worktreePath, relativeTarget),
+            path: useAgent
+              ? worktreePath
+              : join(worktreePath, relativeTarget),
             contentRef: diff.patch,
             metadata: {
               changedFiles: diff.changedFiles,
@@ -501,6 +541,7 @@ export class Orchestrator {
               providerId: route?.providerId,
               permissionEnvelope: envelope,
               durableLeaseId: leaseId,
+              writerMode: useAgent ? 'cursor-agent' : 'fs-fallback',
             },
             createdAt: now(),
           });

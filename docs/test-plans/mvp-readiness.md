@@ -22,10 +22,10 @@
 
 ## Honest remaining limits
 
-- Writer produces a leased `ROLEFLOCK_FIX.md` artefact under a permission envelope. Full Cursor Agent CLI tool loop is still deferred until `cursor-agent` is available on PATH.
+- Writer prefers Cursor Agent CLI (`agent -p --force`) when installed and authenticated; otherwise produces a leased `ROLEFLOCK_FIX.md` artefact under a permission envelope. Post-write path checks keep changes inside the worktree.
 - Live Claude/Codex planner/verifier runs when discovered and not force-faked.
 - Graph runtime supports bounded node retries; full M8 router/join concurrency is not required for Verified Fix MVP.
-- Vendor account-wide quota dashboards are not scraped; Providers show RoleFlock local usage + CLI account identity.
+- Vendor account-wide quota dashboards are not scraped; Providers show RoleFlock local usage + CLI account identity + vendor usage buttons.
 
 ## First run
 

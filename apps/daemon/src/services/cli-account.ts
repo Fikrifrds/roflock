@@ -272,51 +272,61 @@ async function getCodexAccount(): Promise<ProviderAccount> {
 }
 
 async function getCursorAccount(): Promise<ProviderAccount> {
-  const binary =
-    (await whichBinary(process.env.CURSOR_PATH ?? 'cursor')) ??
-    (await whichBinary('agent'));
+  const { discoverCursor } = await import('@roleflock/provider-cursor');
+  const discovery = await discoverCursor();
   const hints = {
-    login: 'Open Cursor → Settings → Account',
-    logout: 'Open Cursor → Settings → Account → Sign out',
-    switch: 'Open Cursor → Settings → Account → Sign out, then sign in',
+    login: 'agent login   # or open Cursor → Settings → Account',
+    logout: 'agent logout',
+    switch: 'agent logout && agent login',
   };
-  if (!binary) {
+  if (discovery.status !== 'ready' || !discovery.binary) {
     return {
       providerId: 'cursor',
       loggedIn: false,
       supportsLogin: false,
       supportsSwitch: false,
       detail:
-        'Cursor Agent CLI was not found. Sandboxed writer still works; sign in via the Cursor app for agent features.',
+        discovery.detail ??
+        'Cursor Agent CLI was not found. Sandboxed writer still works; install with curl https://cursor.com/install -fsS | bash',
       usageLinks: usageLinksFor('cursor'),
       commandHints: hints,
     };
   }
-  // Cursor account is app-managed; presence of local auth files is a soft signal.
+
+  let loggedIn = false;
   let email: string | undefined;
+  let detail = `CLI binary ready (${discovery.binary}).`;
   try {
-    const authPath = join(homedir(), '.cursor', 'argv.json');
-    await readFile(authPath, 'utf8');
+    const { stdout } = await execFileAsync(discovery.binary, ['status', '--format', 'json'], {
+      timeout: 8_000,
+      env: process.env,
+    });
+    const parsed = JSON.parse(stdout) as { loggedIn?: boolean; email?: string; user?: { email?: string } };
+    loggedIn = Boolean(parsed.loggedIn ?? parsed.email ?? parsed.user?.email);
+    email = parsed.email ?? parsed.user?.email;
+    detail = loggedIn
+      ? `Signed in via Cursor Agent CLI (${discovery.binary}).`
+      : `Cursor Agent CLI found but not signed in. Run: agent login`;
   } catch {
-    // ignore
+    // Soft fallback: app presence only.
+    try {
+      await readFile(join(homedir(), '.cursor', 'argv.json'), 'utf8');
+      loggedIn = true;
+      detail = `CLI binary ready (${discovery.binary}). Account status unknown — try agent status.`;
+    } catch {
+      detail = `CLI binary ready (${discovery.binary}). Run agent login if prompts fail.`;
+    }
   }
-  try {
-    const storage = join(homedir(), 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage');
-    // Soft presence check only — do not parse tokens.
-    await readFile(join(homedir(), '.cursor', 'ide_state.json'), 'utf8').catch(() => undefined);
-    void storage;
-  } catch {
-    // ignore
-  }
+
   return {
     providerId: 'cursor',
-    loggedIn: true,
+    loggedIn,
     email,
-    label: 'Cursor app account',
-    authMethod: 'cursor-app',
-    supportsLogin: false,
-    supportsSwitch: false,
-    detail: `CLI binary ready (${binary}). Switch accounts in the Cursor desktop app.`,
+    label: email ?? 'Cursor Agent',
+    authMethod: 'cursor-agent',
+    supportsLogin: true,
+    supportsSwitch: true,
+    detail,
     usageLinks: usageLinksFor('cursor'),
     commandHints: hints,
   };
@@ -351,27 +361,47 @@ async function runLogout(providerId: string): Promise<{ ok: boolean; command: st
       };
     }
   }
+  if (providerId === 'cursor') {
+    const { discoverCursor } = await import('@roleflock/provider-cursor');
+    const discovery = await discoverCursor();
+    const binary = discovery.binary ?? 'agent';
+    const command = `${binary} logout`;
+    try {
+      await execFileAsync(binary, ['logout'], { timeout: 15_000, env: process.env });
+      return { ok: true, command, detail: 'Signed out of Cursor Agent CLI.' };
+    } catch (error) {
+      return {
+        ok: false,
+        command,
+        detail: error instanceof Error ? error.message : 'Cursor logout failed',
+      };
+    }
+  }
   return {
     ok: false,
     command: '',
-    detail: 'Logout is managed inside the Cursor app.',
+    detail: 'Logout is not supported for this provider.',
   };
 }
 
 async function launchLogin(
   providerId: string,
 ): Promise<{ command: string; launched: boolean; detail: string }> {
-  const command =
-    providerId === 'claude'
-      ? `${(await whichBinary(process.env.CLAUDE_PATH ?? 'claude')) ?? 'claude'} auth login`
-      : providerId === 'codex'
-        ? `${(await whichBinary(process.env.CODEX_PATH ?? 'codex')) ?? 'codex'} login`
-        : '';
+  let command = '';
+  if (providerId === 'claude') {
+    command = `${(await whichBinary(process.env.CLAUDE_PATH ?? 'claude')) ?? 'claude'} auth login`;
+  } else if (providerId === 'codex') {
+    command = `${(await whichBinary(process.env.CODEX_PATH ?? 'codex')) ?? 'codex'} login`;
+  } else if (providerId === 'cursor') {
+    const { discoverCursor } = await import('@roleflock/provider-cursor');
+    const discovery = await discoverCursor();
+    command = `${discovery.binary ?? 'agent'} login`;
+  }
   if (!command) {
     return {
-      command: 'Open Cursor → Settings → Account',
+      command: '',
       launched: false,
-      detail: 'Complete sign-in in the Cursor desktop app, then refresh Providers.',
+      detail: 'Login is not supported for this provider.',
     };
   }
 

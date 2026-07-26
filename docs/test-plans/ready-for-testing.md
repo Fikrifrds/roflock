@@ -63,7 +63,9 @@ ROLEFLOCK_FORCE_FAKE=1 pnpm dev
 
 - **Fake provider:** hidden from Providers UI by default; orchestration still available via `ROLEFLOCK_FORCE_FAKE=1`.
 - Planner/verifier invoke Claude/Codex when discovered and not forced fake.
-- **Writer uses Cursor** sandboxed filesystem writes under a permission envelope + durable writer lease — **full Cursor Agent CLI loop still deferred**.
+- Writer uses **Cursor Agent CLI** when `agent` / `cursor-agent` is on PATH (`agent -p --force --trust --sandbox enabled`). Otherwise falls back to leased `ROLEFLOCK_FIX.md` write.
+- Set `ROLEFLOCK_CURSOR_AGENT=0` to force the filesystem fallback even when Agent CLI is installed.
+- Install Agent CLI: `curl https://cursor.com/install -fsS | bash` then `agent login`.
 - Optional **verification command** on New task (else `npm test` or artefact-present check).
 - Custom OpenAI-compatible providers can be registered in Providers UI.
 - Knowledge, approval grants, disclosure grants, and first-run privacy gate are available in the UI.
