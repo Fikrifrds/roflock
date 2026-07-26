@@ -169,3 +169,39 @@ export type GraphRunView = {
     }>;
   };
 };
+
+export type RoleCandidateView = {
+  providerId: string;
+  modelId: string;
+  effort?: string;
+  enabled: boolean;
+  /** ISO timestamp when a parked candidate becomes eligible again. */
+  coolingDownUntil?: string;
+};
+
+export type RoleView = {
+  id: string;
+  label: string;
+  description: string;
+  candidates: RoleCandidateView[];
+};
+
+export type ProviderCatalogue = {
+  providerId: string;
+  displayName: string;
+  status: string;
+  models: Array<{ id: string; displayName: string; effort?: string; family?: string }>;
+};
+
+export type RolesResponse = {
+  roles: RoleView[];
+  providers: ProviderCatalogue[];
+  efforts: string[];
+  cooldowns: Array<{
+    providerConnectionId: string;
+    modelId: string;
+    reason: string;
+    detail?: string;
+    until: string;
+  }>;
+};

@@ -13,6 +13,7 @@ See [`docs/test-plans/mvp-readiness.md`](docs/test-plans/mvp-readiness.md) for t
 Implemented and covered by automated tests:
 
 - Verified bug-fix flow (planner → approval → writer → verification → verifier → accept)
+- Per-role provider and model choice with automatic failover when a quota runs out
 - Optional verification command (`npm test`, custom argv, or artefact check)
 - Direct / Fast / Standard / Bug Fix / Critical workflow modes, pinned to an immutable graph version
 - Graph runtime: typed failure edges, bounded retry loops, concurrency limits, one writer per worktree
@@ -82,6 +83,38 @@ State: `~/.roleflock/roleflock.db` (override with `ROLEFLOCK_DATA_DIR`).
 6. Open Evidence + Providers
 
 Use `ROLEFLOCK_FORCE_FAKE=1 pnpm dev` for a deterministic first pass without live CLIs.
+
+## Roles and models
+
+Open **Roles** to set which provider and model runs each role. Each role is an
+ordered list: RoleFlock uses the first candidate that is healthy and not out of
+quota, and falls through to the next when one refuses.
+
+Shipping defaults:
+
+| Role | Preference | Falls back to |
+|------|-----------|---------------|
+| Planner / lead | Cursor · `claude-opus-5-high` | `gpt-5.6-sol-high`, then Codex `gpt-5.6-sol`, then Claude CLI `opus` |
+| Executor | Cursor · `cursor-grok-4.5-high` | `claude-opus-5-high`, then `composer-2.5` |
+| Reviewer | Cursor · `gpt-5.6-terra-medium` | `claude-opus-5-low`, then Codex `gpt-5.6-terra` |
+| Verifier | Cursor · `gpt-5.6-terra-high` | `claude-opus-5-medium`, then Codex `gpt-5.6-terra` |
+
+Every list ends in the deterministic fake provider, so a run degrades to
+something inspectable rather than failing outright.
+
+Where a model is reachable through two providers it appears twice on purpose —
+Cursor and Codex meter separately, so an exhausted plan costs the run a
+provider rather than the model.
+
+When a provider reports exhausted quota, an unknown model, or a dead session,
+that provider+model is parked on a cooldown (quota 1 h, unknown model 3 h) and
+the next candidate runs. The substitution is written to the task's evidence and
+the audit log — it is never silent. Lift a cooldown early from the Roles page.
+
+Effort is expressed differently per CLI: Cursor encodes it in the model id
+(`claude-opus-5-high` vs `-low`), while Claude Code and Codex take it as a
+separate setting. Both spellings are supported, and a level above what a CLI
+documents is clamped rather than forwarded.
 
 ## Notes
 

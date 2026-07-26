@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 
 export interface SelectOption {
   value: string;
@@ -18,18 +18,24 @@ export interface SelectProps {
   /** id of the element labelling this control, usually a `.field-label`. */
   labelledBy?: string;
   describedBy?: string;
+  /** Force the search field on or off. Defaults to on for long lists. */
+  searchable?: boolean;
 }
+
+/** Above this many options, scrolling stops being a reasonable way to choose. */
+const SEARCH_THRESHOLD = 8;
 
 /**
  * A listbox that replaces the native `<select>`.
  *
- * Native selects render as OS chrome that ignores the app's palette, and — the
- * reason this exists — they cannot show a description per option. Choosing a
- * workflow or a document authority is exactly the case where the label alone
- * ("Critical Feature", "Approved plan") does not tell you what you are picking.
+ * Native selects render as OS chrome that ignores the app's palette and — the
+ * reason this exists — cannot show a description per option. Choosing a
+ * workflow or a model is exactly the case where the label alone ("Critical
+ * Feature", "Opus 5 1M") does not tell you what you are picking.
  *
- * Follows the ARIA combobox pattern: the trigger owns focus throughout and
- * points at the active option via `aria-activedescendant`, so options never
+ * Follows the ARIA combobox pattern. Whichever element owns focus — the trigger
+ * for short lists, the search field for long ones — carries `role="combobox"`
+ * and points at the active option via `aria-activedescendant`, so options never
  * take focus themselves.
  */
 export function Select({
@@ -42,65 +48,94 @@ export function Select({
   required = false,
   labelledBy,
   describedBy,
+  searchable,
 }: SelectProps) {
   const generatedId = useId();
   const triggerId = id ?? generatedId;
   const listboxId = `${triggerId}-listbox`;
+  const searchId = `${triggerId}-search`;
 
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [query, setQuery] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
-  // Typeahead buffer. A ref, not state: typing must not trigger a render.
+  const searchRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Typeahead buffer for the no-search path. A ref, not state: typing must not
+  // trigger a render.
   const typeahead = useRef({ query: '', at: 0 });
 
-  const selectedIndex = options.findIndex((option) => option.value === value);
-  const selected = selectedIndex >= 0 ? options[selectedIndex] : undefined;
+  const withSearch = searchable ?? options.length > SEARCH_THRESHOLD;
 
-  const openList = useCallback(
-    (index?: number) => {
-      if (disabled) return;
-      setOpen(true);
-      setActiveIndex(index ?? (selectedIndex >= 0 ? selectedIndex : 0));
+  const selected = options.find((option) => option.value === value);
+
+  // Matching the id as well as the label matters here: model ids are what the
+  // provider documents, so "opus-5-high" should find its entry.
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return options;
+    return options.filter(
+      (option) =>
+        option.label.toLowerCase().includes(needle) ||
+        option.value.toLowerCase().includes(needle) ||
+        option.description?.toLowerCase().includes(needle),
+    );
+  }, [options, query]);
+
+  const openList = useCallback(() => {
+    if (disabled) return;
+    setQuery('');
+    setOpen(true);
+    const index = options.findIndex((option) => option.value === value);
+    setActiveIndex(index >= 0 ? index : 0);
+  }, [disabled, options, value]);
+
+  const close = useCallback(
+    (returnFocus: boolean) => {
+      setOpen(false);
+      setQuery('');
+      if (returnFocus) triggerRef.current?.focus();
     },
-    [disabled, selectedIndex],
+    [],
   );
 
   const commit = useCallback(
     (index: number) => {
-      const option = options[index];
+      const option = visible[index];
       if (!option) return;
       onChange(option.value);
-      setOpen(false);
+      close(true);
     },
-    [onChange, options],
+    [close, onChange, visible],
   );
 
-  // Pointer-down rather than click: a click that starts inside and ends outside
+  // Pointer-down rather than click: a drag that starts inside and ends outside
   // would otherwise leave the list open.
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      if (!rootRef.current?.contains(event.target as Node)) close(false);
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open]);
+  }, [open, close]);
+
+  useEffect(() => {
+    if (open && withSearch) searchRef.current?.focus();
+  }, [open, withSearch]);
 
   // Keep the keyboard cursor in view when arrowing past the visible window.
-  // Purely cosmetic, and absent in jsdom, so a missing implementation must not
-  // take the control down with it.
+  // Cosmetic, and absent in jsdom, so a missing implementation must not take
+  // the control down with it.
   useEffect(() => {
     if (!open || activeIndex < 0) return;
-    const option = listRef.current?.children[activeIndex];
-    option?.scrollIntoView?.({ block: 'nearest' });
+    listRef.current?.children[activeIndex]?.scrollIntoView?.({ block: 'nearest' });
   }, [open, activeIndex]);
 
-  const moveTo = (index: number) => {
-    if (!options.length) return;
-    const wrapped = (index + options.length) % options.length;
-    if (open) setActiveIndex(wrapped);
-    else commit(wrapped);
+  const move = (index: number) => {
+    if (!visible.length) return;
+    setActiveIndex((index + visible.length) % visible.length);
   };
 
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -108,12 +143,12 @@ export function Select({
       case 'ArrowDown':
         event.preventDefault();
         if (!open) openList();
-        else moveTo(activeIndex + 1);
+        else move(activeIndex + 1);
         return;
       case 'ArrowUp':
         event.preventDefault();
         if (!open) openList();
-        else moveTo(activeIndex - 1);
+        else move(activeIndex - 1);
         return;
       case 'Home':
         if (!open) return;
@@ -123,10 +158,17 @@ export function Select({
       case 'End':
         if (!open) return;
         event.preventDefault();
-        setActiveIndex(options.length - 1);
+        setActiveIndex(visible.length - 1);
         return;
       case 'Enter':
+        event.preventDefault();
+        if (open) commit(activeIndex);
+        else openList();
+        return;
       case ' ':
+        // Space types a space in the search field; only the closed trigger
+        // should treat it as "open".
+        if (open && withSearch) return;
         event.preventDefault();
         if (open) commit(activeIndex);
         else openList();
@@ -134,50 +176,97 @@ export function Select({
       case 'Escape':
         if (!open) return;
         event.preventDefault();
-        setOpen(false);
+        close(true);
         return;
       case 'Tab':
-        setOpen(false);
+        if (open) close(false);
         return;
       default:
         break;
     }
 
-    // Typeahead: printable keys jump to the next option starting with what was
-    // typed. The buffer resets after a pause so a new word starts a new search.
+    // Typeahead only exists for the short-list path; the long-list path has a
+    // real search field doing the same job better.
+    if (withSearch) return;
     if (event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey) return;
-    const now = Date.now();
-    const buffer = now - typeahead.current.at > 800 ? '' : typeahead.current.query;
-    const query = (buffer + event.key).toLowerCase();
-    typeahead.current = { query, at: now };
 
-    const from = (open ? activeIndex : selectedIndex) + 1;
+    const at = Date.now();
+    const buffer = at - typeahead.current.at > 800 ? '' : typeahead.current.query;
+    const needle = (buffer + event.key).toLowerCase();
+    typeahead.current = { query: needle, at };
+
+    const from = (open ? activeIndex : options.findIndex((o) => o.value === value)) + 1;
     const ordered = [...options.slice(from), ...options.slice(0, Math.max(from, 0))];
-    const hit = ordered.find((option) => option.label.toLowerCase().startsWith(query));
+    const hit = ordered.find((option) => option.label.toLowerCase().startsWith(needle));
     if (!hit) return;
     event.preventDefault();
     const index = options.indexOf(hit);
     if (open) setActiveIndex(index);
-    else commit(index);
+    else {
+      onChange(hit.value);
+      void index;
+    }
   };
+
+  const listMarkup = (
+    <ul className="select-popover-list" id={listboxId} role="listbox" ref={listRef}>
+      {visible.length === 0 ? (
+        <li className="select-empty">
+          {options.length === 0 ? 'Nothing to choose from yet.' : `No match for “${query}”.`}
+        </li>
+      ) : (
+        visible.map((option, index) => (
+          <li
+            key={option.value}
+            id={`${listboxId}-${index}`}
+            role="option"
+            aria-selected={option.value === value}
+            className={[
+              'select-option',
+              index === activeIndex ? 'active' : '',
+              option.value === value ? 'selected' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            // Pointer-down would steal focus from whichever element owns it,
+            // breaking aria-activedescendant before the click lands.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => commit(index)}
+            onMouseEnter={() => setActiveIndex(index)}
+          >
+            <b>{option.label}</b>
+            {option.description ? <small>{option.description}</small> : null}
+          </li>
+        ))
+      )}
+    </ul>
+  );
+
+  const activeDescendant =
+    open && activeIndex >= 0 && activeIndex < visible.length
+      ? `${listboxId}-${activeIndex}`
+      : undefined;
 
   return (
     <div className="select" ref={rootRef}>
       <button
         type="button"
         id={triggerId}
+        ref={triggerRef}
         className="select-trigger"
-        role="combobox"
+        // With a search field open, that field is the combobox; the trigger
+        // must not also claim the role.
+        role={withSearch ? undefined : 'combobox'}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
-        aria-activedescendant={open && activeIndex >= 0 ? `${listboxId}-${activeIndex}` : undefined}
+        aria-activedescendant={withSearch ? undefined : activeDescendant}
         aria-labelledby={labelledBy ? `${labelledBy} ${triggerId}` : undefined}
         aria-describedby={describedBy}
         aria-required={required || undefined}
         disabled={disabled}
-        onClick={() => (open ? setOpen(false) : openList())}
-        onKeyDown={onKeyDown}
+        onClick={() => (open ? close(false) : openList())}
+        onKeyDown={withSearch ? undefined : onKeyDown}
       >
         <span className={selected ? 'select-value' : 'select-value select-placeholder'}>
           <b>{selected?.label ?? placeholder}</b>
@@ -189,35 +278,34 @@ export function Select({
       </button>
 
       {open ? (
-        <ul className="select-popover" id={listboxId} role="listbox" ref={listRef}>
-          {options.length === 0 ? (
-            <li className="select-empty">Nothing to choose from yet.</li>
-          ) : (
-            options.map((option, index) => (
-              <li
-                key={option.value}
-                id={`${listboxId}-${index}`}
-                role="option"
-                aria-selected={option.value === value}
-                className={[
-                  'select-option',
-                  index === activeIndex ? 'active' : '',
-                  option.value === value ? 'selected' : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                // Pointer-down would steal focus from the trigger before the
-                // click lands, breaking aria-activedescendant.
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => commit(index)}
-                onMouseEnter={() => setActiveIndex(index)}
-              >
-                <b>{option.label}</b>
-                {option.description ? <small>{option.description}</small> : null}
-              </li>
-            ))
-          )}
-        </ul>
+        <div className="select-popover">
+          {withSearch ? (
+            <div className="select-search">
+              <input
+                id={searchId}
+                ref={searchRef}
+                type="text"
+                role="combobox"
+                autoComplete="off"
+                placeholder="Type to filter…"
+                aria-expanded="true"
+                aria-controls={listboxId}
+                aria-activedescendant={activeDescendant}
+                aria-labelledby={labelledBy}
+                value={query}
+                onChange={(event) => {
+                  setQuery(event.target.value);
+                  setActiveIndex(0);
+                }}
+                onKeyDown={onKeyDown}
+              />
+              <small>
+                {visible.length} of {options.length}
+              </small>
+            </div>
+          ) : null}
+          {listMarkup}
+        </div>
       ) : null}
     </div>
   );

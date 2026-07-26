@@ -11,6 +11,7 @@ import { NewTask } from './routes/NewTask.js';
 import { Privacy } from './routes/Privacy.js';
 import { Projects } from './routes/Projects.js';
 import { Providers } from './routes/Providers.js';
+import { Roles } from './routes/Roles.js';
 import { TaskDetail } from './routes/TaskDetail.js';
 
 const PRIVACY_KEY = 'roleflock-privacy-accepted';
@@ -70,6 +71,7 @@ export function App() {
       <Route path="/approvals" element={<Approvals />} />
       <Route path="/knowledge" element={<Knowledge />} />
       <Route path="/providers" element={<Providers />} />
+      <Route path="/roles" element={<Roles />} />
       <Route path="/privacy" element={<Privacy />} />
     </Routes>
   );

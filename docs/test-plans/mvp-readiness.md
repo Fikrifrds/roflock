@@ -43,7 +43,10 @@ Not implemented: user-authored graphs. Templates are the only graph source, whic
 
 - Writer prefers Cursor Agent CLI (`agent -p --force`) when installed and authenticated; otherwise produces a leased `ROLEFLOCK_FIX.md` artefact under a permission envelope. Post-write path checks keep changes inside the worktree.
 - Live Claude/Codex planner/verifier runs when discovered and not force-faked.
-- The verifier has no path that emits `needs_changes` yet, so the `verifier → writer` edge exists and is unit-tested but is never taken by a live run.
+- The verifier rejects on two grounds: an empty worktree diff, and its own `VERDICT: NEEDS_CHANGES` line. A reply with no parseable verdict is inconclusive rather than a rejection, since the required deterministic check already gates acceptance.
+- Roles are an ordered provider+model list per role, editable at `/roles`. A candidate that reports exhausted quota, an unknown model, or a dead session is parked on a cooldown and the router moves to the next entry; the substitution is recorded as evidence and in the audit log.
+- Cursor Agent reports an unusable model on stderr while exiting 0. The adapter inspects output as well as the exit code, so a mistyped model id fails over instead of producing an empty run that reports success.
+- Effort is expressed differently per provider — Cursor encodes it in the model id, Claude and Codex take it as a separate setting — and levels above what a CLI documents are clamped rather than forwarded.
 - Vendor account-wide quota dashboards are not scraped; Providers show RoleFlock local usage + CLI account identity + vendor usage buttons.
 - Provider discovery shells out to the real CLIs. Results are cached for 15s; a cold probe on a machine with all three installed still takes a few seconds.
 - Multi-user hosts: a second OS account cannot reach the API without the token file, but nothing sandboxes the provider CLIs themselves.

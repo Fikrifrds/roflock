@@ -575,15 +575,45 @@ textarea.compact {
   top: calc(100% + var(--space-1));
   left: 0;
   right: 0;
-  max-height: 320px;
-  overflow-y: auto;
-  padding: var(--space-1);
-  margin: 0;
-  list-style: none;
   background: var(--surface-raised);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow-popover);
+  overflow: hidden;
+}
+
+/* The search field stays put while the list scrolls under it — losing the
+   filter you just typed while scrolling would defeat the point. */
+.select-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-raised);
+}
+
+.select-search input {
+  min-height: 36px;
+  margin: 0;
+  border-color: var(--border-subtle);
+  background: var(--surface-sunken);
+}
+
+.select-search small {
+  flex: none;
+  padding-right: var(--space-1);
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.select-popover-list {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: var(--space-1);
+  margin: 0;
+  list-style: none;
 }
 
 .select-option {
@@ -1359,5 +1389,91 @@ pre {
   .actions button,
   .actions .buttonish {
     flex: 1 1 auto;
+  }
+}
+
+/* ===========================================================================
+   Roles
+   =========================================================================== */
+
+.role-card {
+  padding: var(--space-5);
+  margin-bottom: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.role-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.role-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+}
+
+.role-head small {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.candidate-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  counter-reset: candidate;
+}
+
+.candidate {
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* The top entry is what normally runs, so it carries the accent. */
+.candidate:first-child {
+  border-left-color: var(--accent);
+}
+
+.candidate.disabled {
+  opacity: 0.55;
+  border-left-color: var(--border-strong);
+}
+
+.candidate-rank {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-faint);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.candidate-fields {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(200px, 1.4fr) minmax(140px, 0.8fr);
+  gap: var(--space-3);
+}
+
+.candidate-actions button {
+  min-width: 44px;
+}
+
+@media (max-width: 760px) {
+  .candidate-fields {
+    grid-template-columns: 1fr;
   }
 }

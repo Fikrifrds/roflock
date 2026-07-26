@@ -83,6 +83,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <NavLink to="/tasks/new">New task</NavLink>
           <NavLink to="/approvals">Approvals</NavLink>
           <NavLink to="/providers">Providers</NavLink>
+          <NavLink to="/roles">Roles</NavLink>
           <NavLink to="/knowledge" className="nav-secondary">
             Knowledge
           </NavLink>
