@@ -8,6 +8,7 @@ import {
   assertPathAllowed,
   createFsCursorWriter,
   discoverCursor,
+  parseCursorModelList,
 } from './index.js';
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -125,5 +126,64 @@ describe('CursorWriterAdapter sandbox', () => {
     const discovery = await discoverCursor(binary);
     expect(discovery.status).toBe('ready');
     expect(discovery.binary).toBe(binary);
+  });
+});
+
+describe('read-only Cursor turns', () => {
+  it('says so plainly when a reasoning turn has no Agent CLI to run on', async () => {
+    // Cursor carries most of the model catalogue, so planner and verifier must
+    // be able to run there without a write envelope. Without the CLI the
+    // leased-write fallback cannot stand in for a reasoning turn, and pretending
+    // otherwise would write the prompt to a file and call it an answer.
+    vi.stubEnv('ROLEFLOCK_CURSOR_AGENT', '0');
+    const adapter = new CursorWriterAdapter(createFsCursorWriter());
+
+    await expect(async () => {
+      for await (const _event of adapter.invoke({
+        invocationId: 'inv-ro',
+        prompt: 'read only',
+        cwd: tmpdir(),
+      })) {
+        void _event;
+      }
+    }).rejects.toThrow(/Cursor Agent CLI is required/);
+  });
+
+  it('still refuses to write without an envelope', async () => {
+    const adapter = new CursorWriterAdapter(createFsCursorWriter());
+    await expect(adapter.write('x.md', 'content', undefined as unknown as never)).rejects.toThrow();
+  });
+});
+
+describe('parseCursorModelList', () => {
+  it('recovers the effort and family encoded in a Cursor model id', () => {
+    const models = parseCursorModelList(
+      [
+        'Available models',
+        '',
+        'auto - Auto (default)',
+        'claude-opus-5-high - Opus 5 1M',
+        'claude-opus-5-low-fast - Opus 5 1M Low Fast',
+        'gpt-5.6-terra-medium - GPT-5.6 Terra 1M',
+        'not a model line',
+      ].join('\n'),
+    );
+
+    expect(models.map((m) => m.id)).toEqual([
+      'auto',
+      'claude-opus-5-high',
+      'claude-opus-5-low-fast',
+      'gpt-5.6-terra-medium',
+    ]);
+    expect(models[1]).toMatchObject({ effort: 'high', family: 'claude-opus-5' });
+    // `-fast` is a delivery variant, not an effort, so the family is the same.
+    expect(models[2]).toMatchObject({ effort: 'low', family: 'claude-opus-5' });
+    expect(models[3]).toMatchObject({ effort: 'medium', family: 'gpt-5.6-terra' });
+    expect(models[0]?.effort).toBeUndefined();
+  });
+
+  it('ignores prose and duplicates', () => {
+    const models = parseCursorModelList('a - A\na - A again\n\nsome prose here.');
+    expect(models).toHaveLength(1);
   });
 });

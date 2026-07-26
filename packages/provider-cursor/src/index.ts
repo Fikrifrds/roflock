@@ -6,6 +6,9 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import type { InvocationEvent } from '@roleflock/contracts';
 import {
+  classifyProviderFailure,
+  isEffort,
+  refusalInOutput,
   whichBinary,
   type InvocationRequest,
   type ProviderAdapter,
@@ -144,6 +147,43 @@ export async function discoverCursor(
   };
 }
 
+/** Trailing effort segment of a Cursor model id, if it has one. */
+const CURSOR_EFFORT_SUFFIX = /-(none|low|medium|high|xhigh|max)(-fast)?$/;
+
+/**
+ * Parses `cursor-agent --list-models`, whose output is a header followed by
+ * `<id> - <Display Name>` lines.
+ *
+ * Cursor encodes effort in the id (`claude-opus-5-high`, `cursor-grok-4.5-low`),
+ * so the effort and family are recovered here. That is what lets the picker
+ * group by family and show effort as its own column, rather than making the
+ * user read it out of a slug.
+ */
+export function parseCursorModelList(stdout: string): ProviderModel[] {
+  const models: ProviderModel[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of stdout.split(/\r?\n/)) {
+    const line = raw.trim();
+    const match = /^([A-Za-z0-9][\w.-]*)\s+-\s+(.+)$/.exec(line);
+    if (!match) continue;
+
+    const [, id, displayName] = match as unknown as [string, string, string];
+    if (seen.has(id)) continue;
+    seen.add(id);
+
+    const effort = CURSOR_EFFORT_SUFFIX.exec(id)?.[1];
+    models.push({
+      id,
+      displayName,
+      ...(isEffort(effort) ? { effort } : {}),
+      family: id.replace(CURSOR_EFFORT_SUFFIX, '').replace(/-fast$/, ''),
+    });
+  }
+
+  return models;
+}
+
 function extractStreamText(line: string): string | undefined {
   try {
     const json = JSON.parse(line) as Record<string, unknown>;
@@ -215,7 +255,23 @@ export class CursorWriterAdapter implements ProviderAdapter {
   }
 
   async listModels(): Promise<ProviderModel[]> {
-    return [{ id: 'cursor-agent', displayName: 'Cursor Agent' }];
+    const discovery = await discoverCursor(this.binaryHint);
+    if (discovery.status !== 'ready' || !discovery.binary) {
+      return [{ id: 'cursor-agent', displayName: 'Cursor Agent (default)' }];
+    }
+    try {
+      const { stdout } = await execFileAsync(discovery.binary, ['--list-models'], {
+        timeout: 30_000,
+        maxBuffer: 1024 * 1024,
+        env: process.env,
+      });
+      const models = parseCursorModelList(stdout);
+      return models.length ? models : [{ id: 'auto', displayName: 'Auto (default)' }];
+    } catch {
+      // The catalogue is an account-scoped network call. Losing it should cost
+      // the picker its choices, not take the provider down.
+      return [{ id: 'auto', displayName: 'Auto (default)' }];
+    }
   }
 
   async hasAgentCli(): Promise<boolean> {
@@ -229,11 +285,18 @@ export class CursorWriterAdapter implements ProviderAdapter {
   }
 
   async *invoke(request: InvocationRequest): AsyncIterable<InvocationEvent> {
-    const envelope = this.assertEnvelope(request.permissionEnvelope);
+    // An envelope means "you may write, here". Without one this is a read-only
+    // turn — a planner or verifier reasoning about the repository. Cursor is
+    // the provider that carries most of the model catalogue, so refusing to run
+    // it read-only would put those models out of reach of every role but the
+    // writer.
+    const envelope = request.permissionEnvelope;
+    const readOnly = !envelope?.worktree;
+
     yield { type: 'invocation.started', invocationId: request.invocationId };
     yield { type: 'heartbeat', at: new Date().toISOString() };
 
-    if (this.writer.invoke) {
+    if (this.writer.invoke && envelope) {
       for await (const text of this.writer.invoke(request.prompt, request.signal)) {
         yield { type: 'model.output.delta', text };
       }
@@ -247,23 +310,30 @@ export class CursorWriterAdapter implements ProviderAdapter {
       ? { status: 'missing' as const }
       : await discoverCursor(this.binaryHint);
 
+    if (readOnly && discovery.status !== 'ready') {
+      // The leased-write fallback below cannot stand in for a reasoning turn.
+      throw new Error('Cursor Agent CLI is required for read-only Cursor turns.');
+    }
+
     if (discovery.status === 'ready' && discovery.binary) {
-      const args = [
-        '-p',
-        '--force',
-        '--trust',
-        '--workspace',
-        envelope.worktree,
-        '--output-format',
-        'stream-json',
-      ];
-      if (envelope.allowCommands === false) {
+      const workspace = envelope?.worktree ?? request.cwd;
+      const args = ['-p', '--trust', '--output-format', 'stream-json'];
+      if (workspace) args.push('--workspace', workspace);
+      // Cursor's catalogue encodes effort in the model id (`claude-opus-5-high`
+      // vs `-low`), so there is no separate effort flag to pass here.
+      if (request.model) args.push('--model', request.model);
+
+      if (readOnly) {
+        // No --force: a read-only turn must not be able to auto-run tool calls.
         args.push('--sandbox', 'enabled');
+      } else {
+        args.push('--force');
+        if (envelope?.allowCommands === false) args.push('--sandbox', 'enabled');
       }
       args.push(request.prompt);
 
       const child = spawn(discovery.binary, args, {
-        cwd: request.cwd ?? envelope.worktree,
+        cwd: request.cwd ?? envelope?.worktree,
         signal: request.signal,
         env: process.env,
       });
@@ -283,12 +353,28 @@ export class CursorWriterAdapter implements ProviderAdapter {
       const code: number = await new Promise((resolve) =>
         child.on('close', (value) => resolve(value ?? 1)),
       );
+      // Cursor Agent reports an unusable model on stderr and still exits 0, so
+      // the exit code alone cannot be trusted to mean the work happened.
+      const refusal = code === 0 ? refusalInOutput(stderr) : classifyProviderFailure(stderr);
+      if (refusal) {
+        yield {
+          type: 'invocation.failed',
+          error: {
+            code: `CURSOR_${refusal.toUpperCase()}`,
+            message: stderr.trim().slice(0, 600) || `Cursor Agent exit ${code}`,
+            // A quota or unknown-model failure cannot succeed on a retry with
+            // the same model; the router must move on rather than loop.
+            retryable: refusal === 'transient' || refusal === 'unknown',
+          },
+        };
+        return;
+      }
       if (code !== 0) {
         yield {
           type: 'invocation.failed',
           error: {
             code: 'CURSOR_AGENT_EXIT',
-            message: stderr || `Cursor Agent exit ${code}`,
+            message: stderr.trim().slice(0, 600) || `Cursor Agent exit ${code}`,
             retryable: true,
           },
         };
@@ -299,7 +385,8 @@ export class CursorWriterAdapter implements ProviderAdapter {
     }
 
     // Without Agent CLI, perform the leased write described by the envelope.
-    const target = envelope.allowedPaths.find((path) => path !== '**' && path !== '*');
+    const writeEnvelope = this.assertEnvelope(envelope);
+    const target = writeEnvelope.allowedPaths.find((path) => path !== '**' && path !== '*');
     if (!target) {
       yield {
         type: 'invocation.failed',
@@ -315,7 +402,7 @@ export class CursorWriterAdapter implements ProviderAdapter {
     await this.write(
       target,
       typeof request.prompt === 'string' ? request.prompt : String(request.prompt),
-      envelope,
+      writeEnvelope,
     );
     yield {
       type: 'model.output.delta',

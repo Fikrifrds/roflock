@@ -1,4 +1,5 @@
 import type { InvocationEvent } from '@roleflock/contracts';
+import { classifyProviderFailure } from '@roleflock/provider-core';
 import type {
   InvocationRequest,
   ProviderAdapter,
@@ -49,18 +50,25 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
         authorization: `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify({
-        model: this.model,
+        model: request.model || this.model,
         stream: true,
+        ...(request.effort && request.effort !== 'none'
+          ? { reasoning_effort: request.effort }
+          : {}),
         messages: [{ role: 'user', content: request.prompt }],
       }),
     });
     if (!response.ok || !response.body) {
+      // The status alone cannot tell quota from a bad key, so classify the body
+      // too — a 429 and a "quota exceeded" 403 must route the same way.
+      const detail = await response.text().catch(() => '');
+      const kind = classifyProviderFailure(`${response.status} ${detail}`);
       yield {
         type: 'invocation.failed',
         error: {
-          code: 'HTTP_ERROR',
-          message: `${response.status}`,
-          retryable: response.status >= 500,
+          code: `HTTP_${kind.toUpperCase()}`,
+          message: detail ? `${response.status}: ${detail.slice(0, 400)}` : `${response.status}`,
+          retryable: kind === 'transient',
         },
       };
       return;
