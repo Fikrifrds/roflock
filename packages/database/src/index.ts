@@ -12,6 +12,13 @@ export type { TaskProjection } from './reducers/task-reducer.js';
 export { ProjectRepository } from './repositories/project-repository.js';
 export { TaskRepository } from './repositories/task-repository.js';
 export { ConfirmationRepository } from './repositories/confirmation-repository.js';
+export { ApprovalGrantRepository } from './repositories/approval-grant-repository.js';
+export type { CreateApprovalGrantInput } from './repositories/approval-grant-repository.js';
+export { DisclosureGrantRepository } from './repositories/disclosure-grant-repository.js';
+export type {
+  DisclosureGrant,
+  CreateDisclosureGrantInput,
+} from './repositories/disclosure-grant-repository.js';
 export { WorktreeRepository } from './repositories/worktree-repository.js';
 export { ActiveExecutionRepository } from './repositories/active-execution-repository.js';
 export { InvocationRepository } from './repositories/invocation-repository.js';
@@ -39,6 +46,8 @@ export type {
   KnowledgeState,
 } from './repositories/local-knowledge-repository.js';
 export { EvidenceRepository } from './repositories/evidence-repository.js';
+export { AuditRepository } from './repositories/audit-repository.js';
+export type { AuditEvent } from './repositories/audit-repository.js';
 export { ControlCommandRepository } from './repositories/control-command-repository.js';
 export { ProcessHandleRepository } from './repositories/process-handle-repository.js';
 export { LeaseRepository } from './repositories/lease-repository.js';

@@ -8,6 +8,26 @@ import './styles.css';
 const api = createApi();
 const queryClient = new QueryClient();
 
+type KnowledgeItem = {
+  id: string;
+  projectId?: string;
+  type: string;
+  title: string;
+  body: string;
+  state: string;
+  provenance?: string;
+  createdAt: string;
+};
+
+type DisclosureGrant = {
+  id: string;
+  projectId: string;
+  providerConnectionId: string;
+  scope: Record<string, unknown>;
+  createdAt: string;
+  revokedAt?: string;
+};
+
 type Task = {
   id: string;
   title: string;
@@ -20,6 +40,7 @@ type Task = {
   workflowGraphVersionId: string;
   expectedBehaviour?: string;
   actualBehaviour?: string;
+  verificationCommand?: string;
 };
 
 type Project = {
@@ -73,6 +94,27 @@ type Provider = {
   connectionType?: string;
   health?: { status: string; detail?: string };
   capabilities: Record<string, boolean>;
+  account?: {
+    loggedIn: boolean;
+    email?: string;
+    label?: string;
+    authMethod?: string;
+    subscriptionType?: string;
+    orgName?: string;
+    supportsLogin: boolean;
+    supportsSwitch: boolean;
+    detail?: string;
+    usageLinks?: Array<{ id: string; label: string; url: string; hint?: string }>;
+    commandHints?: { login: string; logout: string; switch: string };
+  };
+  localUsage?: {
+    entryCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    actualCostUsd: number;
+    shadowCostUsd: number;
+    note: string;
+  };
 };
 
 type EvidenceBundle = {
@@ -129,7 +171,9 @@ function Shell({ children }: { children: ReactNode }) {
           <Link to="/projects">Projects</Link>
           <Link to="/tasks/new">New task</Link>
           <Link to="/approvals">Approvals</Link>
+          <Link to="/knowledge">Knowledge</Link>
           <Link to="/providers">Providers</Link>
+          <Link to="/privacy">Privacy</Link>
         </nav>
         <i className={live ? 'live' : ''}>{live ? 'DAEMON LINKED' : 'CONNECTING'}</i>
       </header>
@@ -399,6 +443,7 @@ function NewTask() {
     brief: '',
     expectedBehaviour: '',
     actualBehaviour: '',
+    verificationCommand: '',
     mode: 'bug_fix',
     maxAttempts: 3,
     maxActualCostUsd: 1,
@@ -442,6 +487,7 @@ function NewTask() {
                   brief: form.brief,
                   expectedBehaviour: form.expectedBehaviour || undefined,
                   actualBehaviour: form.actualBehaviour || undefined,
+                  verificationCommand: form.verificationCommand || undefined,
                   mode: form.mode,
                   maxAttempts: form.maxAttempts,
                   maxActualCostUsd: form.maxActualCostUsd,
@@ -606,6 +652,20 @@ function NewTask() {
               </div>
             </div>
           ) : null}
+          <label className="field-label" htmlFor="task-verify">
+            Verification command
+          </label>
+          <input
+            id="task-verify"
+            placeholder="Optional — e.g. npm test (defaults to artefact check or package.json test)"
+            value={form.verificationCommand}
+            onChange={(e) => setForm({ ...form, verificationCommand: e.target.value })}
+          />
+          <p className="hint">
+            RoleFlock runs this inside the task worktree after the writer. Leave blank to use{' '}
+            <code>npm test</code> when present, otherwise check that <code>ROLEFLOCK_FIX.md</code>{' '}
+            exists.
+          </p>
           <div className="two-col">
             <div>
               <label className="field-label" htmlFor="task-attempts">
@@ -1007,44 +1067,327 @@ function TaskDetail() {
 
 function Approvals() {
   const { data = [], refetch } = useData<Approval[]>(['approvals'], '/api/approvals');
+  const [grantOffer, setGrantOffer] = useState<{
+    approval: Approval;
+    projectId: string;
+  } | null>(null);
+  const [grantNote, setGrantNote] = useState('');
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const fingerprintCounts = data.reduce<Record<string, number>>((counts, approval) => {
+    counts[approval.fingerprint] = (counts[approval.fingerprint] ?? 0) + 1;
+    return counts;
+  }, {});
+
+  const grantMaximumRisk = (risk: string): 'low' | 'medium' | 'high' =>
+    risk === 'critical' ? 'high' : risk === 'low' || risk === 'medium' || risk === 'high' ? risk : 'medium';
+
+  const approve = async (approval: Approval, alsoOfferGrant = true) => {
+    setBusy(approval.id);
+    setGrantNote('');
+    try {
+      await api.request(`/api/approvals/${approval.id}/approve`, { method: 'POST' });
+      if (alsoOfferGrant && approval.taskId) {
+        try {
+          const task = await api.request<{ projectId: string }>(`/api/tasks/${approval.taskId}`);
+          setGrantOffer({ approval, projectId: task.projectId });
+        } catch {
+          setGrantOffer(null);
+        }
+      }
+      void refetch();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const createGrant = async () => {
+    if (!grantOffer) return;
+    setGrantNote('');
+    try {
+      await api.request('/api/approval-grants', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId: grantOffer.projectId,
+          scope: 'exact_fingerprint',
+          fingerprint: grantOffer.approval.fingerprint,
+          requestTypes: [grantOffer.approval.requestType],
+          maximumRisk: grantMaximumRisk(grantOffer.approval.riskClass),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          maximumApplications: 25,
+        }),
+      });
+      setGrantNote('Reuse grant saved for 24 hours.');
+      setGrantOffer(null);
+    } catch (error) {
+      setGrantNote(error instanceof Error ? error.message : 'Failed to create grant');
+    }
+  };
+
   return (
     <Shell>
       <Section title="Approval inbox">
         {data.length ? (
-          data.map((approval) => (
-            <article className="row" key={approval.id}>
+          data.map((approval) => {
+            const sameFingerprint = fingerprintCounts[approval.fingerprint] ?? 1;
+            return (
+              <article className="row" key={approval.id}>
+                <div>
+                  <b>{approval.requestType}</b>
+                  <small>{approval.rationale}</small>
+                  <small>risk {approval.riskClass}</small>
+                  <small>fingerprint {approval.fingerprint.slice(0, 12)}…</small>
+                  {sameFingerprint > 1 ? (
+                    <small>{sameFingerprint} pending with this fingerprint</small>
+                  ) : null}
+                  {approval.taskId ? <Link to={`/tasks/${approval.taskId}`}>Open task</Link> : null}
+                </div>
+                <div className="actions">
+                  <button
+                    type="button"
+                    disabled={busy === approval.id}
+                    onClick={() => void approve(approval)}
+                  >
+                    {busy === approval.id ? 'Approving…' : 'Approve'}
+                  </button>
+                  {sameFingerprint > 1 ? (
+                    <button
+                      type="button"
+                      className="quiet"
+                      onClick={async () => {
+                        setBusy(approval.id);
+                        try {
+                          await api.request(
+                            `/api/approval-groups/${approval.id}/approve-all-once`,
+                            { method: 'POST' },
+                          );
+                          void refetch();
+                        } finally {
+                          setBusy(null);
+                        }
+                      }}
+                    >
+                      Approve all once
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="quiet"
+                    onClick={async () => {
+                      await api.request(`/api/approvals/${approval.id}/reject`, { method: 'POST' });
+                      void refetch();
+                    }}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </article>
+            );
+          })
+        ) : (
+          <Empty message="No confirmations are waiting." />
+        )}
+        {grantOffer ? (
+          <article className="row">
+            <div>
+              <b>Grant reuse for identical actions?</b>
+              <small>
+                Allow matching confirmations for the next 24 hours without asking again (fingerprint{' '}
+                {grantOffer.approval.fingerprint.slice(0, 12)}…).
+              </small>
+            </div>
+            <div className="actions">
+              <button type="button" onClick={() => void createGrant()}>
+                Also grant reuse (24h)
+              </button>
+              <button type="button" className="quiet" onClick={() => setGrantOffer(null)}>
+                Skip
+              </button>
+            </div>
+          </article>
+        ) : null}
+        {grantNote ? <p className="hint">{grantNote}</p> : null}
+      </Section>
+    </Shell>
+  );
+}
+
+function Knowledge() {
+  const { data: projects = [] } = useData<Project[]>(['projects'], '/api/projects');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [stateFilter, setStateFilter] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
+  const query = [
+    projectFilter ? `projectId=${encodeURIComponent(projectFilter)}` : '',
+    typeFilter ? `type=${encodeURIComponent(typeFilter)}` : '',
+    stateFilter ? `state=${encodeURIComponent(stateFilter)}` : '',
+  ]
+    .filter(Boolean)
+    .join('&');
+  const { data = [], refetch } = useData<KnowledgeItem[]>(
+    ['knowledge', projectFilter, typeFilter, stateFilter],
+    `/api/knowledge${query ? `?${query}` : ''}`,
+  );
+  const [form, setForm] = useState({
+    projectId: '',
+    type: 'coding_convention',
+    title: '',
+    body: '',
+    state: 'candidate' as 'candidate' | 'published',
+  });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <Shell>
+      <Section title="Local knowledge">
+        <p className="hint">
+          Durable notes compiled into role context when published. Candidates stay local until you
+          promote them.
+        </p>
+        <form
+          className="stack"
+          onSubmit={async (event: FormEvent) => {
+            event.preventDefault();
+            setError('');
+            setSaving(true);
+            try {
+              await api.request('/api/knowledge', {
+                method: 'POST',
+                body: JSON.stringify({
+                  projectId: form.projectId || undefined,
+                  type: form.type,
+                  title: form.title,
+                  body: form.body,
+                  state: form.state,
+                }),
+              });
+              setForm((current) => ({ ...current, title: '', body: '' }));
+              void refetch();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : 'Failed to save knowledge');
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          <label className="field-label" htmlFor="knowledge-project">
+            Project (optional)
+          </label>
+          <select
+            id="knowledge-project"
+            value={form.projectId}
+            onChange={(e) => setForm({ ...form, projectId: e.target.value })}
+          >
+            <option value="">Workspace-wide</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+          <div className="two-col">
+            <div>
+              <label className="field-label" htmlFor="knowledge-type">
+                Type
+              </label>
+              <select
+                id="knowledge-type"
+                value={form.type}
+                onChange={(e) => setForm({ ...form, type: e.target.value })}
+              >
+                <option value="architecture_decision">Architecture decision</option>
+                <option value="coding_convention">Coding convention</option>
+                <option value="past_failure">Past failure</option>
+                <option value="review_rule">Review rule</option>
+                <option value="test_pattern">Test pattern</option>
+                <option value="security_rule">Security rule</option>
+                <option value="rejected_approach">Rejected approach</option>
+              </select>
+            </div>
+            <div>
+              <label className="field-label" htmlFor="knowledge-state">
+                State
+              </label>
+              <select
+                id="knowledge-state"
+                value={form.state}
+                onChange={(e) =>
+                  setForm({ ...form, state: e.target.value as 'candidate' | 'published' })
+                }
+              >
+                <option value="candidate">Candidate</option>
+                <option value="published">Published</option>
+              </select>
+            </div>
+          </div>
+          <label className="field-label" htmlFor="knowledge-title">
+            Title
+          </label>
+          <input
+            id="knowledge-title"
+            required
+            value={form.title}
+            onChange={(e) => setForm({ ...form, title: e.target.value })}
+          />
+          <label className="field-label" htmlFor="knowledge-body">
+            Body
+          </label>
+          <textarea
+            id="knowledge-body"
+            className="compact"
+            required
+            value={form.body}
+            onChange={(e) => setForm({ ...form, body: e.target.value })}
+          />
+          {error ? <p className="error">{error}</p> : null}
+          <button type="submit" disabled={saving}>
+            {saving ? 'Saving…' : 'Add knowledge'}
+          </button>
+        </form>
+      </Section>
+      <Section title="Library">
+        <div className="two-col">
+          <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
+            <option value="">All projects</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <option value="">All types</option>
+            <option value="architecture_decision">Architecture decision</option>
+            <option value="coding_convention">Coding convention</option>
+            <option value="past_failure">Past failure</option>
+            <option value="review_rule">Review rule</option>
+            <option value="test_pattern">Test pattern</option>
+            <option value="security_rule">Security rule</option>
+            <option value="rejected_approach">Rejected approach</option>
+          </select>
+          <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
+            <option value="">All states</option>
+            <option value="candidate">Candidate</option>
+            <option value="published">Published</option>
+          </select>
+        </div>
+        {data.length ? (
+          data.map((item) => (
+            <article className="row" key={item.id}>
               <div>
-                <b>{approval.requestType}</b>
-                <small>{approval.rationale}</small>
-                <small>risk {approval.riskClass}</small>
-                <small>fingerprint {approval.fingerprint.slice(0, 12)}…</small>
-                {approval.taskId ? <Link to={`/tasks/${approval.taskId}`}>Open task</Link> : null}
+                <b>{item.title}</b>
+                <small>
+                  {item.type} · {item.state}
+                  {item.projectId ? ` · project ${item.projectId.slice(0, 8)}…` : ' · workspace'}
+                </small>
+                <small>{item.body.slice(0, 240)}{item.body.length > 240 ? '…' : ''}</small>
               </div>
-              <div className="actions">
-                <button
-                  type="button"
-                  onClick={async () => {
-                    await api.request(`/api/approvals/${approval.id}/approve`, { method: 'POST' });
-                    void refetch();
-                  }}
-                >
-                  Approve
-                </button>
-                <button
-                  type="button"
-                  className="quiet"
-                  onClick={async () => {
-                    await api.request(`/api/approvals/${approval.id}/reject`, { method: 'POST' });
-                    void refetch();
-                  }}
-                >
-                  Reject
-                </button>
-              </div>
+              <em>{new Date(item.createdAt).toLocaleString()}</em>
             </article>
           ))
         ) : (
-          <Empty message="No confirmations are waiting." />
+          <Empty message="No knowledge items match these filters." />
         )}
       </Section>
     </Shell>
@@ -1059,9 +1402,43 @@ function Evidence() {
     Boolean(id),
   );
   const { data: usage } = useData<Usage>(['usage', id], `/api/usage/tasks/${id}`, Boolean(id));
+  const [exportNote, setExportNote] = useState('');
+  const downloadJson = async (path: string, filename: string) => {
+    setExportNote('');
+    try {
+      const payload = await api.request<unknown>(path);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setExportNote(`Downloaded ${filename}`);
+    } catch (error) {
+      setExportNote(error instanceof Error ? error.message : 'Export failed');
+    }
+  };
   return (
     <Shell>
       <Section title="Evidence ledger">
+        <div className="actions">
+          <button
+            type="button"
+            className="quiet"
+            onClick={() => void downloadJson(`/api/tasks/${id}/export/evidence`, `roleflock-evidence-${id}.json`)}
+          >
+            Export evidence bundle
+          </button>
+          <button
+            type="button"
+            className="quiet"
+            onClick={() => void downloadJson(`/api/tasks/${id}/export/audit`, `roleflock-audit-${id}.json`)}
+          >
+            Export audit pack
+          </button>
+        </div>
+        {exportNote ? <p className="hint">{exportNote}</p> : null}
         <EvidenceSection title="Findings" items={data?.findings ?? []} />
         <EvidenceSection title="Test runs" items={data?.testRuns ?? []} />
         <EvidenceSection title="Artefacts / diff" items={data?.artefacts ?? []} />
@@ -1160,11 +1537,123 @@ function Evidence() {
   );
 }
 
+function Privacy() {
+  const { data: privacy } = useData<{
+    localOnly: boolean;
+    claims: string[];
+  }>(['privacy'], '/api/privacy');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <Shell>
+      <Section title="Privacy & local data">
+        <p className="hint">
+          RoleFlock keeps task state on this machine. Exports are redacted; repository contents are
+          not uploaded for version checks.
+        </p>
+        <ul className="stack">
+          {(privacy?.claims ?? []).map((claim) => (
+            <li key={claim}>{claim}</li>
+          ))}
+        </ul>
+        <div className="actions">
+          <button
+            type="button"
+            className="quiet"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setNote('');
+              try {
+                const result = await api.request<{ backupDir: string }>('/api/data/backup', {
+                  method: 'POST',
+                });
+                setNote(`Backup written to ${result.backupDir}`);
+              } catch (error) {
+                setNote(error instanceof Error ? error.message : 'Backup failed');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Backup local database
+          </button>
+          <button
+            type="button"
+            className="quiet"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setNote('');
+              try {
+                const payload = await api.request<unknown>('/api/diagnostics/export');
+                const blob = new Blob([JSON.stringify(payload, null, 2)], {
+                  type: 'application/json',
+                });
+                const url = URL.createObjectURL(blob);
+                const anchor = document.createElement('a');
+                anchor.href = url;
+                anchor.download = 'roleflock-diagnostics.json';
+                anchor.click();
+                URL.revokeObjectURL(url);
+                setNote('Downloaded redacted diagnostics');
+              } catch (error) {
+                setNote(error instanceof Error ? error.message : 'Diagnostics export failed');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Export diagnostics
+          </button>
+          <button
+            type="button"
+            className="danger"
+            disabled={busy}
+            onClick={async () => {
+              if (
+                !window.confirm(
+                  'Delete all local RoleFlock data (database, documents, worktrees)? Repository folders on disk are kept.',
+                )
+              ) {
+                return;
+              }
+              setBusy(true);
+              setNote('');
+              try {
+                const result = await api.request<{ note?: string }>('/api/data/delete', {
+                  method: 'POST',
+                  body: JSON.stringify({ confirm: 'DELETE_LOCAL_DATA' }),
+                });
+                setNote(result.note ?? 'Local data deleted. Restart the daemon.');
+              } catch (error) {
+                setNote(error instanceof Error ? error.message : 'Delete failed');
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Delete local data
+          </button>
+        </div>
+        {note ? <p className="hint">{note}</p> : null}
+      </Section>
+    </Shell>
+  );
+}
+
 function Providers() {
   const queryClient = useQueryClient();
   const { data: providers = [] } = useData<Provider[]>(['providers'], '/api/providers');
+  const { data: projects = [] } = useData<Project[]>(['projects'], '/api/projects');
+  const { data: disclosureGrants = [], refetch: refetchDisclosure } = useData<DisclosureGrant[]>(
+    ['disclosure-grants'],
+    '/api/disclosure-grants',
+  );
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [health, setHealth] = useState<Record<string, string>>({});
+  const [authNote, setAuthNote] = useState<Record<string, string>>({});
+  const [authBusy, setAuthBusy] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState({
     displayName: '',
     endpoint: '',
@@ -1173,6 +1662,12 @@ function Providers() {
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [disclosureForm, setDisclosureForm] = useState({
+    projectId: '',
+    providerConnectionId: '',
+  });
+  const [disclosureNote, setDisclosureNote] = useState('');
+  const [disclosureBusy, setDisclosureBusy] = useState(false);
 
   async function onRegister(event: FormEvent) {
     event.preventDefault();
@@ -1192,15 +1687,44 @@ function Providers() {
     }
   }
 
+  async function runAuth(providerId: string, action: 'login' | 'logout' | 'switch') {
+    setAuthBusy((current) => ({ ...current, [providerId]: true }));
+    setAuthNote((current) => ({ ...current, [providerId]: `${action}…` }));
+    try {
+      const result = await api.request<{
+        ok: boolean;
+        detail: string;
+        command?: string;
+        launched?: boolean;
+      }>(`/api/providers/${providerId}/auth/${action}`, { method: 'POST' });
+      setAuthNote((current) => ({
+        ...current,
+        [providerId]: result.command
+          ? `${result.detail}${result.launched ? '' : ` · run: ${result.command}`}`
+          : result.detail,
+      }));
+      await queryClient.invalidateQueries({ queryKey: ['providers'] });
+    } catch (error) {
+      setAuthNote((current) => ({
+        ...current,
+        [providerId]: error instanceof Error ? error.message : `${action} failed`,
+      }));
+    } finally {
+      setAuthBusy((current) => ({ ...current, [providerId]: false }));
+    }
+  }
+
+  const visible = providers.filter((provider) => provider.id !== 'fake');
+
   return (
     <Shell>
       <Section title="Providers">
         <p className="lede">
-          Local CLI discovery plus optional OpenAI-compatible HTTP endpoints. Missing CLIs stay
-          listed so you can install them later.
+          Real CLI discovery plus optional OpenAI-compatible endpoints. Sign in per CLI, switch
+          accounts when needed, and track RoleFlock local usage for each connection.
         </p>
-        {providers.length ? (
-          providers.map((provider) => (
+        {visible.length ? (
+          visible.map((provider) => (
             <article className="provider-card" key={provider.id}>
               <div className="row">
                 <div>
@@ -1209,9 +1733,60 @@ function Providers() {
                   <small>
                     {provider.connectionType ?? 'cli'} · {provider.status}
                   </small>
+                  {provider.account ? (
+                    <small>
+                      {provider.account.loggedIn
+                        ? `account ${provider.account.email ?? provider.account.label ?? 'signed in'}`
+                        : 'account not signed in'}
+                      {provider.account.subscriptionType
+                        ? ` · ${provider.account.subscriptionType}`
+                        : ''}
+                    </small>
+                  ) : null}
                   {provider.health?.detail ? <small>{provider.health.detail}</small> : null}
                 </div>
                 <div className="actions compact-actions">
+                  {provider.account && !provider.account.loggedIn && provider.account.supportsLogin ? (
+                    <button
+                      type="button"
+                      disabled={authBusy[provider.id]}
+                      onClick={() => void runAuth(provider.id, 'login')}
+                    >
+                      Login
+                    </button>
+                  ) : null}
+                  {provider.account?.loggedIn && provider.account.supportsSwitch ? (
+                    <button
+                      type="button"
+                      className="quiet"
+                      disabled={authBusy[provider.id]}
+                      onClick={() => void runAuth(provider.id, 'switch')}
+                    >
+                      Switch account
+                    </button>
+                  ) : null}
+                  {provider.account?.loggedIn && provider.account.supportsLogin ? (
+                    <button
+                      type="button"
+                      className="quiet"
+                      disabled={authBusy[provider.id]}
+                      onClick={() => void runAuth(provider.id, 'logout')}
+                    >
+                      Logout
+                    </button>
+                  ) : null}
+                  {(provider.account?.usageLinks ?? []).map((link) => (
+                    <a
+                      key={link.id}
+                      className="quiet buttonish"
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={link.hint}
+                    >
+                      {link.label}
+                    </a>
+                  ))}
                   <button
                     type="button"
                     className="quiet"
@@ -1229,6 +1804,7 @@ function Providers() {
                             ? `${result.status}: ${result.detail}`
                             : result.status,
                         }));
+                        await queryClient.invalidateQueries({ queryKey: ['providers'] });
                       } catch (error) {
                         setHealth((current) => ({
                           ...current,
@@ -1242,6 +1818,7 @@ function Providers() {
                   </button>
                   <button
                     type="button"
+                    className="quiet"
                     onClick={() =>
                       setExpanded((current) => ({
                         ...current,
@@ -1260,7 +1837,28 @@ function Providers() {
                   </span>
                 ))}
               </div>
+              {provider.localUsage ? (
+                <div className="provider-usage">
+                  <p>
+                    <span>local usage</span>{' '}
+                    {provider.localUsage.entryCount} calls ·{' '}
+                    {provider.localUsage.inputTokens + provider.localUsage.outputTokens} tokens ·
+                    actual ${provider.localUsage.actualCostUsd.toFixed(4)} · shadow $
+                    {provider.localUsage.shadowCostUsd.toFixed(4)}
+                  </p>
+                  <p className="hint">{provider.localUsage.note}</p>
+                  {(provider.account?.usageLinks ?? []).length ? (
+                    <p className="hint">
+                      Plan limits (5h / week / month) live on the vendor dashboard — use the usage
+                      buttons above. Claude: also run <code>/usage</code> inside an interactive{' '}
+                      <code>claude</code> session.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {provider.account?.detail ? <p className="hint">{provider.account.detail}</p> : null}
               {health[provider.id] ? <p className="hint">Health: {health[provider.id]}</p> : null}
+              {authNote[provider.id] ? <p className="hint">{authNote[provider.id]}</p> : null}
               {expanded[provider.id] ? <ProviderModels providerId={provider.id} /> : null}
             </article>
           ))
@@ -1321,6 +1919,111 @@ function Providers() {
             </button>
           </div>
         </form>
+      </Section>
+      <Section title="Disclosure grants">
+        <p className="hint">
+          Explicitly allow a provider connection to receive compiled task briefs and supporting
+          documents for a project.
+        </p>
+        <form
+          className="stack"
+          onSubmit={async (event: FormEvent) => {
+            event.preventDefault();
+            setDisclosureNote('');
+            setDisclosureBusy(true);
+            try {
+              await api.request('/api/disclosure-grants', {
+                method: 'POST',
+                body: JSON.stringify({
+                  projectId: disclosureForm.projectId,
+                  providerConnectionId: disclosureForm.providerConnectionId,
+                  scope: { taskBrief: true, documents: true },
+                }),
+              });
+              setDisclosureNote('Disclosure grant created.');
+              setDisclosureForm({ projectId: '', providerConnectionId: '' });
+              void refetchDisclosure();
+            } catch (error) {
+              setDisclosureNote(
+                error instanceof Error ? error.message : 'Failed to create disclosure grant',
+              );
+            } finally {
+              setDisclosureBusy(false);
+            }
+          }}
+        >
+          <label className="field-label" htmlFor="disclosure-project">
+            Project
+          </label>
+          <select
+            id="disclosure-project"
+            required
+            value={disclosureForm.projectId}
+            onChange={(e) => setDisclosureForm({ ...disclosureForm, projectId: e.target.value })}
+          >
+            <option value="">Choose a project</option>
+            {projects.map((project) => (
+              <option key={project.id} value={project.id}>
+                {project.name}
+              </option>
+            ))}
+          </select>
+          <label className="field-label" htmlFor="disclosure-provider">
+            Provider
+          </label>
+          <select
+            id="disclosure-provider"
+            required
+            value={disclosureForm.providerConnectionId}
+            onChange={(e) =>
+              setDisclosureForm({ ...disclosureForm, providerConnectionId: e.target.value })
+            }
+          >
+            <option value="">Choose a provider</option>
+            {visible.map((provider) => (
+              <option key={provider.id} value={provider.id}>
+                {provider.displayName}
+              </option>
+            ))}
+          </select>
+          <button type="submit" disabled={disclosureBusy}>
+            {disclosureBusy ? 'Saving…' : 'Allow task briefs + docs'}
+          </button>
+          {disclosureNote ? <p className="hint">{disclosureNote}</p> : null}
+        </form>
+        {disclosureGrants.filter((grant) => !grant.revokedAt).length ? (
+          disclosureGrants
+            .filter((grant) => !grant.revokedAt)
+            .map((grant) => (
+              <article className="row" key={grant.id}>
+                <div>
+                  <b>{grant.providerConnectionId}</b>
+                  <small>project {grant.projectId.slice(0, 8)}…</small>
+                  <small>
+                    scope{' '}
+                    {Object.entries(grant.scope)
+                      .filter(([, enabled]) => enabled)
+                      .map(([key]) => key)
+                      .join(', ') || 'custom'}
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  className="quiet"
+                  onClick={async () => {
+                    await api.request(`/api/disclosure-grants/${grant.id}/revoke`, {
+                      method: 'POST',
+                    });
+                    void refetchDisclosure();
+                  }}
+                >
+                  Revoke
+                </button>
+              </article>
+            ))
+        ) : (
+          <Empty message="No active disclosure grants." />
+        )}
       </Section>
     </Shell>
   );
@@ -1412,6 +2115,52 @@ function Empty({ message }: { message: string }) {
 }
 
 function App() {
+  const [privacyAccepted, setPrivacyAccepted] = useState(
+    () => localStorage.getItem('roleflock-privacy-accepted') === '1',
+  );
+  const { data: privacy } = useData<{ claims: string[] }>(
+    ['privacy-onboarding'],
+    '/api/privacy',
+    !privacyAccepted,
+  );
+
+  if (!privacyAccepted) {
+    return (
+      <Shell>
+        <Section title="Before you start">
+          <p className="lede">
+            RoleFlock is local-first. Confirm these privacy claims before registering a repository.
+          </p>
+          <ul className="stack">
+            {(privacy?.claims ?? [
+              'Daemon binds to 127.0.0.1 by default.',
+              'Exports redact API keys and tokens.',
+              'Update checks do not send repository contents.',
+            ]).map((claim) => (
+              <li key={claim}>{claim}</li>
+            ))}
+          </ul>
+          <p className="hint">
+            Full guide:{' '}
+            <code>docs/product/verified-fix-onboarding.md</code> · Privacy page available anytime
+            after continue.
+          </p>
+          <div className="form-actions">
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.setItem('roleflock-privacy-accepted', '1');
+                setPrivacyAccepted(true);
+              }}
+            >
+              Continue locally
+            </button>
+          </div>
+        </Section>
+      </Shell>
+    );
+  }
+
   return (
     <Routes>
       <Route path="/" element={<Home />} />
@@ -1420,7 +2169,9 @@ function App() {
       <Route path="/tasks/:id" element={<TaskDetail />} />
       <Route path="/tasks/:id/evidence" element={<Evidence />} />
       <Route path="/approvals" element={<Approvals />} />
+      <Route path="/knowledge" element={<Knowledge />} />
       <Route path="/providers" element={<Providers />} />
+      <Route path="/privacy" element={<Privacy />} />
     </Routes>
   );
 }

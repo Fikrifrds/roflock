@@ -401,6 +401,11 @@ button,
   color: #e7e2d9;
 }
 
+.danger {
+  background: #8b2e2e;
+  color: #f7ebe8;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -485,6 +490,21 @@ pre {
 .provider-card .row {
   border: 0;
   padding: 0;
+}
+
+.provider-card small {
+  display: block;
+  margin-top: 4px;
+  color: #b7b1a6;
+}
+
+.provider-usage {
+  margin-top: 12px;
+}
+
+.provider-usage span {
+  color: #b7b1a6;
+  margin-right: 6px;
 }
 
 .capabilities {

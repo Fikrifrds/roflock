@@ -12,6 +12,92 @@ describe('daemon boundary', () => {
   it('defaults to loopback-only bind', async () => expect((await server()).host).toBe('127.0.0.1'));
   it('has no raw shell execution endpoint', async () => { const { app } = await server(); expect((await app.inject({ method: 'POST', url: '/api/shell', headers: { 'x-roleflock-token': 'test-token', 'x-roleflock-csrf': 'test-csrf' } })).statusCode).toBe(404); });
   it('rejects unauthenticated API requests', async () => { const { app } = await server(); expect((await app.inject({ method: 'GET', url: '/api/projects' })).statusCode).toBe(401); });
+  it('rejects mutations with invalid CSRF', async () => {
+    const { app } = await server();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers: {
+        'x-roleflock-token': 'test-token',
+        'x-roleflock-csrf': 'wrong',
+        'content-type': 'application/json',
+      },
+      payload: { path: '/tmp' },
+    });
+    expect(res.statusCode).toBe(403);
+    expect((res.json() as { error: string }).error).toMatch(/CSRF/i);
+  });
+  it('allows authenticated GET without CSRF header', async () => {
+    const { app } = await server();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      headers: { 'x-roleflock-token': 'test-token' },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+  it('rejects mutations from non-local origins', async () => {
+    const { app } = await server();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers: {
+        'x-roleflock-token': 'test-token',
+        'x-roleflock-csrf': 'test-csrf',
+        origin: 'https://evil.example',
+        'content-type': 'application/json',
+      },
+      payload: { path: '/tmp' },
+    });
+    expect(res.statusCode).toBe(403);
+  });
+  it('exposes privacy claims for local-first onboarding', async () => {
+    const { app } = await server();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/privacy',
+      headers: { 'x-roleflock-token': 'test-token' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect((res.json() as { localOnly: boolean }).localOnly).toBe(true);
+  });
+  it('exposes version without repository data', async () => {
+    const { app } = await server();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/version',
+      headers: { 'x-roleflock-token': 'test-token' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { product: string; version: string; platform: string };
+    expect(body.product).toBe('RoleFlock');
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(body.platform).toBeTruthy();
+  });
+  it('checks updates offline without sending repository data', async () => {
+    const previous = process.env.ROLEFLOCK_UPDATE_URL;
+    delete process.env.ROLEFLOCK_UPDATE_URL;
+    try {
+      const { app } = await server();
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/updates/check',
+        headers: { 'x-roleflock-token': 'test-token' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as {
+        updateAvailable: boolean;
+        channel: string;
+        note: string;
+      };
+      expect(body.updateAvailable).toBe(false);
+      expect(body.channel).toBe('local');
+      expect(body.note).toMatch(/do not transmit repository contents/i);
+    } finally {
+      if (previous === undefined) delete process.env.ROLEFLOCK_UPDATE_URL;
+      else process.env.ROLEFLOCK_UPDATE_URL = previous;
+    }
+  });
   it('registers openai-compatible custom providers', async () => {
     const { app } = await server();
     const headers = {
@@ -37,7 +123,35 @@ describe('daemon boundary', () => {
 
     const listed = await app.inject({ method: 'GET', url: '/api/providers', headers });
     expect(listed.statusCode).toBe(200);
-    expect((listed.json() as Array<{ id: string }>).some((p) => p.id === body.id)).toBe(true);
+    const providers = listed.json() as Array<{ id: string }>;
+    expect(providers.some((p) => p.id === body.id)).toBe(true);
+    expect(providers.some((p) => p.id === 'fake')).toBe(false);
+  });
+  it('exposes provider account and auth action endpoints', async () => {
+    const { app } = await server();
+    const headers = {
+      'x-roleflock-token': 'test-token',
+      'x-roleflock-csrf': 'test-csrf',
+    };
+    const account = await app.inject({
+      method: 'GET',
+      url: '/api/providers/claude/account',
+      headers,
+    });
+    expect(account.statusCode).toBe(200);
+    const body = account.json() as {
+      account: { providerId: string; supportsLogin: boolean };
+      localUsage: { note: string };
+    };
+    expect(body.account.providerId).toBe('claude');
+    expect(body.localUsage.note).toMatch(/local meter/i);
+
+    const listed = await app.inject({ method: 'GET', url: '/api/providers', headers });
+    expect(
+      (listed.json() as Array<{ id: string; localUsage?: { entryCount: number } }>).every(
+        (provider) => provider.id === 'fake' || typeof provider.localUsage?.entryCount === 'number',
+      ),
+    ).toBe(true);
   });
   it('recommends smallest sufficient workflows from task intent', async () => {
     const { app } = await server();
@@ -261,5 +375,107 @@ describe('daemon boundary', () => {
         })
       ).statusCode,
     ).toBe(401);
+  });
+  it('creates and lists approval grants for a project', async () => {
+    const { mkdtemp, rm } = await import('node:fs/promises');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { randomUUID } = await import('node:crypto');
+    const { openMigratedDatabase, ProjectRepository } = await import('@roleflock/database');
+    const dataDir = await mkdtemp(join(tmpdir(), 'rf-grant-data-'));
+    const session = { token: 'test-token', csrf: 'test-csrf' };
+    const db = openMigratedDatabase(join(dataDir, 'roleflock.db'));
+    const time = new Date().toISOString();
+    const projectId = randomUUID();
+    new ProjectRepository(db).create({
+      id: projectId,
+      workspaceId: 'local',
+      name: 'Grant test',
+      repositoryPath: '/tmp',
+      resolvedPath: '/tmp',
+      baseBranch: 'HEAD',
+      status: 'active',
+      createdAt: time,
+      updatedAt: time,
+    });
+    db.close();
+    const instance = await createServer({ dataDir, session });
+    const headers = {
+      'x-roleflock-token': session.token,
+      'x-roleflock-csrf': session.csrf,
+      'content-type': 'application/json',
+    };
+    try {
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+      const created = await instance.app.inject({
+        method: 'POST',
+        url: '/api/approval-grants',
+        headers,
+        payload: {
+          projectId,
+          scope: 'exact_fingerprint',
+          fingerprint: 'abc123fingerprint',
+          maximumRisk: 'medium',
+          expiresAt,
+          maximumApplications: 5,
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      const grant = created.json() as { id: string; scope: string; fingerprint?: string };
+      expect(grant.scope).toBe('exact_fingerprint');
+      expect(grant.fingerprint).toBe('abc123fingerprint');
+
+      const listed = await instance.app.inject({
+        method: 'GET',
+        url: `/api/approval-grants?projectId=${projectId}`,
+        headers,
+      });
+      expect(listed.statusCode).toBe(200);
+      expect((listed.json() as Array<{ id: string }>).some((row) => row.id === grant.id)).toBe(
+        true,
+      );
+
+      const revoked = await instance.app.inject({
+        method: 'POST',
+        url: `/api/approval-grants/${grant.id}/revoke`,
+        headers,
+        payload: {},
+      });
+      expect(revoked.statusCode).toBe(200);
+    } finally {
+      await instance.app.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+  it('lists knowledge items after create', async () => {
+    const { app } = await server();
+    const headers = {
+      'x-roleflock-token': 'test-token',
+      'x-roleflock-csrf': 'test-csrf',
+      'content-type': 'application/json',
+    };
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/knowledge',
+      headers,
+      payload: {
+        type: 'review_rule',
+        title: 'Always cite documents',
+        body: 'Findings must reference attached PRDs when present.',
+        state: 'published',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const listed = await app.inject({
+      method: 'GET',
+      url: '/api/knowledge?state=published',
+      headers,
+    });
+    expect(listed.statusCode).toBe(200);
+    expect(
+      (listed.json() as Array<{ title: string }>).some(
+        (item) => item.title === 'Always cite documents',
+      ),
+    ).toBe(true);
   });
 });

@@ -9,13 +9,14 @@ export class TaskRepository {
       .prepare(
         `INSERT INTO tasks
           (id, project_id, type, title, brief, risk, state, workflow_graph_version_id, budget_policy_id,
-           expected_behaviour, actual_behaviour, max_attempts, max_actual_cost_usd, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           expected_behaviour, actual_behaviour, verification_command, max_attempts, max_actual_cost_usd, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            state = excluded.state,
            updated_at = excluded.updated_at,
            title = excluded.title,
-           brief = excluded.brief`,
+           brief = excluded.brief,
+           verification_command = excluded.verification_command`,
       )
       .run(
         task.id,
@@ -29,6 +30,7 @@ export class TaskRepository {
         task.budgetPolicyId,
         task.expectedBehaviour ?? null,
         task.actualBehaviour ?? null,
+        task.verificationCommand ?? null,
         task.maxAttempts,
         task.maxActualCostUsd ?? null,
         task.createdAt,
@@ -41,7 +43,7 @@ export class TaskRepository {
     const row = this.db
       .prepare(
         `SELECT id, project_id, type, title, brief, risk, state, workflow_graph_version_id, budget_policy_id,
-                expected_behaviour, actual_behaviour, max_attempts, max_actual_cost_usd, created_at, updated_at
+                expected_behaviour, actual_behaviour, verification_command, max_attempts, max_actual_cost_usd, created_at, updated_at
          FROM tasks WHERE id = ?`,
       )
       .get(id) as Record<string, unknown> | undefined;
@@ -53,14 +55,14 @@ export class TaskRepository {
       ? (this.db
           .prepare(
             `SELECT id, project_id, type, title, brief, risk, state, workflow_graph_version_id, budget_policy_id,
-                    expected_behaviour, actual_behaviour, max_attempts, max_actual_cost_usd, created_at, updated_at
+                    expected_behaviour, actual_behaviour, verification_command, max_attempts, max_actual_cost_usd, created_at, updated_at
              FROM tasks WHERE project_id = ? ORDER BY created_at DESC`,
           )
           .all(projectId) as Array<Record<string, unknown>>)
       : (this.db
           .prepare(
             `SELECT id, project_id, type, title, brief, risk, state, workflow_graph_version_id, budget_policy_id,
-                    expected_behaviour, actual_behaviour, max_attempts, max_actual_cost_usd, created_at, updated_at
+                    expected_behaviour, actual_behaviour, verification_command, max_attempts, max_actual_cost_usd, created_at, updated_at
              FROM tasks ORDER BY created_at DESC`,
           )
           .all() as Array<Record<string, unknown>>);
@@ -81,6 +83,9 @@ function mapTask(row: Record<string, unknown>): Task {
     budgetPolicyId: String(row.budget_policy_id),
     expectedBehaviour: row.expected_behaviour ? String(row.expected_behaviour) : undefined,
     actualBehaviour: row.actual_behaviour ? String(row.actual_behaviour) : undefined,
+    verificationCommand: row.verification_command
+      ? String(row.verification_command)
+      : undefined,
     maxAttempts: Number(row.max_attempts),
     maxActualCostUsd:
       row.max_actual_cost_usd === null || row.max_actual_cost_usd === undefined

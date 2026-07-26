@@ -44,12 +44,18 @@ importers:
       '@roleflock/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@roleflock/evidence':
+        specifier: workspace:*
+        version: link:../../packages/evidence
       '@roleflock/graph-core':
         specifier: workspace:*
         version: link:../../packages/graph-core
       '@roleflock/graph-runtime':
         specifier: workspace:*
         version: link:../../packages/graph-runtime
+      '@roleflock/observability':
+        specifier: workspace:*
+        version: link:../../packages/observability
       '@roleflock/provider-claude':
         specifier: workspace:*
         version: link:../../packages/provider-claude

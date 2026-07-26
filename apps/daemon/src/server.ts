@@ -41,7 +41,7 @@ export async function createServer(options: ServerOptions = {}): Promise<{ app: 
     providers,
     documents,
   );
-  registerApi(app, db, session, bus, orchestrator, providers, documents);
+  registerApi(app, db, session, bus, orchestrator, providers, documents, dataDir);
   const webDist = join(process.cwd(), 'apps', 'web', 'dist');
   if (existsSync(webDist)) await app.register(statik, { root: webDist, wildcard: false });
   app.addHook('onClose', async () => db.close());

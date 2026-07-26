@@ -1,0 +1,8 @@
+{
+  "name": "tiny-bug",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/add.test.js"
+  }
+}

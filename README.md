@@ -6,20 +6,26 @@
 - Local UI (dev): http://127.0.0.1:5173
 - Local daemon: http://127.0.0.1:4178
 
-## Status: ready for local testing
+## Status: ready for local Verified Fix
 
-Phase 0 walking skeleton is implemented and covered by automated tests:
+See [`docs/test-plans/mvp-readiness.md`](docs/test-plans/mvp-readiness.md) for the Public MVP exit-gate checklist.
 
-- Verified bug-fix flow (planner → approval → writer → test → verifier → accept)
+Implemented and covered by automated tests:
+
+- Verified bug-fix flow (planner → approval → writer → verification → verifier → accept)
+- Optional verification command (`npm test`, custom argv, or artefact check)
 - Direct / Fast / Standard / Bug Fix workflow modes
 - Folder picker + custom project names
-- Approval inbox + in-task approve banner
-- Providers page with honest CLI discovery (Claude / Codex / Cursor / Fake)
-- Evidence, usage, disclosure manifests
-- Daemon restart recovery for pending approvals
+- Approval inbox, grant reuse, knowledge base UI
+- Providers page with real CLI discovery + account/login/switch + local usage
+- Evidence, context inspector, export/privacy/backup/delete
+- Daemon restart recovery — [`docs/crash-recovery.md`](docs/crash-recovery.md)
 - Localhost-only bind, session token, CSRF, no shell endpoint
+- Version/update check without repository data
 
-Manual checklist: [`docs/test-plans/manual-test-checklist.md`](docs/test-plans/manual-test-checklist.md)
+Manual checklist: [`docs/test-plans/manual-test-checklist.md`](docs/test-plans/manual-test-checklist.md)  
+Verified Fix first run: [`docs/product/verified-fix-onboarding.md`](docs/product/verified-fix-onboarding.md)  
+Threat model: [`docs/security/threat-model.md`](docs/security/threat-model.md)
 
 ## Setup
 
@@ -56,11 +62,16 @@ State: `~/.roleflock/roleflock.db` (override with `ROLEFLOCK_DATA_DIR`).
 5. Accept when verification finishes
 6. Open Evidence + Providers
 
+Use `ROLEFLOCK_FORCE_FAKE=1 pnpm dev` for a deterministic first pass without live CLIs.
+
 ## Notes
 
-- Walking skeleton uses the **Fake provider** for deterministic local runs.
-- Claude / Codex / Cursor appear on Providers with `ready` or `missing` based on PATH.
-- Real CLI-driven writing is scaffolded; full live CLI orchestration is next after local UI validation.
+- **Fake provider** is omitted from the Providers UI unless `ROLEFLOCK_INCLUDE_FAKE=1`; use `ROLEFLOCK_FORCE_FAKE=1` for deterministic orchestration.
+- Claude / Codex / Cursor appear on Providers with `ready` or `missing` based on PATH; login via provider auth actions.
+- **Cursor writer:** sandboxed filesystem writes under a permission envelope + writer lease — full Cursor Agent CLI loop still deferred.
+- Planner/verifier may invoke Claude/Codex when discovered and not forced fake.
+- Public site copy (draft): [`docs/public/README.md`](docs/public/README.md), [`docs/public/privacy.md`](docs/public/privacy.md)
+- Baseline benchmark: `pnpm benchmark` → [`docs/benchmarks/baseline.md`](docs/benchmarks/baseline.md)
 
 ## Safety invariants
 
@@ -70,6 +81,7 @@ State: `~/.roleflock/roleflock.db` (override with `ROLEFLOCK_DATA_DIR`).
 - One writer lease per task worktree
 - Secret/symlink escape paths denied
 - Unknown billable outcomes are not auto-retried
+- Update checks never send repository paths or contents
 
 ## Workspace
 
@@ -79,5 +91,8 @@ apps/daemon       Fastify local daemon + orchestrator
 packages/*        Contracts, database, runtime, providers, approvals
 docs/product      PRD + implementation plan
 docs/adr          Architecture decision records
+docs/security     Threat model
+docs/public       roleflock.com draft copy
 docs/test-plans   Exit gates + manual checklist
+docs/benchmarks   Local fixture baselines
 ```

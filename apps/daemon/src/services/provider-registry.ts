@@ -10,6 +10,12 @@ import { ClaudeAdapter } from '@roleflock/provider-claude';
 import { CodexAdapter } from '@roleflock/provider-codex';
 import { CursorWriterAdapter, createFsCursorWriter } from '@roleflock/provider-cursor';
 import { OpenAiCompatibleAdapter } from '@roleflock/provider-custom';
+import {
+  getProviderAccount,
+  runProviderAuthAction,
+  type AuthActionResult,
+  type ProviderAccount,
+} from './cli-account.js';
 
 export interface RegisteredProvider {
   id: string;
@@ -18,6 +24,15 @@ export interface RegisteredProvider {
   health: ProviderHealth;
   capabilities: ProviderCapabilities;
   connectionType: 'fake' | 'cli' | 'openai-compatible';
+  account?: ProviderAccount;
+  localUsage?: {
+    entryCount: number;
+    inputTokens: number;
+    outputTokens: number;
+    actualCostUsd: number;
+    shadowCostUsd: number;
+    note: string;
+  };
 }
 
 export interface CustomProviderInput {
@@ -42,9 +57,36 @@ const connectionTypes: Record<string, RegisteredProvider['connectionType']> = {
   cursor: 'cli',
 };
 
+function includeFakeProvider(): boolean {
+  return process.env.ROLEFLOCK_INCLUDE_FAKE === '1';
+}
+
+function mergeAccountIntoHealth(
+  base: ProviderHealth,
+  account: ProviderAccount | undefined,
+): ProviderHealth {
+  if (!account || base.status === 'missing' || base.status === 'error') return base;
+  if (!account.loggedIn && account.supportsLogin) {
+    return {
+      ...base,
+      status: 'unauthenticated',
+      detail: account.detail ?? 'Sign in required',
+    };
+  }
+  if (account.loggedIn && (account.label || account.detail)) {
+    return {
+      ...base,
+      detail: account.detail ?? base.detail,
+    };
+  }
+  return base;
+}
+
 /**
  * The daemon's provider inventory. CLI-backed providers are listed even when
- * missing so callers can show their real installation state.
+ * missing so callers can show their real installation state. Fake stays
+ * registered for offline fallback but is hidden from the Providers UI unless
+ * ROLEFLOCK_INCLUDE_FAKE=1.
  */
 export class ProviderRegistry {
   private readonly adapters = new AdapterRegistry();
@@ -102,10 +144,19 @@ export class ProviderRegistry {
     };
   }
 
-  async list(): Promise<RegisteredProvider[]> {
+  async list(options: { includeFake?: boolean } = {}): Promise<RegisteredProvider[]> {
+    const showFake = options.includeFake ?? includeFakeProvider();
+    const adapters = this.adapters
+      .list()
+      .filter((adapter) => showFake || adapter.id !== 'fake');
     return Promise.all(
-      this.adapters.list().map(async (adapter) => {
-        const health = await this.healthCheck(adapter.id);
+      adapters.map(async (adapter) => {
+        const base = (await adapter.healthCheck?.()) ?? { status: 'ready' as const };
+        const account =
+          adapter.id === 'fake'
+            ? undefined
+            : await getProviderAccount(adapter.id).catch(() => undefined);
+        const health = mergeAccountIntoHealth(base, account);
         return {
           id: adapter.id,
           displayName:
@@ -114,6 +165,7 @@ export class ProviderRegistry {
           health,
           capabilities: await this.capabilities(adapter.id),
           connectionType: connectionTypes[adapter.id] ?? 'cli',
+          account,
         };
       }),
     );
@@ -121,7 +173,15 @@ export class ProviderRegistry {
 
   async healthCheck(id: string): Promise<ProviderHealth> {
     const adapter = this.get(id);
-    return adapter.healthCheck?.() ?? { status: 'ready' };
+    const base = (await adapter.healthCheck?.()) ?? { status: 'ready' as const };
+    if (id === 'fake' || base.status === 'missing' || base.status === 'error') {
+      return base;
+    }
+    if (connectionTypes[id] === 'cli' || ['claude', 'codex', 'cursor'].includes(id)) {
+      const account = await getProviderAccount(id);
+      return mergeAccountIntoHealth(base, account);
+    }
+    return base;
   }
 
   async capabilities(id: string): Promise<ProviderCapabilities> {
@@ -131,5 +191,13 @@ export class ProviderRegistry {
 
   async models(id: string): Promise<ProviderModel[]> {
     return (await this.get(id).listModels?.()) ?? [];
+  }
+
+  async authAction(
+    id: string,
+    action: 'login' | 'logout' | 'switch',
+  ): Promise<AuthActionResult> {
+    if (!this.has(id)) throw new Error(`Provider not found: ${id}`);
+    return runProviderAuthAction(id, action);
   }
 }

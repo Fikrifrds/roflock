@@ -93,4 +93,36 @@ export class UsageRepository {
       entryCount: row.entryCount,
     };
   }
+
+  summarizeByProvider(providerConnectionId: string): {
+    actualCostUsd: number;
+    shadowCostUsd: number;
+    inputTokens: number;
+    outputTokens: number;
+    entryCount: number;
+  } {
+    const row = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(actual_cost_usd), 0) AS actual,
+                COALESCE(SUM(shadow_cost_usd), 0) AS shadow,
+                COALESCE(SUM(input_tokens), 0) AS inputTokens,
+                COALESCE(SUM(output_tokens), 0) AS outputTokens,
+                COUNT(*) AS entryCount
+         FROM usage_ledger_entries WHERE provider_connection_id = ?`,
+      )
+      .get(providerConnectionId) as {
+      actual: number;
+      shadow: number;
+      inputTokens: number;
+      outputTokens: number;
+      entryCount: number;
+    };
+    return {
+      actualCostUsd: row.actual,
+      shadowCostUsd: row.shadow,
+      inputTokens: row.inputTokens,
+      outputTokens: row.outputTokens,
+      entryCount: row.entryCount,
+    };
+  }
 }

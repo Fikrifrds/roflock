@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Task } from '@roleflock/contracts';
-import { ConfirmationRepository, EvidenceRepository, LocalKnowledgeRepository, PriceCardRepository, ProjectRepository, QuotaSnapshotRepository, TaskRepository, UsageRepository, type KnowledgeState, type KnowledgeType, type SqliteDb } from '@roleflock/database';
+import { AuditRepository, ApprovalGrantRepository, ConfirmationRepository, DisclosureGrantRepository, EvidenceRepository, LocalKnowledgeRepository, PriceCardRepository, ProjectRepository, QuotaSnapshotRepository, TaskRepository, UsageRepository, type KnowledgeState, type KnowledgeType, type SqliteDb } from '@roleflock/database';
 import { compileContext, ROLE_CONTRACTS, type RoleId } from '@roleflock/context-compiler';
 import { getWorkflowGraph, recommendWorkflow, workflowGraphs } from '@roleflock/graph-core';
 import { budgetStatus } from '@roleflock/usage-ledger';
@@ -12,6 +12,14 @@ import {
   chooseDirectory,
   DirectoryPickerCancelled,
 } from '../services/directory-picker.js';
+import {
+  backupLocalData,
+  buildDiagnosticsExport,
+  buildTaskAuditExport,
+  buildTaskEvidenceExport,
+  deleteLocalData,
+} from '../services/export-service.js';
+import { getProviderAccount } from '../services/cli-account.js';
 import { Orchestrator } from '../services/orchestrator.js';
 import { ProviderRegistry } from '../services/provider-registry.js';
 import {
@@ -19,6 +27,7 @@ import {
   isDocumentAuthority,
   isDocumentKind,
 } from '../services/documents.js';
+import { checkForUpdates, getLocalVersion } from '../services/version-check.js';
 
 export function registerApi(
   app: FastifyInstance,
@@ -28,8 +37,9 @@ export function registerApi(
   orchestrator: Orchestrator,
   providers: ProviderRegistry,
   documents: DocumentService,
+  dataDir: string,
 ): void {
-  const projects = new ProjectRepository(db), tasks = new TaskRepository(db), approvals = new ConfirmationRepository(db), evidence = new EvidenceRepository(db), usage = new UsageRepository(db);
+  const projects = new ProjectRepository(db), tasks = new TaskRepository(db), approvals = new ConfirmationRepository(db), approvalGrants = new ApprovalGrantRepository(db), disclosureGrants = new DisclosureGrantRepository(db), evidence = new EvidenceRepository(db), usage = new UsageRepository(db), audit = new AuditRepository(db);
   app.get('/api/health', async () => ({
     ok: true,
     status: 'ok',
@@ -119,6 +129,7 @@ export function registerApi(
       budgetPolicyId: 'local-default',
       expectedBehaviour: body.expectedBehaviour,
       actualBehaviour: body.actualBehaviour,
+      verificationCommand: body.verificationCommand,
       maxAttempts: body.maxAttempts ?? 3,
       maxActualCostUsd: body.maxActualCostUsd,
       createdAt: now(),
@@ -333,10 +344,160 @@ export function registerApi(
       return { accepted: true };
     });
   }
-  app.post('/api/approval-groups/:id/approve-all-once', async () => ({ accepted: true }));
-  app.post('/api/approval-grants', async () => ({ id: randomUUID(), accepted: true }));
-  app.post('/api/approval-grants/:id/revoke', async () => ({ accepted: true }));
-  app.get('/api/providers', async () => providers.list());
+  app.post('/api/approval-groups/:id/approve-all-once', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    const body = (request.body ?? {}) as { fingerprint?: string };
+    const source = approvals.get(id);
+    const fingerprint = body.fingerprint ?? source?.fingerprint;
+    if (!fingerprint) {
+      return reply.code(400).send({ error: 'fingerprint is required when confirmation id is unknown' });
+    }
+    const approved = orchestrator.approveAllByFingerprint(fingerprint);
+    audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'approval.approve_all_once',
+      targetType: 'confirmation',
+      targetId: id,
+      details: { fingerprint, approved },
+      createdAt: now(),
+    });
+    return { accepted: true, approved };
+  });
+  app.get('/api/approval-grants', async (request, reply) => {
+    const projectId = (request.query as { projectId?: string }).projectId;
+    if (!projectId) return reply.code(400).send({ error: 'projectId is required' });
+    return approvalGrants.listByProject(projectId);
+  });
+  app.post('/api/approval-grants', async (request, reply) => {
+    const body = request.body as {
+      projectId?: string;
+      scope?: string;
+      fingerprint?: string;
+      requestTypes?: string[];
+      maximumRisk?: string;
+      expiresAt?: string;
+      maximumApplications?: number;
+      maximumAdditionalCost?: number;
+    };
+    if (!body.projectId || !body.scope || !body.maximumRisk || !body.expiresAt) {
+      return reply
+        .code(400)
+        .send({ error: 'projectId, scope, maximumRisk, and expiresAt are required' });
+    }
+    if (!projects.get(body.projectId)) {
+      return reply.code(404).send({ error: 'Project not found' });
+    }
+    const grant = approvalGrants.create({
+      id: randomUUID(),
+      projectId: body.projectId,
+      scope: body.scope as Parameters<typeof approvalGrants.create>[0]['scope'],
+      fingerprint: body.fingerprint,
+      requestTypes: body.requestTypes,
+      maximumRisk: body.maximumRisk as Parameters<typeof approvalGrants.create>[0]['maximumRisk'],
+      maximumApplications: body.maximumApplications,
+      maximumAdditionalCost: body.maximumAdditionalCost,
+      expiresAt: body.expiresAt,
+      createdBy: 'local-user',
+      createdAt: now(),
+    });
+    audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'approval.grant.created',
+      targetType: 'approval_grant',
+      targetId: grant.id,
+      details: { projectId: grant.projectId, scope: grant.scope, fingerprint: grant.fingerprint },
+      createdAt: now(),
+    });
+    bus.publish('approval.grant.created', grant);
+    return reply.code(201).send(grant);
+  });
+  app.post('/api/approval-grants/:id/revoke', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    const existing = approvalGrants.get(id);
+    if (!existing) return reply.code(404).send({ error: 'Approval grant not found' });
+    approvalGrants.revoke(id, now());
+    audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'approval.grant.revoked',
+      targetType: 'approval_grant',
+      targetId: id,
+      createdAt: now(),
+    });
+    return { accepted: true };
+  });
+  app.get('/api/disclosure-grants', async (request) => {
+    const query = request.query as { projectId?: string; providerConnectionId?: string };
+    return disclosureGrants.list(query);
+  });
+  app.post('/api/disclosure-grants', async (request, reply) => {
+    const body = request.body as {
+      projectId?: string;
+      providerConnectionId?: string;
+      scope?: Record<string, unknown>;
+    };
+    if (!body.projectId || !body.providerConnectionId) {
+      return reply.code(400).send({ error: 'projectId and providerConnectionId are required' });
+    }
+    if (!projects.get(body.projectId)) {
+      return reply.code(404).send({ error: 'Project not found' });
+    }
+    try {
+      providers.get(body.providerConnectionId);
+    } catch {
+      return reply.code(404).send({ error: 'Provider not found' });
+    }
+    const grant = disclosureGrants.create({
+      id: randomUUID(),
+      projectId: body.projectId,
+      providerConnectionId: body.providerConnectionId,
+      scope: body.scope ?? { taskBrief: true, documents: true },
+      createdAt: now(),
+    });
+    audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'disclosure.grant.created',
+      targetType: 'disclosure_grant',
+      targetId: grant.id,
+      details: {
+        projectId: grant.projectId,
+        providerConnectionId: grant.providerConnectionId,
+      },
+      createdAt: now(),
+    });
+    return reply.code(201).send(grant);
+  });
+  app.post('/api/disclosure-grants/:id/revoke', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    const existing = disclosureGrants.get(id);
+    if (!existing) return reply.code(404).send({ error: 'Disclosure grant not found' });
+    disclosureGrants.revoke(id, now());
+    audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'disclosure.grant.revoked',
+      targetType: 'disclosure_grant',
+      targetId: id,
+      createdAt: now(),
+    });
+    return { accepted: true };
+  });
+  app.get('/api/providers', async () => {
+    const listed = await providers.list();
+    return listed.map((provider) => {
+      const summary = usage.summarizeByProvider(provider.id);
+      return {
+        ...provider,
+        localUsage: {
+          ...summary,
+          note: 'RoleFlock local meter for this provider — not the vendor billing dashboard.',
+        },
+      };
+    });
+  });
   app.post('/api/providers', async (request, reply) => {
     const body = request.body as {
       displayName?: string;
@@ -397,6 +558,44 @@ export function registerApi(
       return await providers.models(id);
     } catch {
       return reply.code(404).send({ error: 'Provider not found' });
+    }
+  });
+  app.get('/api/providers/:id/account', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    try {
+      providers.get(id);
+      const account = await getProviderAccount(id);
+      const summary = usage.summarizeByProvider(id);
+      return {
+        account,
+        localUsage: {
+          ...summary,
+          note: 'RoleFlock local meter for this provider — not the vendor billing dashboard.',
+        },
+      };
+    } catch {
+      return reply.code(404).send({ error: 'Provider not found' });
+    }
+  });
+  app.post('/api/providers/:id/auth/:action', async (request, reply) => {
+    const { id, action } = request.params as {
+      id: string;
+      action: string;
+    };
+    if (!['login', 'logout', 'switch'].includes(action)) {
+      return reply.code(400).send({ error: 'action must be login, logout, or switch' });
+    }
+    try {
+      const result = await providers.authAction(
+        id,
+        action as 'login' | 'logout' | 'switch',
+      );
+      bus.publish('provider.auth', result);
+      return result;
+    } catch (error) {
+      return reply.code(404).send({
+        error: error instanceof Error ? error.message : 'Provider not found',
+      });
     }
   });
   app.get('/api/evidence/tasks/:taskId', async (request) => evidence.getBundle((request.params as { taskId: string }).taskId));
@@ -477,6 +676,96 @@ export function registerApi(
     bus.publish('knowledge.created', item);
     return reply.code(201).send(item);
   });
+  app.get('/api/tasks/:id/export/evidence', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    if (!tasks.get(taskId)) return reply.code(404).send({ error: 'Task not found' });
+    const bundle = buildTaskEvidenceExport(db, taskId);
+    audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'export.evidence',
+      targetType: 'task',
+      targetId: taskId,
+      details: { itemCount: bundle.items.length },
+      createdAt: now(),
+    });
+    return bundle;
+  });
+  app.get('/api/tasks/:id/export/audit', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    if (!tasks.get(taskId)) return reply.code(404).send({ error: 'Task not found' });
+    const pack = buildTaskAuditExport(db, taskId);
+    audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'export.audit',
+      targetType: 'task',
+      targetId: taskId,
+      createdAt: now(),
+    });
+    return pack;
+  });
+  app.get('/api/diagnostics/export', async () => {
+    const pack = buildDiagnosticsExport(db, dataDir);
+    audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'export.diagnostics',
+      targetType: 'workspace',
+      targetId: 'local',
+      createdAt: now(),
+    });
+    return pack;
+  });
+  app.post('/api/data/backup', async () => {
+    const result = backupLocalData(dataDir);
+    audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'data.backup',
+      targetType: 'workspace',
+      targetId: 'local',
+      details: { files: result.files },
+      createdAt: now(),
+    });
+    return result;
+  });
+  app.post('/api/data/delete', async (request, reply) => {
+    const body = request.body as { confirm?: string };
+    if (body.confirm !== 'DELETE_LOCAL_DATA') {
+      return reply.code(400).send({
+        error: 'Send { "confirm": "DELETE_LOCAL_DATA" } to wipe local RoleFlock data',
+      });
+    }
+    audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'data.delete',
+      targetType: 'workspace',
+      targetId: 'local',
+      createdAt: now(),
+    });
+    db.close();
+    const result = deleteLocalData(dataDir);
+    return {
+      ...result,
+      note: 'Local SQLite, documents, and worktrees were wiped. Restart the daemon to continue.',
+    };
+  });
+  app.get('/api/version', async () => getLocalVersion());
+  app.get('/api/updates/check', async () => checkForUpdates());
+  app.get('/api/privacy', async () => ({
+    localOnly: true,
+    bind: '127.0.0.1',
+    repositoryContentsSent: false,
+    updateCheckSendsRepoData: false,
+    claims: [
+      'Daemon binds to loopback by default.',
+      'Exports redact API keys, tokens, and private key material.',
+      'Version/update checks must not send repository contents.',
+      'Local data can be backed up and deleted from Privacy.',
+    ],
+  }));
   app.get('/api/roles/contracts', async () => Object.values(ROLE_CONTRACTS));
   app.get('/api/tasks/:id/context-preview', async (request, reply) => {
     const task = tasks.get((request.params as { id: string }).id);

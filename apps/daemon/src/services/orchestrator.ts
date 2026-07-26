@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readdirSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ActiveExecution, Task } from '@roleflock/contracts';
-import { createConfirmationRequest } from '@roleflock/approval-engine';
+import type { ActiveExecution, ConfirmationRequest, Task } from '@roleflock/contracts';
+import { createConfirmationRequest, matchingGrant } from '@roleflock/approval-engine';
 import {
   buildRepositoryMap,
   compileContext,
@@ -11,18 +11,22 @@ import {
 } from '@roleflock/context-compiler';
 import {
   ActiveExecutionRepository,
+  ApprovalGrantRepository,
+  AuditRepository,
   ConfirmationRepository,
   ControlCommandRepository,
   EvidenceRepository,
   EventStore,
   InvocationRepository,
+  LeaseRepository,
   LocalKnowledgeRepository,
+  ProcessHandleRepository,
   TaskRepository,
   UsageRepository,
   WorktreeRepository,
   type SqliteDb,
 } from '@roleflock/database';
-import { runCommand } from '@roleflock/command-runner';
+import { runCommand, CommandError } from '@roleflock/command-runner';
 import { getWorkflowGraph, validateGraph, type WorkflowGraph } from '@roleflock/graph-core';
 import { runSequentialGraph } from '@roleflock/graph-runtime';
 import {
@@ -50,6 +54,12 @@ interface PreparedRun {
   baseCommit: string;
 }
 
+interface VerificationSpec {
+  command: string;
+  args: string[];
+  label: string;
+}
+
 export class Orchestrator {
   private readonly active = new Map<string, AbortController>();
   private readonly acceptanceWaiters = new Map<
@@ -69,6 +79,8 @@ export class Orchestrator {
   private readonly events: EventStore;
   private readonly confirmations: ConfirmationRepository;
   private readonly invocations: InvocationRepository;
+  private readonly leases: LeaseRepository;
+  private readonly processHandles: ProcessHandleRepository;
   private readonly worktreeBaseDir: string;
   private readonly providers?: ProviderRegistry;
   private readonly documents?: DocumentService;
@@ -91,6 +103,8 @@ export class Orchestrator {
     this.events = new EventStore(db);
     this.confirmations = new ConfirmationRepository(db);
     this.invocations = new InvocationRepository(db);
+    this.leases = new LeaseRepository(db);
+    this.processHandles = new ProcessHandleRepository(db);
     this.worktreeBaseDir = worktreeBaseDir;
     this.providers = providers;
     this.documents = documents;
@@ -148,10 +162,16 @@ export class Orchestrator {
       this.executions.upsert(execution);
       this.setTaskState(taskId, 'paused');
     }
-    if (['stop', 'force-terminate', 'cancel'].includes(commandType)) {
+    if (commandType === 'stop' || commandType === 'cancel') {
       execution.stopRequested = true;
       this.executions.upsert(execution);
       this.active.get(taskId)?.abort();
+    }
+    if (commandType === 'force-terminate') {
+      execution.stopRequested = true;
+      this.executions.upsert(execution);
+      this.active.get(taskId)?.abort();
+      this.forceKillTaskProcesses(taskId, execution.nodeRunId);
     }
     if (commandType === 'cancel') {
       const wt = this.worktrees.getByTask(taskId);
@@ -174,6 +194,14 @@ export class Orchestrator {
     this.confirmationWaiters.delete(id);
     const request = this.confirmations.get(id);
     if (request) this.setTaskState(request.taskId, 'running');
+  }
+
+  approveAllByFingerprint(fingerprint: string): number {
+    const pending = this.confirmations.listByFingerprint(fingerprint, 'pending');
+    for (const request of pending) {
+      this.resolveConfirmation(request.id, 'approved');
+    }
+    return pending.length;
   }
 
   private async prepareRun(
@@ -410,20 +438,46 @@ export class Orchestrator {
           riskClass: 'medium',
           stateHash: baseCommit,
         });
-        this.confirmations.create(confirmation);
-        this.setTaskState(task.id, 'awaiting_confirmation');
-        this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation', route);
-        this.bus.publish('approval.requested', confirmation);
-        const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
-        if (decision === 'rejected') throw new Error('Confirmation rejected');
+        const autoApproved = this.tryGrantAutoApproval(confirmation, task.projectId);
+        this.confirmations.create(autoApproved.request);
+        if (autoApproved.skipped) {
+          this.evidence.addFinding({
+            id: randomUUID(),
+            taskId: task.id,
+            nodeRunId,
+            severity: 'info',
+            summary: 'Reviewer confirmation auto-approved via grant',
+            details: confirmation.rationale,
+            createdAt: now(),
+          });
+        } else {
+          this.setTaskState(task.id, 'awaiting_confirmation');
+          this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation', route);
+          this.bus.publish('approval.requested', autoApproved.request);
+          const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
+          if (decision === 'rejected') throw new Error('Confirmation rejected');
+        }
       } else if (role === 'writer') {
         await this.assertDocumentConflictsResolved(task, graphRunId, nodeRunId, baseCommit, controller);
-        const lease = new WriterLease(worktreePath, nodeRunId);
-        if (!lease.acquire()) throw new Error('Writer lease unavailable');
+        const leaseId = randomUUID();
+        const memLease = new WriterLease(worktreePath, nodeRunId);
+        if (!memLease.acquire()) throw new Error('Writer lease unavailable');
+        try {
+          this.leases.tryAcquire({
+            id: leaseId,
+            resourceType: 'writer',
+            resourceId: worktreePath,
+            ownerId: nodeRunId,
+            acquiredAt: now(),
+          });
+        } catch {
+          memLease.release();
+          throw new Error('Writer lease unavailable (durable)');
+        }
         this.worktrees.setWriterLease(task.id, nodeRunId);
         try {
           const relativeTarget = 'ROLEFLOCK_FIX.md';
-          const content = `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'fake'}\n`;
+          const content = `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'fake'}\nVerification: ${task.verificationCommand ?? 'artefact-present / npm test / ROLEFLOCK_FORCE_FAKE'}\n`;
           const envelope = {
             worktree: worktreePath,
             allowedPaths: [relativeTarget],
@@ -446,32 +500,59 @@ export class Orchestrator {
               status: diff.status,
               providerId: route?.providerId,
               permissionEnvelope: envelope,
+              durableLeaseId: leaseId,
             },
             createdAt: now(),
           });
         } finally {
-          lease.release();
+          this.leases.release(leaseId, now());
+          memLease.release();
           this.worktrees.setWriterLease(task.id, null);
         }
       } else if (role === 'test') {
-        const result = await runCommand({
-          command: process.execPath,
-          args: ['-e', 'console.log("RoleFlock deterministic test passed")'],
-          cwd: worktreePath,
-          sandboxRoot: worktreePath,
-          timeoutMs: 15_000,
-        });
+        const verification = await this.resolveVerification(task, worktreePath);
+        let passed = false;
+        let exitCode: number | undefined;
+        let stdout = '';
+        let stderr = '';
+        try {
+          const result = await runCommand({
+            command: verification.command,
+            args: verification.args,
+            cwd: worktreePath,
+            sandboxRoot: worktreePath,
+            timeoutMs: 60_000,
+          });
+          passed = true;
+          exitCode = result.exitCode ?? 0;
+          stdout = result.stdout;
+          stderr = result.stderr;
+        } catch (error) {
+          if (error instanceof CommandError) {
+            exitCode = error.result.exitCode ?? undefined;
+            stdout = error.result.stdout;
+            stderr = error.result.stderr;
+            passed = false;
+          } else {
+            throw error;
+          }
+        }
         this.evidence.addTestRun({
           id: randomUUID(),
           taskId: task.id,
           nodeRunId,
-          command: `${process.execPath} -e test`,
-          exitCode: result.exitCode ?? undefined,
-          stdoutRef: result.stdout,
-          stderrRef: result.stderr,
-          passed: true,
+          command: verification.label,
+          exitCode,
+          stdoutRef: stdout,
+          stderrRef: stderr,
+          passed,
           createdAt: now(),
         });
+        if (!passed) {
+          throw new Error(
+            `Verification failed (${verification.label})${stderr ? `: ${stderr.slice(0, 400)}` : ''}`,
+          );
+        }
       } else if (role === 'accept') {
         this.setTaskState(task.id, 'awaiting_acceptance');
         this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation');
@@ -558,6 +639,30 @@ export class Orchestrator {
     }
   }
 
+  private tryGrantAutoApproval(
+    request: ConfirmationRequest,
+    projectId: string,
+  ): { request: ConfirmationRequest; skipped: boolean; grantId?: string } {
+    const grants = new ApprovalGrantRepository(this.db).listActive(projectId);
+    const grant = matchingGrant(request, grants);
+    if (!grant) return { request, skipped: false };
+    new ApprovalGrantRepository(this.db).incrementApplications(grant.id);
+    new AuditRepository(this.db).append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'approval.grant.applied',
+      targetType: 'confirmation',
+      targetId: request.id,
+      details: { grantId: grant.id, fingerprint: request.fingerprint },
+      createdAt: now(),
+    });
+    return {
+      request: { ...request, status: 'approved' },
+      skipped: true,
+      grantId: grant.id,
+    };
+  }
+
   private recordFailure(taskId: string, summary: string, details: string): void {
     this.evidence.addFinding({
       id: randomUUID(),
@@ -598,10 +703,24 @@ export class Orchestrator {
       riskClass: 'high',
       stateHash: baseCommit,
     });
-    this.confirmations.create(confirmation);
+    const autoApproved = this.tryGrantAutoApproval(confirmation, task.projectId);
+    this.confirmations.create(autoApproved.request);
+    if (autoApproved.skipped) {
+      this.evidence.addFinding({
+        id: randomUUID(),
+        taskId: task.id,
+        nodeRunId,
+        severity: 'info',
+        summary: 'Document conflict confirmation auto-approved via grant',
+        details: conflict,
+        createdAt: now(),
+      });
+      this.documentConflictResolved.add(task.id);
+      return;
+    }
     this.setTaskState(task.id, 'awaiting_confirmation');
     this.updateExecution(task, graphRunId, nodeRunId, 'writer', 'awaiting_confirmation');
-    this.bus.publish('approval.requested', confirmation);
+    this.bus.publish('approval.requested', autoApproved.request);
     const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
     if (decision === 'rejected') {
       throw new Error('Authoritative document conflict was rejected');
@@ -684,6 +803,63 @@ export class Orchestrator {
       throw error;
     }
     return output;
+  }
+
+  private forceKillTaskProcesses(taskId: string, nodeRunId: string): void {
+    for (const handle of this.processHandles.listRunning()) {
+      if (handle.nodeRunId !== nodeRunId) continue;
+      try {
+        if (handle.pgid && process.platform !== 'win32') {
+          process.kill(-handle.pgid, 'SIGKILL');
+        } else {
+          process.kill(handle.pid, 'SIGKILL');
+        }
+      } catch {
+        // process may already be gone
+      }
+      this.processHandles.setStatus(handle.id, 'terminated', now());
+    }
+    this.bus.publish('control.force_killed', { taskId, nodeRunId });
+  }
+
+  private async resolveVerification(
+    task: Task,
+    worktreePath: string,
+  ): Promise<VerificationSpec> {
+    if (this.forceFake) {
+      return {
+        command: process.execPath,
+        args: ['-e', 'console.log("RoleFlock deterministic test passed")'],
+        label: 'deterministic-fake',
+      };
+    }
+    if (task.verificationCommand?.trim()) {
+      const parts = task.verificationCommand.trim().split(/\s+/).filter(Boolean);
+      const command = parts[0]!;
+      return {
+        command,
+        args: parts.slice(1),
+        label: task.verificationCommand.trim(),
+      };
+    }
+    try {
+      const pkg = JSON.parse(await readFile(join(worktreePath, 'package.json'), 'utf8')) as {
+        scripts?: Record<string, string>;
+      };
+      if (pkg.scripts?.test) {
+        return { command: 'npm', args: ['test', '--silent'], label: 'npm test' };
+      }
+    } catch {
+      // no package.json / no test script
+    }
+    return {
+      command: process.execPath,
+      args: [
+        '-e',
+        "require('fs').accessSync('ROLEFLOCK_FIX.md'); console.log('verified artefact present')",
+      ],
+      label: 'artefact-present',
+    };
   }
 
   private assertBudget(task: Task): void {
@@ -780,7 +956,7 @@ export class Orchestrator {
       currentActivity: route?.fallbackUsed
         ? `${role} executing (fallback)`
         : `${role} executing`,
-      activeCommandPreview: role === 'test' ? 'node -e deterministic-test' : undefined,
+      activeCommandPreview: role === 'test' ? 'verification command' : undefined,
       startedAt: timestamp,
       lastHeartbeatAt: timestamp,
       attempt: 1,
