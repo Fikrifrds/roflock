@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BrowserRouter, Link, Route, Routes, useNavigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Link, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { createApi } from './lib/api.js';
 import './styles.css';
 
@@ -151,6 +151,76 @@ function useData<T>(key: string[], path: string, enabled = true) {
   });
 }
 
+const TASK_STATE_LABELS: Record<string, string> = {
+  ready: 'Ready to start',
+  running: 'Running',
+  paused: 'Paused',
+  awaiting_confirmation: 'Needs approval',
+  awaiting_acceptance: 'Needs acceptance',
+  succeeded: 'Completed',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+};
+
+function formatTaskState(state: string): string {
+  return TASK_STATE_LABELS[state] ?? state.replaceAll('_', ' ');
+}
+
+function taskStateTone(state: string): 'ok' | 'warn' | 'danger' | 'muted' | 'info' {
+  if (state === 'succeeded') return 'ok';
+  if (state === 'failed' || state === 'cancelled') return 'danger';
+  if (state === 'awaiting_confirmation' || state === 'awaiting_acceptance') return 'warn';
+  if (state === 'running') return 'info';
+  return 'muted';
+}
+
+function formatPhase(phase: string | undefined, state: string): string {
+  if (!phase) return formatTaskState(state);
+  const labels: Record<string, string> = {
+    reasoning: 'Thinking',
+    writing: 'Writing changes',
+    running_tests: 'Running verification',
+    awaiting_confirmation: 'Waiting for approval',
+    awaiting_acceptance: 'Waiting for acceptance',
+  };
+  return labels[phase] ?? phase.replaceAll('_', ' ');
+}
+
+function providerTone(provider: Provider): 'ok' | 'warn' | 'danger' | 'muted' | 'info' {
+  if (provider.status === 'missing' || provider.status === 'error') return 'danger';
+  if (
+    provider.status === 'unauthenticated' ||
+    (provider.account && !provider.account.loggedIn && provider.account.supportsLogin)
+  ) {
+    return 'warn';
+  }
+  if (provider.status === 'ready') return 'ok';
+  return 'muted';
+}
+
+function providerStatusLabel(provider: Provider): string {
+  if (provider.status === 'missing') return 'Not installed';
+  if (provider.status === 'error') return 'Error';
+  if (
+    provider.status === 'unauthenticated' ||
+    (provider.account && !provider.account.loggedIn && provider.account.supportsLogin)
+  ) {
+    return 'Sign in required';
+  }
+  if (provider.status === 'ready') return 'Ready';
+  return provider.status;
+}
+
+function StatusPill({
+  tone,
+  children,
+}: {
+  tone: 'ok' | 'warn' | 'danger' | 'muted' | 'info';
+  children: ReactNode;
+}) {
+  return <span className={`status-pill ${tone}`}>{children}</span>;
+}
+
 function Shell({ children }: { children: ReactNode }) {
   const [live, setLive] = useState(false);
   useEffect(() => {
@@ -167,15 +237,22 @@ function Shell({ children }: { children: ReactNode }) {
         <Link className="wordmark" to="/">
           ROLE<span>FLOCK</span>
         </Link>
-        <nav>
-          <Link to="/projects">Projects</Link>
-          <Link to="/tasks/new">New task</Link>
-          <Link to="/approvals">Approvals</Link>
-          <Link to="/knowledge">Knowledge</Link>
-          <Link to="/providers">Providers</Link>
-          <Link to="/privacy">Privacy</Link>
+        <nav aria-label="Primary">
+          <NavLink to="/" end>
+            Home
+          </NavLink>
+          <NavLink to="/projects">Projects</NavLink>
+          <NavLink to="/tasks/new">New task</NavLink>
+          <NavLink to="/approvals">Approvals</NavLink>
+          <NavLink to="/providers">Providers</NavLink>
+          <NavLink to="/knowledge" className="nav-secondary">
+            Knowledge
+          </NavLink>
+          <NavLink to="/privacy" className="nav-secondary">
+            Privacy
+          </NavLink>
         </nav>
-        <i className={live ? 'live' : ''}>{live ? 'DAEMON LINKED' : 'CONNECTING'}</i>
+        <i className={live ? 'live' : ''}>{live ? 'Connected' : 'Connecting…'}</i>
       </header>
       <main>{children}</main>
     </>
@@ -207,7 +284,7 @@ function Home() {
   return (
     <Shell>
       <section className="hero">
-        <p>LOCAL-FIRST AGENT CONTROL PLANE</p>
+        <p>LOCAL-FIRST AGENT CONTROL</p>
         <h1>
           Build with a flock,
           <br />
@@ -215,8 +292,21 @@ function Home() {
         </h1>
         <div className="health">
           {health?.ok
-            ? `● Daemon healthy on ${health.host ?? '127.0.0.1'}:${health.port ?? 4178}`
-            : '○ Checking local daemon'}
+            ? `Daemon healthy on ${health.host ?? '127.0.0.1'}:${health.port ?? 4178}`
+            : 'Checking local daemon…'}
+        </div>
+        <div className="hero-actions">
+          <Link className="buttonish" to="/tasks/new">
+            New task
+          </Link>
+          <Link className="quiet buttonish" to="/projects">
+            Projects
+          </Link>
+          {approvals.length ? (
+            <Link className="quiet buttonish" to="/approvals">
+              {approvals.length} approval{approvals.length === 1 ? '' : 's'} waiting
+            </Link>
+          ) : null}
         </div>
       </section>
       <div className="status-strip" aria-label="Flock status">
@@ -225,17 +315,20 @@ function Home() {
           <b>{health?.ok ? 'Healthy' : 'Checking'}</b>
         </div>
         <div>
-          <span>Pending approvals</span>
-          <b>{approvals.length}</b>
+          <span>Needs you</span>
+          <b>{approvals.length ? `${approvals.length} approval${approvals.length === 1 ? '' : 's'}` : 'Nothing pending'}</b>
         </div>
         <div>
           <span>Tasks</span>
           <b>
-            {Object.entries(stateCounts).length
-              ? Object.entries(stateCounts)
-                  .map(([state, count]) => `${count} ${state}`)
-                  .join(' · ')
-              : 'No tasks'}
+            {tasks.length
+              ? `${tasks.length} total · ${
+                  Object.entries(stateCounts)
+                    .map(([state, count]) => `${count} ${formatTaskState(state).toLowerCase()}`)
+                    .slice(0, 3)
+                    .join(', ')
+                }`
+              : 'None yet'}
           </b>
         </div>
         {usage ? (
@@ -245,11 +338,21 @@ function Home() {
           </div>
         ) : null}
       </div>
-      <Section title="Recent flights">
+      <Section title="Recent tasks">
         {tasks.length ? (
           tasks.map((task) => <TaskCard key={task.id} task={task} />)
         ) : (
-          <Empty message="No work has entered the flock yet." />
+          <div className="empty-cta">
+            <Empty message="No tasks yet. Register a project, then create a Verified Fix task." />
+            <div className="actions">
+              <Link className="buttonish" to="/projects">
+                Add a project
+              </Link>
+              <Link className="quiet buttonish" to="/tasks/new">
+                Create a task
+              </Link>
+            </div>
+          </div>
         )}
       </Section>
     </Shell>
@@ -257,7 +360,7 @@ function Home() {
 }
 
 function Projects() {
-  const { data: projects = [], refetch } = useData<Project[]>(['projects'], '/api/projects');
+  const { data: projects = [], refetch, isLoading } = useData<Project[]>(['projects'], '/api/projects');
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
@@ -274,6 +377,9 @@ function Projects() {
   return (
     <Shell>
       <Section title="Projects">
+        <p className="lede">
+          Register a local Git repository. Tasks run inside an isolated worktree of that repo.
+        </p>
         <form
           className="stack"
           onSubmit={async (event: FormEvent) => {
@@ -346,12 +452,16 @@ function Projects() {
                 }
               }}
             >
-              {choosing ? 'Choosing…' : 'Choose…'}
+              {choosing ? 'Choosing…' : 'Choose folder'}
             </button>
           </div>
-          <button type="submit">Add repository</button>
+          <button type="submit">Add project</button>
           {error ? <p className="error">{error}</p> : null}
         </form>
+        {isLoading ? <Empty message="Loading projects…" /> : null}
+        {!isLoading && projects.length === 0 ? (
+          <Empty message="No projects yet. Add a repository above to create tasks." />
+        ) : null}
         {projects.map((project) => (
           <article className="row" key={project.id}>
             <div className="project-meta">
@@ -470,6 +580,20 @@ function NewTask() {
   return (
     <Shell>
       <Section title="New task">
+        <p className="lede">
+          Describe the work. RoleFlock picks a smallest-sufficient workflow — override only if you
+          need a heavier path.
+        </p>
+        {projects.length === 0 ? (
+          <div className="empty-cta">
+            <Empty message="Add a project first, then come back to create a task." />
+            <div className="actions">
+              <Link className="buttonish" to="/projects">
+                Go to Projects
+              </Link>
+            </div>
+          </div>
+        ) : null}
         <form
           className="stack task-form"
           onSubmit={async (event: FormEvent) => {
@@ -859,20 +983,66 @@ function TaskDetail() {
   return (
     <Shell>
       <Section title={task.title}>
+        <div className="task-header">
+          <StatusPill tone={taskStateTone(task.state)}>{formatTaskState(task.state)}</StatusPill>
+          <small>
+            {task.type.replaceAll('_', ' ')} · risk {task.risk} · {task.workflowGraphVersionId}
+          </small>
+        </div>
         <p className="lede">{task.brief}</p>
         {actionError || latestError ? (
           <p className="error">
             {actionError || latestError?.details || latestError?.summary}
           </p>
         ) : null}
+
+        <div className="actions primary-actions">
+          {task.state === 'ready' || task.state === 'failed' ? (
+            <button type="button" disabled={starting} onClick={() => void action('start')}>
+              {starting ? 'Starting…' : task.state === 'failed' ? 'Retry task' : 'Start task'}
+            </button>
+          ) : null}
+          {!waiting && task.state === 'running' ? (
+            <>
+              <button type="button" className="quiet" onClick={() => void action('pause')}>
+                Pause
+              </button>
+              <button type="button" className="quiet" onClick={() => void action('stop')}>
+                Stop
+              </button>
+              <button
+                type="button"
+                className="danger"
+                title="Kill the active process immediately"
+                onClick={() => void action('force-terminate')}
+              >
+                Force stop
+              </button>
+            </>
+          ) : null}
+          {task.state === 'paused' ? (
+            <button type="button" onClick={() => void action('start')}>
+              Resume
+            </button>
+          ) : null}
+          {task.state === 'running' || task.state === 'paused' || waiting ? (
+            <button type="button" className="quiet" onClick={() => void action('cancel')}>
+              Cancel task
+            </button>
+          ) : null}
+          <Link className="quiet buttonish" to={`/tasks/${id}/evidence`}>
+            Evidence
+          </Link>
+        </div>
+
         {pending.length > 0 ? (
           <article className="pending-banner">
-            <p className="eyebrow">PENDING CONFIRMATION</p>
-            <h3>Reviewer is waiting for your decision</h3>
+            <p className="eyebrow">YOUR DECISION NEEDED</p>
+            <h3>Approve to continue, or reject to stop this step</h3>
             {pending.map((approval) => (
               <div key={approval.id} className="pending-item">
                 <p>
-                  <b>{approval.requestType}</b> — {approval.rationale}
+                  <b>{approval.requestType.replaceAll('_', ' ')}</b> — {approval.rationale}
                 </p>
                 <div className="actions">
                   <button type="button" onClick={() => void decide(approval.id, 'approve')}>
@@ -895,7 +1065,7 @@ function TaskDetail() {
         ) : null}
         {task.state === 'awaiting_acceptance' && pending.length === 0 ? (
           <article className="pending-banner">
-            <p className="eyebrow">HUMAN ACCEPTANCE</p>
+            <p className="eyebrow">ACCEPT THE RESULT</p>
             <h3>Verification finished — accept or reject the change</h3>
             <div className="actions">
               <button type="button" onClick={() => void action('accept')}>
@@ -907,8 +1077,76 @@ function TaskDetail() {
             </div>
           </article>
         ) : null}
-        <article className="documents-panel">
-          <p className="eyebrow">SUPPORTING DOCUMENTS</p>
+
+        {workflow ? (
+          <ol className="workflow-steps" aria-label="Workflow steps">
+            {workflow.roles.map((role) => {
+              const active = execution?.roleDisplayName === role;
+              return (
+                <li key={role} className={active ? 'active' : undefined}>
+                  {role}
+                </li>
+              );
+            })}
+          </ol>
+        ) : null}
+
+        <article className="execution">
+          <p className="eyebrow">NOW</p>
+          <h2>{formatPhase(execution?.phase, task.state)}</h2>
+          <dl>
+            {(
+              [
+                ['Current role', execution?.roleDisplayName ?? 'Waiting to start'],
+                ['Provider', execution?.providerDisplayName ?? '—'],
+                ['Activity', execution?.currentActivity ?? 'Idle'],
+                ['Attempt', `${execution?.attempt ?? 0} / ${task.maxAttempts}`],
+                [
+                  'Actual cost',
+                  `$${(execution?.actualCost ?? 0).toFixed(4)}`,
+                ],
+                [
+                  'Budget left',
+                  task.maxActualCostUsd === undefined
+                    ? 'No hard cap'
+                    : `$${Math.max(0, task.maxActualCostUsd - (execution?.actualCost ?? 0)).toFixed(4)}`,
+                ],
+              ] as const
+            ).map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+          <details className="raw-json">
+            <summary>More run details</summary>
+            <dl>
+              {(
+                [
+                  ['Model', execution?.configuredModelDisplayName ?? '—'],
+                  ['Effort', execution?.effort ?? 'standard'],
+                  ['Permission', execution?.permissionProfileId ?? '—'],
+                  ['Command', execution?.activeCommandPreview ?? '—'],
+                  ['Heartbeat', execution?.lastHeartbeatAt ?? '—'],
+                  [
+                    'Shadow cost',
+                    `$${(execution?.shadowCost ?? 0).toFixed(4)} (estimate, not a bill)`,
+                  ],
+                  ['Usage confidence', execution?.usageConfidence ?? 'exact'],
+                ] as const
+              ).map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        </article>
+
+        <details className="documents-panel">
+          <summary className="eyebrow">Supporting documents ({taskDocuments.length})</summary>
           {taskDocuments.length ? (
             <ul className="doc-list">
               {taskDocuments.map((doc) => (
@@ -916,7 +1154,7 @@ function TaskDetail() {
                   <div>
                     <b>{doc.fileName}</b>
                     <small>
-                      {doc.kind} · {doc.authority} · sha256 {doc.sha256.slice(0, 12)}…
+                      {doc.kind} · {doc.authority}
                     </small>
                     {doc.extractedTextPreview ? (
                       <small>{doc.extractedTextPreview}</small>
@@ -926,7 +1164,7 @@ function TaskDetail() {
               ))}
             </ul>
           ) : (
-            <p className="hint">No documents attached. Optional — tasks can start without them.</p>
+            <p className="hint">Optional. Attach notes that should inform planning.</p>
           )}
           <div className="two-col">
             <select
@@ -977,89 +1215,7 @@ function TaskDetail() {
               }
             }}
           />
-        </article>
-        {workflow ? (
-          <ol className="workflow-steps" aria-label="Workflow graph">
-            {workflow.roles.map((role) => {
-              const active = execution?.roleDisplayName === role;
-              return (
-                <li key={role} className={active ? 'active' : undefined}>
-                  {role}
-                </li>
-              );
-            })}
-          </ol>
-        ) : null}
-        <article className="execution">
-          <p className="eyebrow">ACTIVE EXECUTION</p>
-          <h2>{execution?.phase ?? task.state}</h2>
-          <dl>
-            {(
-              [
-                ['Role', execution?.roleDisplayName ?? 'Awaiting start'],
-                ['Provider', execution?.providerDisplayName ?? '—'],
-                ['Configured model', execution?.configuredModelDisplayName ?? '—'],
-                ['Effort', execution?.effort ?? 'standard'],
-                ['Permission profile', execution?.permissionProfileId ?? '—'],
-                ['Activity', execution?.currentActivity ?? 'Ready'],
-                ['Tool / command', execution?.activeCommandPreview ?? '—'],
-                ['Heartbeat', execution?.lastHeartbeatAt ?? '—'],
-                ['Attempt', `${execution?.attempt ?? 0}/${task.maxAttempts}`],
-                [
-                  'Actual cost',
-                  `$${(execution?.actualCost ?? 0).toFixed(4)}`,
-                ],
-                [
-                  'Shadow cost',
-                  `$${(execution?.shadowCost ?? 0).toFixed(4)} (not a bill)`,
-                ],
-                [
-                  'Budget remaining',
-                  task.maxActualCostUsd === undefined
-                    ? 'No hard cap'
-                    : `$${Math.max(0, task.maxActualCostUsd - (execution?.actualCost ?? 0)).toFixed(4)} of $${task.maxActualCostUsd.toFixed(4)}`,
-                ],
-                ['Usage confidence', execution?.usageConfidence ?? 'exact'],
-                ['Workflow', task.workflowGraphVersionId],
-              ] as const
-            ).map(([label, value]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-          <div className="actions">
-            {task.state === 'ready' || task.state === 'failed' ? (
-              <button type="button" disabled={starting} onClick={() => void action('start')}>
-                {starting ? 'Starting…' : task.state === 'failed' ? 'Retry' : 'Start'}
-              </button>
-            ) : null}
-            {!waiting && task.state === 'running' ? (
-              <>
-                <button type="button" className="quiet" onClick={() => void action('pause')}>
-                  Pause
-                </button>
-                <button type="button" className="quiet" onClick={() => void action('stop')}>
-                  Stop
-                </button>
-                <button
-                  type="button"
-                  className="quiet"
-                  onClick={() => void action('force-terminate')}
-                >
-                  Force
-                </button>
-              </>
-            ) : null}
-            <button type="button" className="quiet" onClick={() => void action('cancel')}>
-              Cancel
-            </button>
-            <Link className="quiet buttonish" to={`/tasks/${id}/evidence`}>
-              Evidence
-            </Link>
-          </div>
-        </article>
+        </details>
       </Section>
     </Shell>
   );
@@ -1126,21 +1282,23 @@ function Approvals() {
 
   return (
     <Shell>
-      <Section title="Approval inbox">
+      <Section title="Approvals">
+        <p className="lede">Decisions waiting before a task can continue.</p>
         {data.length ? (
           data.map((approval) => {
             const sameFingerprint = fingerprintCounts[approval.fingerprint] ?? 1;
             return (
               <article className="row" key={approval.id}>
                 <div>
-                  <b>{approval.requestType}</b>
+                  <b>{approval.requestType.replaceAll('_', ' ')}</b>
                   <small>{approval.rationale}</small>
-                  <small>risk {approval.riskClass}</small>
-                  <small>fingerprint {approval.fingerprint.slice(0, 12)}…</small>
+                  <small>Risk: {approval.riskClass}</small>
                   {sameFingerprint > 1 ? (
-                    <small>{sameFingerprint} pending with this fingerprint</small>
+                    <small>{sameFingerprint} similar requests pending</small>
                   ) : null}
-                  {approval.taskId ? <Link to={`/tasks/${approval.taskId}`}>Open task</Link> : null}
+                  {approval.taskId ? (
+                    <Link to={`/tasks/${approval.taskId}`}>Open related task</Link>
+                  ) : null}
                 </div>
                 <div className="actions">
                   <button
@@ -1185,23 +1343,21 @@ function Approvals() {
             );
           })
         ) : (
-          <Empty message="No confirmations are waiting." />
+          <Empty message="Nothing waiting. When a reviewer needs you, it shows up here." />
         )}
         {grantOffer ? (
-          <article className="row">
-            <div>
-              <b>Grant reuse for identical actions?</b>
-              <small>
-                Allow matching confirmations for the next 24 hours without asking again (fingerprint{' '}
-                {grantOffer.approval.fingerprint.slice(0, 12)}…).
-              </small>
-            </div>
+          <article className="pending-banner">
+            <p className="eyebrow">OPTIONAL</p>
+            <h3>Remember this approval for 24 hours?</h3>
+            <p className="hint">
+              Matching confirmations can continue without asking again.
+            </p>
             <div className="actions">
               <button type="button" onClick={() => void createGrant()}>
-                Also grant reuse (24h)
+                Remember for 24h
               </button>
               <button type="button" className="quiet" onClick={() => setGrantOffer(null)}>
-                Skip
+                Not now
               </button>
             </div>
           </article>
@@ -1728,8 +1884,8 @@ function Providers() {
     <Shell>
       <Section title="Providers">
         <p className="lede">
-          Real CLI discovery plus optional OpenAI-compatible endpoints. Sign in per CLI, switch
-          accounts when needed, and track RoleFlock local usage for each connection.
+          Connect the CLIs RoleFlock will use. Sign in here when asked, then open vendor usage for
+          plan limits.
         </p>
         {providersLoading ? (
           <Empty message="Loading providers…" />
@@ -1740,147 +1896,157 @@ function Providers() {
                 Updating providers…
               </p>
             ) : null}
-            {visible.map((provider) => (
-            <article className="provider-card" key={provider.id}>
-              <div className="row">
-                <div>
-                  <b>{provider.displayName}</b>
-                  <small>id {provider.id}</small>
-                  <small>
-                    {provider.connectionType ?? 'cli'} · {provider.status}
-                  </small>
-                  {provider.account ? (
-                    <small>
-                      {provider.account.loggedIn
-                        ? `account ${provider.account.email ?? provider.account.label ?? 'signed in'}`
-                        : 'account not signed in'}
-                      {provider.account.subscriptionType
-                        ? ` · ${provider.account.subscriptionType}`
-                        : ''}
-                    </small>
+            {visible.map((provider) => {
+              const needsLogin =
+                Boolean(provider.account) &&
+                !provider.account!.loggedIn &&
+                provider.account!.supportsLogin;
+              const accountLabel = provider.account?.loggedIn
+                ? provider.account.email ?? provider.account.label ?? 'Signed in'
+                : needsLogin
+                  ? 'Not signed in'
+                  : provider.account?.label ?? null;
+              return (
+                <article className="provider-card" key={provider.id}>
+                  <div className="row">
+                    <div className="provider-meta">
+                      <div className="provider-title">
+                        <b>{provider.displayName}</b>
+                        <StatusPill tone={providerTone(provider)}>
+                          {providerStatusLabel(provider)}
+                        </StatusPill>
+                      </div>
+                      {accountLabel ? <small>{accountLabel}</small> : null}
+                      {provider.account?.subscriptionType ? (
+                        <small>{provider.account.subscriptionType}</small>
+                      ) : null}
+                      {provider.account?.detail && !expanded[provider.id] ? (
+                        <p className="hint truncate">{provider.account.detail}</p>
+                      ) : null}
+                    </div>
+                    <div className="actions compact-actions">
+                      {needsLogin ? (
+                        <button
+                          type="button"
+                          disabled={authBusy[provider.id]}
+                          onClick={() => void runAuth(provider.id, 'login')}
+                        >
+                          {authBusy[provider.id] ? 'Opening…' : 'Sign in'}
+                        </button>
+                      ) : null}
+                      {(provider.account?.usageLinks ?? []).map((link) => (
+                        <a
+                          key={link.id}
+                          className="quiet buttonish"
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={link.hint}
+                        >
+                          {link.label}
+                        </a>
+                      ))}
+                      <button
+                        type="button"
+                        className="quiet"
+                        onClick={() =>
+                          setExpanded((current) => ({
+                            ...current,
+                            [provider.id]: !current[provider.id],
+                          }))
+                        }
+                      >
+                        {expanded[provider.id] ? 'Hide details' : 'Details'}
+                      </button>
+                    </div>
+                  </div>
+                  {provider.localUsage ? (
+                    <div className="provider-usage">
+                      <p>
+                        <span>Local meter</span>
+                        {provider.localUsage.entryCount} calls ·{' '}
+                        {provider.localUsage.inputTokens + provider.localUsage.outputTokens} tokens ·
+                        ${provider.localUsage.actualCostUsd.toFixed(4)}
+                      </p>
+                    </div>
                   ) : null}
-                  {provider.health?.detail ? <small>{provider.health.detail}</small> : null}
-                </div>
-                <div className="actions compact-actions">
-                  {provider.account && !provider.account.loggedIn && provider.account.supportsLogin ? (
-                    <button
-                      type="button"
-                      disabled={authBusy[provider.id]}
-                      onClick={() => void runAuth(provider.id, 'login')}
-                    >
-                      Login
-                    </button>
+                  {authNote[provider.id] ? <p className="hint">{authNote[provider.id]}</p> : null}
+                  {health[provider.id] ? <p className="hint">Health: {health[provider.id]}</p> : null}
+                  {expanded[provider.id] ? (
+                    <div className="provider-details">
+                      {provider.account?.detail ? (
+                        <p className="hint">{provider.account.detail}</p>
+                      ) : null}
+                      <div className="actions compact-actions">
+                        {provider.account?.loggedIn && provider.account.supportsSwitch ? (
+                          <button
+                            type="button"
+                            className="quiet"
+                            disabled={authBusy[provider.id]}
+                            onClick={() => void runAuth(provider.id, 'switch')}
+                          >
+                            Switch account
+                          </button>
+                        ) : null}
+                        {provider.account?.loggedIn && provider.account.supportsLogin ? (
+                          <button
+                            type="button"
+                            className="quiet"
+                            disabled={authBusy[provider.id]}
+                            onClick={() => void runAuth(provider.id, 'logout')}
+                          >
+                            Sign out
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="quiet"
+                          onClick={async () => {
+                            setHealth((current) => ({ ...current, [provider.id]: 'Checking…' }));
+                            try {
+                              const result = await api.request<{
+                                healthy: boolean;
+                                status: string;
+                                detail?: string;
+                              }>(`/api/providers/${provider.id}/health-check`, { method: 'POST' });
+                              setHealth((current) => ({
+                                ...current,
+                                [provider.id]: result.detail
+                                  ? `${result.status}: ${result.detail}`
+                                  : result.status,
+                              }));
+                              await queryClient.invalidateQueries({ queryKey: ['providers'] });
+                            } catch (error) {
+                              setHealth((current) => ({
+                                ...current,
+                                [provider.id]:
+                                  error instanceof Error ? error.message : 'Health check failed',
+                              }));
+                            }
+                          }}
+                        >
+                          Check health
+                        </button>
+                      </div>
+                      <div className="capabilities">
+                        {Object.entries(provider.capabilities).map(([name, enabled]) => (
+                          <span
+                            key={name}
+                            className={enabled ? 'capability enabled' : 'capability'}
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                      <ProviderModels providerId={provider.id} />
+                    </div>
                   ) : null}
-                  {provider.account?.loggedIn && provider.account.supportsSwitch ? (
-                    <button
-                      type="button"
-                      className="quiet"
-                      disabled={authBusy[provider.id]}
-                      onClick={() => void runAuth(provider.id, 'switch')}
-                    >
-                      Switch account
-                    </button>
-                  ) : null}
-                  {provider.account?.loggedIn && provider.account.supportsLogin ? (
-                    <button
-                      type="button"
-                      className="quiet"
-                      disabled={authBusy[provider.id]}
-                      onClick={() => void runAuth(provider.id, 'logout')}
-                    >
-                      Logout
-                    </button>
-                  ) : null}
-                  {(provider.account?.usageLinks ?? []).map((link) => (
-                    <a
-                      key={link.id}
-                      className="quiet buttonish"
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      title={link.hint}
-                    >
-                      {link.label}
-                    </a>
-                  ))}
-                  <button
-                    type="button"
-                    className="quiet"
-                    onClick={async () => {
-                      setHealth((current) => ({ ...current, [provider.id]: 'Checking…' }));
-                      try {
-                        const result = await api.request<{
-                          healthy: boolean;
-                          status: string;
-                          detail?: string;
-                        }>(`/api/providers/${provider.id}/health-check`, { method: 'POST' });
-                        setHealth((current) => ({
-                          ...current,
-                          [provider.id]: result.detail
-                            ? `${result.status}: ${result.detail}`
-                            : result.status,
-                        }));
-                        await queryClient.invalidateQueries({ queryKey: ['providers'] });
-                      } catch (error) {
-                        setHealth((current) => ({
-                          ...current,
-                          [provider.id]:
-                            error instanceof Error ? error.message : 'Health check failed',
-                        }));
-                      }
-                    }}
-                  >
-                    Check health
-                  </button>
-                  <button
-                    type="button"
-                    className="quiet"
-                    onClick={() =>
-                      setExpanded((current) => ({
-                        ...current,
-                        [provider.id]: !current[provider.id],
-                      }))
-                    }
-                  >
-                    {expanded[provider.id] ? 'Hide details' : 'Show details'}
-                  </button>
-                </div>
-              </div>
-              <div className="capabilities">
-                {Object.entries(provider.capabilities).map(([name, enabled]) => (
-                  <span key={name} className={enabled ? 'capability enabled' : 'capability'}>
-                    {name}: {enabled ? 'yes' : 'no'}
-                  </span>
-                ))}
-              </div>
-              {provider.localUsage ? (
-                <div className="provider-usage">
-                  <p>
-                    <span>local usage</span>{' '}
-                    {provider.localUsage.entryCount} calls ·{' '}
-                    {provider.localUsage.inputTokens + provider.localUsage.outputTokens} tokens ·
-                    actual ${provider.localUsage.actualCostUsd.toFixed(4)} · shadow $
-                    {provider.localUsage.shadowCostUsd.toFixed(4)}
-                  </p>
-                  <p className="hint">{provider.localUsage.note}</p>
-                  {(provider.account?.usageLinks ?? []).length ? (
-                    <p className="hint">
-                      Plan limits (5h / week / month) live on the vendor dashboard — use the usage
-                      buttons above. Claude: also run <code>/usage</code> inside an interactive{' '}
-                      <code>claude</code> session.
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
-              {provider.account?.detail ? <p className="hint">{provider.account.detail}</p> : null}
-              {health[provider.id] ? <p className="hint">Health: {health[provider.id]}</p> : null}
-              {authNote[provider.id] ? <p className="hint">{authNote[provider.id]}</p> : null}
-              {expanded[provider.id] ? <ProviderModels providerId={provider.id} /> : null}
-            </article>
-          ))}
+                </article>
+              );
+            })}
           </>
         ) : (
-          <Empty message="No providers are configured yet." />
+          <Empty message="No providers found. Install Claude, Codex, or Cursor Agent CLI, then refresh." />
         )}
       </Section>
       <Section title="Add OpenAI-compatible provider">
@@ -1930,11 +2096,9 @@ function Providers() {
             onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
           />
           {formError ? <p className="error">{formError}</p> : null}
-          <div className="form-actions">
-            <button type="submit" disabled={saving}>
-              {saving ? 'Saving…' : 'Register provider'}
-            </button>
-          </div>
+          <button type="submit" disabled={saving}>
+            {saving ? 'Saving…' : 'Register provider'}
+          </button>
         </form>
       </Section>
       <Section title="Disclosure grants">
@@ -2110,10 +2274,10 @@ function TaskCard({ task }: { task: Task }) {
       <div>
         <b>{task.title}</b>
         <small>
-          {task.type} · {task.state}
+          {task.type.replaceAll('_', ' ')} · {formatTaskState(task.state)}
         </small>
       </div>
-      <em>{task.risk}</em>
+      <StatusPill tone={taskStateTone(task.state)}>{formatTaskState(task.state)}</StatusPill>
     </Link>
   );
 }
@@ -2146,9 +2310,10 @@ function App() {
       <Shell>
         <Section title="Before you start">
           <p className="lede">
-            RoleFlock is local-first. Confirm these privacy claims before registering a repository.
+            RoleFlock stays on your machine. Confirm these points, then add a project and create a
+            task.
           </p>
-          <ul className="stack">
+          <ul className="claim-list">
             {(privacy?.claims ?? [
               'Daemon binds to 127.0.0.1 by default.',
               'Exports redact API keys and tokens.',
@@ -2157,11 +2322,6 @@ function App() {
               <li key={claim}>{claim}</li>
             ))}
           </ul>
-          <p className="hint">
-            Full guide:{' '}
-            <code>docs/product/verified-fix-onboarding.md</code> · Privacy page available anytime
-            after continue.
-          </p>
           <div className="form-actions">
             <button
               type="button"
@@ -2170,7 +2330,7 @@ function App() {
                 setPrivacyAccepted(true);
               }}
             >
-              Continue locally
+              Continue
             </button>
           </div>
         </Section>

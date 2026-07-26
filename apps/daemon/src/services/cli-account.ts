@@ -67,7 +67,7 @@ export function usageLinksFor(providerId: string): ProviderUsageLink[] {
       return [
         {
           id: 'cursor-spending',
-          label: 'Cursor spending',
+          label: 'Cursor usage',
           url: 'https://cursor.com/dashboard/spending',
           hint: 'Cursor plan usage and spending dashboard.',
         },
@@ -358,8 +358,8 @@ async function getCursorAccount(): Promise<ProviderAccount> {
     email = parsed.email;
     detail = loggedIn
       ? parsed.message
-        ? `${parsed.message} (${discovery.binary})`
-        : `Signed in via Cursor Agent CLI (${discovery.binary}).`
+        ? parsed.message
+        : 'Signed in via Cursor Agent CLI'
       : `Cursor Agent CLI found but not signed in. Run: agent login`;
   } catch {
     // Soft fallback: app presence only.
