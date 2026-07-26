@@ -202,6 +202,32 @@ nav a.nav-secondary {
   margin-bottom: 12px;
 }
 
+.advanced-panel {
+  margin: 18px 0 8px;
+  padding: 14px 0;
+  border-top: 1px solid #ffffff14;
+}
+
+.advanced-panel > summary {
+  cursor: pointer;
+  color: #edae49;
+  font-family: Fraunces, serif;
+  font-size: 20px;
+  list-style: none;
+}
+
+.advanced-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-panel[open] > summary {
+  margin-bottom: 16px;
+}
+
+.advanced-panel .section-title {
+  font-size: 24px;
+}
+
 header i {
   margin-left: auto;
   font-size: 11px;

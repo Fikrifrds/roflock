@@ -577,14 +577,22 @@ function NewTask() {
     }
   }, [recommendation?.mode, modeTouched]);
 
+  useEffect(() => {
+    if (!form.projectId && projects[0]) {
+      setForm((current) => ({ ...current, projectId: projects[0]!.id }));
+    }
+  }, [projects, form.projectId]);
+
+  const noProjects = projects.length === 0;
+
   return (
     <Shell>
       <Section title="New task">
         <p className="lede">
-          Describe the work. RoleFlock picks a smallest-sufficient workflow — override only if you
-          need a heavier path.
+          Pick a project, describe the work, and send it. RoleFlock chooses a workflow unless you
+          override it below.
         </p>
-        {projects.length === 0 ? (
+        {noProjects ? (
           <div className="empty-cta">
             <Empty message="Add a project first, then come back to create a task." />
             <div className="actions">
@@ -593,7 +601,7 @@ function NewTask() {
               </Link>
             </div>
           </div>
-        ) : null}
+        ) : (
         <form
           className="stack task-form"
           onSubmit={async (event: FormEvent) => {
@@ -640,7 +648,6 @@ function NewTask() {
             value={form.projectId}
             onChange={(e) => setForm({ ...form, projectId: e.target.value })}
           >
-            <option value="">Choose a project</option>
             {projects.map((project) => (
               <option key={project.id} value={project.id}>
                 {project.name}
@@ -675,58 +682,6 @@ function NewTask() {
             ))}
           </div>
 
-          <label className="field-label" htmlFor="task-risk">
-            Risk
-          </label>
-          <select
-            id="task-risk"
-            value={form.risk}
-            onChange={(e) => {
-              setModeTouched(false);
-              setForm({ ...form, risk: e.target.value });
-            }}
-          >
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="critical">Critical</option>
-          </select>
-
-          <label className="field-label" htmlFor="workflow-mode">
-            Workflow mode
-          </label>
-          <select
-            id="workflow-mode"
-            value={form.mode}
-            onChange={(e) => {
-              setModeTouched(true);
-              setForm({ ...form, mode: e.target.value });
-            }}
-          >
-            {(workflows.length
-              ? workflows
-              : [
-                  { id: 'bug_fix', label: 'Verified Bug Fix', description: '' },
-                  { id: 'direct', label: 'Direct', description: '' },
-                  { id: 'fast', label: 'Fast', description: '' },
-                  { id: 'standard', label: 'Standard', description: '' },
-                  { id: 'critical', label: 'Critical Feature', description: '' },
-                ]
-            ).map((workflow) => (
-              <option key={workflow.id} value={workflow.id}>
-                {workflow.label}
-              </option>
-            ))}
-          </select>
-          <small className="hint">
-            {recommendation
-              ? `Recommended: ${recommendation.label}. ${recommendation.rationale}${
-                  modeTouched && form.mode !== recommendation.mode ? ' (overridden)' : ''
-                }`
-              : workflows.find((workflow) => workflow.id === form.mode)?.description ??
-                'Choose the smallest sufficient execution path.'}
-          </small>
-
           <label className="field-label" htmlFor="task-title">
             Title
           </label>
@@ -752,158 +707,212 @@ function NewTask() {
             <div className="two-col">
               <div>
                 <label className="field-label" htmlFor="task-expected">
-                  Expected behaviour
+                  Expected
                 </label>
                 <textarea
                   id="task-expected"
                   className="compact"
-                  placeholder="Optional"
+                  placeholder="What should happen?"
                   value={form.expectedBehaviour}
                   onChange={(e) => setForm({ ...form, expectedBehaviour: e.target.value })}
                 />
               </div>
               <div>
                 <label className="field-label" htmlFor="task-actual">
-                  Actual behaviour
+                  Actual
                 </label>
                 <textarea
                   id="task-actual"
                   className="compact"
-                  placeholder="Optional"
+                  placeholder="What happens instead?"
                   value={form.actualBehaviour}
                   onChange={(e) => setForm({ ...form, actualBehaviour: e.target.value })}
                 />
               </div>
             </div>
           ) : null}
-          <label className="field-label" htmlFor="task-verify">
-            Verification command
-          </label>
-          <input
-            id="task-verify"
-            placeholder="Optional — e.g. npm test (defaults to artefact check or package.json test)"
-            value={form.verificationCommand}
-            onChange={(e) => setForm({ ...form, verificationCommand: e.target.value })}
-          />
-          <p className="hint">
-            RoleFlock runs this inside the task worktree after the writer. Leave blank to use{' '}
-            <code>npm test</code> when present, otherwise check that <code>ROLEFLOCK_FIX.md</code>{' '}
-            exists.
-          </p>
-          <div className="two-col">
-            <div>
-              <label className="field-label" htmlFor="task-attempts">
-                Max attempts
-              </label>
-              <input
-                id="task-attempts"
-                type="number"
-                min={1}
-                value={form.maxAttempts}
-                onChange={(e) => setForm({ ...form, maxAttempts: Number(e.target.value) })}
-              />
-            </div>
-            <div>
-              <label className="field-label" htmlFor="task-budget">
-                Max actual cost (USD)
-              </label>
-              <input
-                id="task-budget"
-                type="number"
-                min={0}
-                step={0.01}
-                value={form.maxActualCostUsd}
-                onChange={(e) => setForm({ ...form, maxActualCostUsd: Number(e.target.value) })}
-              />
-            </div>
-          </div>
-          <p className="field-label">Supporting documents (optional)</p>
-          <small className="hint">
-            Original files are stored locally with SHA-256 hashes. A task can start with none.
-          </small>
-          <div className="two-col">
-            <div>
-              <label className="field-label" htmlFor="doc-kind">
-                Kind
-              </label>
-              <select
-                id="doc-kind"
-                value={docDraft.kind}
-                onChange={(e) => setDocDraft({ ...docDraft, kind: e.target.value })}
-              >
-                <option value="prd">PRD</option>
-                <option value="implementation_plan">Implementation plan</option>
-                <option value="architecture">Architecture</option>
-                <option value="api_spec">API spec</option>
-                <option value="ticket">Ticket</option>
-                <option value="research">Research</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div>
-              <label className="field-label" htmlFor="doc-authority">
-                Authority
-              </label>
-              <select
-                id="doc-authority"
-                value={docDraft.authority}
-                onChange={(e) => setDocDraft({ ...docDraft, authority: e.target.value })}
-              >
-                <option value="authoritative_requirement">Authoritative requirement</option>
-                <option value="approved_plan">Approved plan</option>
-                <option value="reference">Reference</option>
-                <option value="inspiration_only">Inspiration only</option>
-              </select>
-            </div>
-          </div>
-          <label className="field-label" htmlFor="doc-file">
-            Attach text file
-          </label>
-          <input
-            id="doc-file"
-            type="file"
-            accept=".md,.txt,.json,.yaml,.yml,.csv"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              const content = await file.text();
-              setPendingDocs((current) => [
-                ...current,
-                {
-                  fileName: file.name,
-                  kind: docDraft.kind,
-                  authority: docDraft.authority,
-                  content,
-                },
-              ]);
-              e.target.value = '';
-            }}
-          />
-          {pendingDocs.length ? (
-            <ul className="doc-list">
-              {pendingDocs.map((doc, index) => (
-                <li key={`${doc.fileName}-${index}`}>
-                  {doc.fileName} · {doc.kind} · {doc.authority}
-                  <button
-                    type="button"
-                    className="quiet"
-                    onClick={() =>
-                      setPendingDocs((current) => current.filter((_, i) => i !== index))
-                    }
-                  >
-                    Remove
-                  </button>
-                </li>
+
+          <details className="advanced-panel">
+            <summary>Advanced options</summary>
+            <p className="hint">
+              {recommendation
+                ? `Suggested workflow: ${recommendation.label}. ${recommendation.rationale}${
+                    modeTouched && form.mode !== recommendation.mode ? ' (overridden)' : ''
+                  }`
+                : 'Leave defaults unless you need a heavier path or custom verification.'}
+            </p>
+            <label className="field-label" htmlFor="task-risk">
+              Risk
+            </label>
+            <select
+              id="task-risk"
+              value={form.risk}
+              onChange={(e) => {
+                setModeTouched(false);
+                setForm({ ...form, risk: e.target.value });
+              }}
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+
+            <label className="field-label" htmlFor="workflow-mode">
+              Workflow
+            </label>
+            <select
+              id="workflow-mode"
+              value={form.mode}
+              onChange={(e) => {
+                setModeTouched(true);
+                setForm({ ...form, mode: e.target.value });
+              }}
+            >
+              {(workflows.length
+                ? workflows
+                : [
+                    { id: 'bug_fix', label: 'Verified Bug Fix', description: '' },
+                    { id: 'direct', label: 'Direct', description: '' },
+                    { id: 'fast', label: 'Fast', description: '' },
+                    { id: 'standard', label: 'Standard', description: '' },
+                    { id: 'critical', label: 'Critical Feature', description: '' },
+                  ]
+              ).map((workflow) => (
+                <option key={workflow.id} value={workflow.id}>
+                  {workflow.label}
+                </option>
               ))}
-            </ul>
-          ) : null}
+            </select>
+
+            <label className="field-label" htmlFor="task-verify">
+              Verification command
+            </label>
+            <input
+              id="task-verify"
+              placeholder="Optional — e.g. npm test"
+              value={form.verificationCommand}
+              onChange={(e) => setForm({ ...form, verificationCommand: e.target.value })}
+            />
+            <p className="hint">
+              Runs in the worktree after the writer. Blank uses <code>npm test</code> when present.
+            </p>
+            <div className="two-col">
+              <div>
+                <label className="field-label" htmlFor="task-attempts">
+                  Max attempts
+                </label>
+                <input
+                  id="task-attempts"
+                  type="number"
+                  min={1}
+                  value={form.maxAttempts}
+                  onChange={(e) => setForm({ ...form, maxAttempts: Number(e.target.value) })}
+                />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="task-budget">
+                  Max cost (USD)
+                </label>
+                <input
+                  id="task-budget"
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  value={form.maxActualCostUsd}
+                  onChange={(e) => setForm({ ...form, maxActualCostUsd: Number(e.target.value) })}
+                />
+              </div>
+            </div>
+
+            <p className="field-label">Supporting documents</p>
+            <p className="hint">Optional. Stored locally with a hash.</p>
+            <div className="two-col">
+              <div>
+                <label className="field-label" htmlFor="doc-kind">
+                  Kind
+                </label>
+                <select
+                  id="doc-kind"
+                  value={docDraft.kind}
+                  onChange={(e) => setDocDraft({ ...docDraft, kind: e.target.value })}
+                >
+                  <option value="prd">PRD</option>
+                  <option value="implementation_plan">Implementation plan</option>
+                  <option value="architecture">Architecture</option>
+                  <option value="api_spec">API spec</option>
+                  <option value="ticket">Ticket</option>
+                  <option value="research">Research</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="field-label" htmlFor="doc-authority">
+                  Authority
+                </label>
+                <select
+                  id="doc-authority"
+                  value={docDraft.authority}
+                  onChange={(e) => setDocDraft({ ...docDraft, authority: e.target.value })}
+                >
+                  <option value="authoritative_requirement">Authoritative requirement</option>
+                  <option value="approved_plan">Approved plan</option>
+                  <option value="reference">Reference</option>
+                  <option value="inspiration_only">Inspiration only</option>
+                </select>
+              </div>
+            </div>
+            <label className="field-label" htmlFor="doc-file">
+              Attach text file
+            </label>
+            <input
+              id="doc-file"
+              type="file"
+              accept=".md,.txt,.json,.yaml,.yml,.csv"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const content = await file.text();
+                setPendingDocs((current) => [
+                  ...current,
+                  {
+                    fileName: file.name,
+                    kind: docDraft.kind,
+                    authority: docDraft.authority,
+                    content,
+                  },
+                ]);
+                e.target.value = '';
+              }}
+            />
+            {pendingDocs.length ? (
+              <ul className="doc-list">
+                {pendingDocs.map((doc, index) => (
+                  <li key={`${doc.fileName}-${index}`}>
+                    {doc.fileName} · {doc.kind}
+                    <button
+                      type="button"
+                      className="quiet"
+                      onClick={() =>
+                        setPendingDocs((current) => current.filter((_, i) => i !== index))
+                      }
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </details>
+
           {error ? <p className="error">{error}</p> : null}
           <div className="form-actions">
             <button type="submit" disabled={submitting || !form.projectId}>
-              {submitting ? 'Sending…' : 'Send to flock'}
+              {submitting ? 'Creating…' : 'Create task'}
             </button>
           </div>
         </form>
+        )}
       </Section>
     </Shell>
   );
@@ -1396,10 +1405,10 @@ function Knowledge() {
 
   return (
     <Shell>
-      <Section title="Local knowledge">
-        <p className="hint">
-          Durable notes compiled into role context when published. Candidates stay local until you
-          promote them.
+      <Section title="Knowledge">
+        <p className="lede">
+          Notes that can be included in agent context when marked published. Drafts stay as
+          candidates until you promote them.
         </p>
         <form
           className="stack"
@@ -1703,11 +1712,11 @@ function Privacy() {
   return (
     <Shell>
       <Section title="Privacy & local data">
-        <p className="hint">
-          RoleFlock keeps task state on this machine. Exports are redacted; repository contents are
-          not uploaded for version checks.
+        <p className="lede">
+          Everything stays on this machine. Use backup/export when you need a copy; delete wipes
+          RoleFlock data only (not your git repos).
         </p>
-        <ul className="stack">
+        <ul className="claim-list">
           {(privacy?.claims ?? []).map((claim) => (
             <li key={claim}>{claim}</li>
           ))}
@@ -2049,10 +2058,11 @@ function Providers() {
           <Empty message="No providers found. Install Claude, Codex, or Cursor Agent CLI, then refresh." />
         )}
       </Section>
+      <details className="advanced-panel">
+        <summary>Add custom provider or disclosure allow-list</summary>
       <Section title="Add OpenAI-compatible provider">
         <p className="lede">
-          Point RoleFlock at any OpenAI-compatible chat completions endpoint for the reviewer
-          role.
+          Optional. Point RoleFlock at a local or remote OpenAI-compatible endpoint for reviewer.
         </p>
         <form className="stack" onSubmit={(event) => void onRegister(event)}>
           <label className="field-label" htmlFor="provider-name">
@@ -2101,10 +2111,9 @@ function Providers() {
           </button>
         </form>
       </Section>
-      <Section title="Disclosure grants">
-        <p className="hint">
-          Explicitly allow a provider connection to receive compiled task briefs and supporting
-          documents for a project.
+      <Section title="Allow provider access to briefs">
+        <p className="lede">
+          Let a provider receive task briefs and attached docs for one project.
         </p>
         <form
           className="stack"
@@ -2121,7 +2130,7 @@ function Providers() {
                   scope: { taskBrief: true, documents: true },
                 }),
               });
-              setDisclosureNote('Disclosure grant created.');
+              setDisclosureNote('Access allowed.');
               setDisclosureForm({ projectId: '', providerConnectionId: '' });
               void refetchDisclosure();
             } catch (error) {
@@ -2168,25 +2177,25 @@ function Providers() {
             ))}
           </select>
           <button type="submit" disabled={disclosureBusy}>
-            {disclosureBusy ? 'Saving…' : 'Allow task briefs + docs'}
+            {disclosureBusy ? 'Saving…' : 'Allow briefs + docs'}
           </button>
           {disclosureNote ? <p className="hint">{disclosureNote}</p> : null}
         </form>
         {disclosureGrants.filter((grant) => !grant.revokedAt).length ? (
           disclosureGrants
             .filter((grant) => !grant.revokedAt)
-            .map((grant) => (
+            .map((grant) => {
+              const projectName =
+                projects.find((project) => project.id === grant.projectId)?.name ??
+                grant.projectId.slice(0, 8);
+              const providerName =
+                visible.find((provider) => provider.id === grant.providerConnectionId)
+                  ?.displayName ?? grant.providerConnectionId;
+              return (
               <article className="row" key={grant.id}>
                 <div>
-                  <b>{grant.providerConnectionId}</b>
-                  <small>project {grant.projectId.slice(0, 8)}…</small>
-                  <small>
-                    scope{' '}
-                    {Object.entries(grant.scope)
-                      .filter(([, enabled]) => enabled)
-                      .map(([key]) => key)
-                      .join(', ') || 'custom'}
-                  </small>
+                  <b>{providerName}</b>
+                  <small>{projectName}</small>
                 </div>
                 <button
                   type="button"
@@ -2201,11 +2210,13 @@ function Providers() {
                   Revoke
                 </button>
               </article>
-            ))
+              );
+            })
         ) : (
-          <Empty message="No active disclosure grants." />
+          <Empty message="No allow-list entries yet." />
         )}
       </Section>
+      </details>
     </Shell>
   );
 }
