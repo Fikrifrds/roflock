@@ -1,18 +1,11 @@
 import { useState, type FormEvent } from 'react';
+import { Field } from '../components/Field.js';
+import { Select, type SelectOption } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
 import { Empty, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
+import { KNOWLEDGE_STATES, KNOWLEDGE_TYPES, withAnyOption } from '../lib/choices.js';
 import type { KnowledgeItem, Project } from '../types.js';
-
-const KNOWLEDGE_TYPES = [
-  ['architecture_decision', 'Architecture decision'],
-  ['coding_convention', 'Coding convention'],
-  ['past_failure', 'Past failure'],
-  ['review_rule', 'Review rule'],
-  ['test_pattern', 'Test pattern'],
-  ['security_rule', 'Security rule'],
-  ['rejected_approach', 'Rejected approach'],
-] as const;
 
 export function Knowledge() {
   const { data: projects = [] } = useData<Project[]>(['projects'], '/api/projects');
@@ -39,6 +32,15 @@ export function Knowledge() {
   });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const projectOptions: SelectOption[] = [
+    { value: '', label: 'Workspace-wide', description: 'Applies to every project' },
+    ...projects.map((project) => ({
+      value: project.id,
+      label: project.name,
+      description: project.resolvedPath,
+    })),
+  ];
 
   return (
     <Shell>
@@ -73,73 +75,66 @@ export function Knowledge() {
             }
           }}
         >
-          <label className="field-label" htmlFor="knowledge-project">
-            Project (optional)
-          </label>
-          <select
-            id="knowledge-project"
-            value={form.projectId}
-            onChange={(e) => setForm({ ...form, projectId: e.target.value })}
-          >
-            <option value="">Workspace-wide</option>
-            {projects.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
+          <Field label="Project" htmlFor="knowledge-project" optional>
+            {({ id }) => (
+              <Select
+                id={id}
+                labelledBy={`${id}-label`}
+                value={form.projectId}
+                options={projectOptions}
+                onChange={(projectId) => setForm({ ...form, projectId })}
+              />
+            )}
+          </Field>
           <div className="two-col">
-            <div>
-              <label className="field-label" htmlFor="knowledge-type">
-                Type
-              </label>
-              <select
-                id="knowledge-type"
-                value={form.type}
-                onChange={(e) => setForm({ ...form, type: e.target.value })}
-              >
-                {KNOWLEDGE_TYPES.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="field-label" htmlFor="knowledge-state">
-                State
-              </label>
-              <select
-                id="knowledge-state"
-                value={form.state}
-                onChange={(e) =>
-                  setForm({ ...form, state: e.target.value as 'candidate' | 'published' })
-                }
-              >
-                <option value="candidate">Candidate</option>
-                <option value="published">Published</option>
-              </select>
-            </div>
+            <Field label="Type" htmlFor="knowledge-type">
+              {({ id }) => (
+                <Select
+                  id={id}
+                  labelledBy={`${id}-label`}
+                  value={form.type}
+                  options={KNOWLEDGE_TYPES}
+                  onChange={(type) => setForm({ ...form, type })}
+                />
+              )}
+            </Field>
+            <Field label="State" htmlFor="knowledge-state">
+              {({ id }) => (
+                <Select
+                  id={id}
+                  labelledBy={`${id}-label`}
+                  value={form.state}
+                  options={KNOWLEDGE_STATES}
+                  onChange={(state) =>
+                    setForm({ ...form, state: state as 'candidate' | 'published' })
+                  }
+                />
+              )}
+            </Field>
           </div>
-          <label className="field-label" htmlFor="knowledge-title">
-            Title
-          </label>
-          <input
-            id="knowledge-title"
-            required
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-          />
-          <label className="field-label" htmlFor="knowledge-body">
-            Body
-          </label>
-          <textarea
-            id="knowledge-body"
-            className="compact"
-            required
-            value={form.body}
-            onChange={(e) => setForm({ ...form, body: e.target.value })}
-          />
+          <Field label="Title" htmlFor="knowledge-title">
+            {({ id }) => (
+              <input
+                id={id}
+                required
+                placeholder="Short, searchable summary"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+              />
+            )}
+          </Field>
+          <Field label="Body" htmlFor="knowledge-body">
+            {({ id }) => (
+              <textarea
+                id={id}
+                className="compact"
+                required
+                placeholder="The rule, decision, or lesson — and why it holds"
+                value={form.body}
+                onChange={(e) => setForm({ ...form, body: e.target.value })}
+              />
+            )}
+          </Field>
           {error ? (
             <p className="error" role="alert">
               {error}
@@ -153,54 +148,39 @@ export function Knowledge() {
 
       <Section title="Library">
         <div className="two-col">
-          <div>
-            <label className="field-label" htmlFor="filter-project">
-              Project
-            </label>
-            <select
-              id="filter-project"
-              value={projectFilter}
-              onChange={(e) => setProjectFilter(e.target.value)}
-            >
-              <option value="">All projects</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="field-label" htmlFor="filter-type">
-              Type
-            </label>
-            <select
-              id="filter-type"
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-            >
-              <option value="">All types</option>
-              {KNOWLEDGE_TYPES.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="field-label" htmlFor="filter-state">
-              State
-            </label>
-            <select
-              id="filter-state"
-              value={stateFilter}
-              onChange={(e) => setStateFilter(e.target.value)}
-            >
-              <option value="">All states</option>
-              <option value="candidate">Candidate</option>
-              <option value="published">Published</option>
-            </select>
-          </div>
+          <Field label="Project" htmlFor="filter-project">
+            {({ id }) => (
+              <Select
+                id={id}
+                labelledBy={`${id}-label`}
+                value={projectFilter}
+                options={withAnyOption(projectOptions.slice(1), 'All projects')}
+                onChange={setProjectFilter}
+              />
+            )}
+          </Field>
+          <Field label="Type" htmlFor="filter-type">
+            {({ id }) => (
+              <Select
+                id={id}
+                labelledBy={`${id}-label`}
+                value={typeFilter}
+                options={withAnyOption(KNOWLEDGE_TYPES, 'All types')}
+                onChange={setTypeFilter}
+              />
+            )}
+          </Field>
+          <Field label="State" htmlFor="filter-state">
+            {({ id }) => (
+              <Select
+                id={id}
+                labelledBy={`${id}-label`}
+                value={stateFilter}
+                options={withAnyOption(KNOWLEDGE_STATES, 'All states')}
+                onChange={setStateFilter}
+              />
+            )}
+          </Field>
         </div>
         {data.length ? (
           data.map((item) => (

@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Field } from '../components/Field.js';
 import { ProviderModels } from '../components/ProviderModels.js';
+import { Select } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
 import { Empty, Section, StatusPill } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
@@ -256,46 +258,56 @@ export function Providers() {
             Optional. Point RoleFlock at a local or remote OpenAI-compatible endpoint for reviewer.
           </p>
           <form className="stack" onSubmit={(event) => void onRegister(event)}>
-            <label className="field-label" htmlFor="provider-name">
-              Display name
-            </label>
-            <input
-              id="provider-name"
-              required
-              placeholder="Local OpenAI-compatible"
-              value={form.displayName}
-              onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-            />
-            <label className="field-label" htmlFor="provider-endpoint">
-              Endpoint
-            </label>
-            <input
-              id="provider-endpoint"
-              required
-              placeholder="http://127.0.0.1:11434/v1"
-              value={form.endpoint}
-              onChange={(e) => setForm({ ...form, endpoint: e.target.value })}
-            />
-            <label className="field-label" htmlFor="provider-model">
-              Model
-            </label>
-            <input
-              id="provider-model"
-              required
-              placeholder="gpt-4o-mini"
-              value={form.model}
-              onChange={(e) => setForm({ ...form, model: e.target.value })}
-            />
-            <label className="field-label" htmlFor="provider-key">
-              API key
-            </label>
-            <input
-              id="provider-key"
-              type="password"
-              placeholder="Optional for local endpoints"
-              value={form.apiKey}
-              onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-            />
+            <Field label="Display name" htmlFor="provider-name">
+              {({ id }) => (
+                <input
+                  id={id}
+                  required
+                  placeholder="Local OpenAI-compatible"
+                  value={form.displayName}
+                  onChange={(e) => setForm({ ...form, displayName: e.target.value })}
+                />
+              )}
+            </Field>
+            <Field label="Endpoint" htmlFor="provider-endpoint">
+              {({ id }) => (
+                <input
+                  id={id}
+                  required
+                  placeholder="http://127.0.0.1:11434/v1"
+                  value={form.endpoint}
+                  onChange={(e) => setForm({ ...form, endpoint: e.target.value })}
+                />
+              )}
+            </Field>
+            <Field label="Model" htmlFor="provider-model">
+              {({ id }) => (
+                <input
+                  id={id}
+                  required
+                  placeholder="gpt-4o-mini"
+                  value={form.model}
+                  onChange={(e) => setForm({ ...form, model: e.target.value })}
+                />
+              )}
+            </Field>
+            <Field
+              label="API key"
+              htmlFor="provider-key"
+              optional
+              hint="Stored locally and redacted from every export."
+            >
+              {({ id, describedBy }) => (
+                <input
+                  id={id}
+                  aria-describedby={describedBy}
+                  type="password"
+                  placeholder="Not needed for most local endpoints"
+                  value={form.apiKey}
+                  onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+                />
+              )}
+            </Field>
             {formError ? (
               <p className="error" role="alert">
                 {formError}
@@ -338,40 +350,42 @@ export function Providers() {
               }
             }}
           >
-            <label className="field-label" htmlFor="disclosure-project">
-              Project
-            </label>
-            <select
-              id="disclosure-project"
-              required
-              value={disclosureForm.projectId}
-              onChange={(e) => setDisclosureForm({ ...disclosureForm, projectId: e.target.value })}
-            >
-              <option value="">Choose a project</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-            <label className="field-label" htmlFor="disclosure-provider">
-              Provider
-            </label>
-            <select
-              id="disclosure-provider"
-              required
-              value={disclosureForm.providerConnectionId}
-              onChange={(e) =>
-                setDisclosureForm({ ...disclosureForm, providerConnectionId: e.target.value })
-              }
-            >
-              <option value="">Choose a provider</option>
-              {visible.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.displayName}
-                </option>
-              ))}
-            </select>
+            <Field label="Project" htmlFor="disclosure-project">
+              {({ id }) => (
+                <Select
+                  id={id}
+                  labelledBy={`${id}-label`}
+                  required
+                  placeholder="Choose a project"
+                  value={disclosureForm.projectId}
+                  options={projects.map((project) => ({
+                    value: project.id,
+                    label: project.name,
+                    description: project.resolvedPath,
+                  }))}
+                  onChange={(projectId) => setDisclosureForm({ ...disclosureForm, projectId })}
+                />
+              )}
+            </Field>
+            <Field label="Provider" htmlFor="disclosure-provider">
+              {({ id }) => (
+                <Select
+                  id={id}
+                  labelledBy={`${id}-label`}
+                  required
+                  placeholder="Choose a provider"
+                  value={disclosureForm.providerConnectionId}
+                  options={visible.map((provider) => ({
+                    value: provider.id,
+                    label: provider.displayName,
+                    description: providerStatusLabel(provider),
+                  }))}
+                  onChange={(providerConnectionId) =>
+                    setDisclosureForm({ ...disclosureForm, providerConnectionId })
+                  }
+                />
+              )}
+            </Field>
             <button type="submit" disabled={disclosureBusy}>
               {disclosureBusy ? 'Saving…' : 'Allow briefs + docs'}
             </button>

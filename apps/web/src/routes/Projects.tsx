@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Field } from '../components/Field.js';
 import { Shell } from '../components/Shell.js';
 import { Empty, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
@@ -48,59 +49,74 @@ export function Projects() {
             }
           }}
         >
-          <label className="field-label" htmlFor="repo-name">
-            Display name
-          </label>
-          <input
-            id="repo-name"
-            placeholder="e.g. Tilaqa Web"
-            value={name}
-            onChange={(e) => {
-              setNameTouched(true);
-              setName(e.target.value);
-            }}
-          />
-          <label className="field-label" htmlFor="repo-path">
-            Local path
-          </label>
-          <div className="path-row">
-            <input
-              id="repo-path"
-              placeholder="Select or paste a Git repository path"
-              value={path}
-              onChange={(e) => {
-                const next = e.target.value;
-                setPath(next);
-                if (!nameTouched) setName(suggestNameFromPath(next));
-              }}
-              required
-            />
-            <button
-              type="button"
-              className="quiet"
-              disabled={choosing}
-              onClick={async () => {
-                setError('');
-                setChoosing(true);
-                try {
-                  const result = await api.request<{ path: string | null; cancelled: boolean }>(
-                    '/api/dialogs/choose-directory',
-                    { method: 'POST' },
-                  );
-                  if (!result.cancelled && result.path) {
-                    setPath(result.path);
-                    if (!nameTouched) setName(suggestNameFromPath(result.path));
-                  }
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : 'Folder picker failed');
-                } finally {
-                  setChoosing(false);
-                }
-              }}
-            >
-              {choosing ? 'Choosing…' : 'Choose folder'}
-            </button>
-          </div>
+          <Field
+            label="Local path"
+            htmlFor="repo-path"
+            hint="Tasks run in an isolated worktree, so your working copy is never touched."
+          >
+            {({ id, describedBy }) => (
+              <div className="path-row">
+                <input
+                  id={id}
+                  aria-describedby={describedBy}
+                  placeholder="Select or paste a Git repository path"
+                  value={path}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setPath(next);
+                    if (!nameTouched) setName(suggestNameFromPath(next));
+                  }}
+                  required
+                />
+                <button
+                  type="button"
+                  className="quiet"
+                  disabled={choosing}
+                  onClick={async () => {
+                    setError('');
+                    setChoosing(true);
+                    try {
+                      const result = await api.request<{ path: string | null; cancelled: boolean }>(
+                        '/api/dialogs/choose-directory',
+                        { method: 'POST' },
+                      );
+                      if (!result.cancelled && result.path) {
+                        setPath(result.path);
+                        if (!nameTouched) setName(suggestNameFromPath(result.path));
+                      }
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : 'Folder picker failed');
+                    } finally {
+                      setChoosing(false);
+                    }
+                  }}
+                >
+                  {choosing ? 'Choosing…' : 'Choose folder'}
+                </button>
+              </div>
+            )}
+          </Field>
+
+          <Field
+            label="Display name"
+            htmlFor="repo-name"
+            optional
+            hint="Defaults to the folder name."
+          >
+            {({ id, describedBy }) => (
+              <input
+                id={id}
+                aria-describedby={describedBy}
+                placeholder="e.g. Tilaqa Web"
+                value={name}
+                onChange={(e) => {
+                  setNameTouched(true);
+                  setName(e.target.value);
+                }}
+              />
+            )}
+          </Field>
+
           <button type="submit">Add project</button>
           {error ? (
             <p className="error" role="alert">

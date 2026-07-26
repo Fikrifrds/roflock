@@ -1,29 +1,15 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
+import { Field, FileDrop } from '../components/Field.js';
 import { GraphRunView } from '../components/GraphRunView.js';
+import { Select } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
 import { Empty, Section, StatusPill } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
+import { DOCUMENT_AUTHORITIES, DOCUMENT_KINDS } from '../lib/choices.js';
 import { formatPhase, formatTaskState, isTerminalState, taskStateTone } from '../lib/format.js';
 import type { ActiveExecution, Approval, Task, TaskDocument } from '../types.js';
-
-const DOCUMENT_KINDS = [
-  ['prd', 'PRD'],
-  ['implementation_plan', 'Implementation plan'],
-  ['architecture', 'Architecture'],
-  ['api_spec', 'API spec'],
-  ['ticket', 'Ticket'],
-  ['research', 'Research'],
-  ['other', 'Other'],
-] as const;
-
-const DOCUMENT_AUTHORITIES = [
-  ['authoritative_requirement', 'Authoritative requirement'],
-  ['approved_plan', 'Approved plan'],
-  ['reference', 'Reference'],
-  ['inspiration_only', 'Inspiration only'],
-] as const;
 
 export function TaskDetail() {
   const { id = '' } = useParams();
@@ -287,66 +273,49 @@ export function TaskDetail() {
             <p className="hint">Optional. Attach notes that should inform planning.</p>
           )}
           <div className="two-col">
-            <div>
-              <label className="field-label" htmlFor="detail-doc-kind">
-                Kind
-              </label>
-              <select
-                id="detail-doc-kind"
-                value={docDraft.kind}
-                onChange={(e) => setDocDraft({ ...docDraft, kind: e.target.value })}
-              >
-                {DOCUMENT_KINDS.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="field-label" htmlFor="detail-doc-authority">
-                Authority
-              </label>
-              <select
-                id="detail-doc-authority"
-                value={docDraft.authority}
-                onChange={(e) => setDocDraft({ ...docDraft, authority: e.target.value })}
-              >
-                {DOCUMENT_AUTHORITIES.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Field label="Kind" htmlFor="detail-doc-kind">
+              {({ id: fieldId }) => (
+                <Select
+                  id={fieldId}
+                  labelledBy={`${fieldId}-label`}
+                  value={docDraft.kind}
+                  options={DOCUMENT_KINDS}
+                  onChange={(kind) => setDocDraft({ ...docDraft, kind })}
+                />
+              )}
+            </Field>
+            <Field label="Authority" htmlFor="detail-doc-authority">
+              {({ id: fieldId }) => (
+                <Select
+                  id={fieldId}
+                  labelledBy={`${fieldId}-label`}
+                  value={docDraft.authority}
+                  options={DOCUMENT_AUTHORITIES}
+                  onChange={(authority) => setDocDraft({ ...docDraft, authority })}
+                />
+              )}
+            </Field>
           </div>
-          <label className="field-label" htmlFor="detail-doc-file">
-            Attach text file
-          </label>
-          <input
+          <FileDrop
             id="detail-doc-file"
-            type="file"
             accept=".md,.txt,.json,.yaml,.yml,.csv"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
+            label="Attach a text file"
+            hint="drag it here or click to browse"
+            onFile={async (file) => {
               try {
-                const content = await file.text();
                 await api.request(`/api/tasks/${id}/documents`, {
                   method: 'POST',
                   body: JSON.stringify({
                     fileName: file.name,
                     kind: docDraft.kind,
                     authority: docDraft.authority,
-                    content,
+                    content: await file.text(),
                     mimeType: file.type || 'text/plain',
                   }),
                 });
                 refresh();
               } catch (error) {
                 setActionError(error instanceof Error ? error.message : 'Upload failed');
-              } finally {
-                e.target.value = '';
               }
             }}
           />

@@ -1,31 +1,21 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Field, FileDrop } from '../components/Field.js';
+import { Select, type SelectOption } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
 import { Empty, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
+import {
+  DOCUMENT_AUTHORITIES,
+  DOCUMENT_KINDS,
+  RISK_LEVELS,
+} from '../lib/choices.js';
 import type { Project, Task, Workflow } from '../types.js';
 
-const DOCUMENT_KINDS = [
-  ['prd', 'PRD'],
-  ['implementation_plan', 'Implementation plan'],
-  ['architecture', 'Architecture'],
-  ['api_spec', 'API spec'],
-  ['ticket', 'Ticket'],
-  ['research', 'Research'],
-  ['other', 'Other'],
-] as const;
-
-const DOCUMENT_AUTHORITIES = [
-  ['authoritative_requirement', 'Authoritative requirement'],
-  ['approved_plan', 'Approved plan'],
-  ['reference', 'Reference'],
-  ['inspiration_only', 'Inspiration only'],
-] as const;
-
 const FALLBACK_INTENTS = [
-  { id: 'bug_fix', label: 'Fix a Bug', description: '' },
-  { id: 'feature', label: 'Add a Feature', description: '' },
-  { id: 'investigation', label: 'Investigate', description: '' },
+  { id: 'bug_fix', label: 'Fix a Bug', description: 'Verified fix with regression checks' },
+  { id: 'feature', label: 'Add a Feature', description: 'Extend an existing codebase' },
+  { id: 'investigation', label: 'Investigate', description: 'Diagnose before changing code' },
 ];
 
 const FALLBACK_WORKFLOWS: Workflow[] = [
@@ -76,6 +66,23 @@ export function NewTask() {
   const overridden = modeOverride !== null && modeOverride !== recommendation?.mode;
   const noProjects = projects.length === 0;
 
+  const projectOptions: SelectOption[] = projects.map((project) => ({
+    value: project.id,
+    label: project.name,
+    description: project.resolvedPath,
+  }));
+
+  const workflowOptions: SelectOption[] = (workflows.length ? workflows : FALLBACK_WORKFLOWS).map(
+    (workflow) => ({
+      value: workflow.id,
+      label: workflow.label,
+      description:
+        workflow.id === recommendation?.mode
+          ? `Recommended · ${workflow.description}`
+          : workflow.description,
+    }),
+  );
+
   return (
     <Shell>
       <Section title="New task">
@@ -83,6 +90,7 @@ export function NewTask() {
           Pick a project, describe the work, and send it. RoleFlock chooses a workflow unless you
           override it below.
         </p>
+
         {noProjects ? (
           <div className="empty-cta">
             <Empty message="Add a project first, then come back to create a task." />
@@ -130,21 +138,18 @@ export function NewTask() {
               }
             }}
           >
-            <label className="field-label" htmlFor="task-project">
-              Project
-            </label>
-            <select
-              id="task-project"
-              required
-              value={projectId}
-              onChange={(e) => setProjectOverride(e.target.value)}
-            >
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
+            <Field label="Project" htmlFor="task-project">
+              {({ id }) => (
+                <Select
+                  id={id}
+                  labelledBy={`${id}-label`}
+                  value={projectId}
+                  options={projectOptions}
+                  onChange={setProjectOverride}
+                  required
+                />
+              )}
+            </Field>
 
             <fieldset className="intent-fieldset">
               <legend className="field-label">What are you working on?</legend>
@@ -167,215 +172,225 @@ export function NewTask() {
               </div>
             </fieldset>
 
-            <label className="field-label" htmlFor="task-title">
-              Title
-            </label>
-            <input
-              id="task-title"
-              required
-              placeholder="Short task title"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-            />
-            <label className="field-label" htmlFor="task-brief">
-              Brief
-            </label>
-            <textarea
-              id="task-brief"
-              className="compact"
-              required
-              placeholder="What should the flock fix or build?"
-              value={form.brief}
-              onChange={(e) => setForm({ ...form, brief: e.target.value })}
-            />
+            <Field label="Title" htmlFor="task-title">
+              {({ id }) => (
+                <input
+                  id={id}
+                  required
+                  placeholder="Short task title"
+                  value={form.title}
+                  onChange={(e) => setForm({ ...form, title: e.target.value })}
+                />
+              )}
+            </Field>
+
+            <Field
+              label="Brief"
+              htmlFor="task-brief"
+              hint="What should the flock fix or build? Be specific about the outcome."
+            >
+              {({ id, describedBy }) => (
+                <textarea
+                  id={id}
+                  aria-describedby={describedBy}
+                  className="compact"
+                  required
+                  placeholder="Describe the work"
+                  value={form.brief}
+                  onChange={(e) => setForm({ ...form, brief: e.target.value })}
+                />
+              )}
+            </Field>
+
             {form.type === 'bug_fix' ? (
               <div className="two-col">
-                <div>
-                  <label className="field-label" htmlFor="task-expected">
-                    Expected
-                  </label>
-                  <textarea
-                    id="task-expected"
-                    className="compact"
-                    placeholder="What should happen?"
-                    value={form.expectedBehaviour}
-                    onChange={(e) => setForm({ ...form, expectedBehaviour: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="field-label" htmlFor="task-actual">
-                    Actual
-                  </label>
-                  <textarea
-                    id="task-actual"
-                    className="compact"
-                    placeholder="What happens instead?"
-                    value={form.actualBehaviour}
-                    onChange={(e) => setForm({ ...form, actualBehaviour: e.target.value })}
-                  />
-                </div>
+                <Field label="Expected" htmlFor="task-expected" optional>
+                  {({ id }) => (
+                    <textarea
+                      id={id}
+                      className="compact"
+                      placeholder="What should happen?"
+                      value={form.expectedBehaviour}
+                      onChange={(e) => setForm({ ...form, expectedBehaviour: e.target.value })}
+                    />
+                  )}
+                </Field>
+                <Field label="Actual" htmlFor="task-actual" optional>
+                  {({ id }) => (
+                    <textarea
+                      id={id}
+                      className="compact"
+                      placeholder="What happens instead?"
+                      value={form.actualBehaviour}
+                      onChange={(e) => setForm({ ...form, actualBehaviour: e.target.value })}
+                    />
+                  )}
+                </Field>
               </div>
             ) : null}
 
             <details className="advanced-panel">
               <summary>Advanced options</summary>
-              <p className="hint">
-                {recommendation
-                  ? `Suggested workflow: ${recommendation.label}. ${recommendation.rationale}${
-                      overridden ? ' (overridden)' : ''
-                    }`
-                  : 'Leave defaults unless you need a heavier path or custom verification.'}
-              </p>
-              <label className="field-label" htmlFor="task-risk">
-                Risk
-              </label>
-              <select
-                id="task-risk"
-                value={form.risk}
-                onChange={(e) => {
-                  setModeOverride(null);
-                  setForm({ ...form, risk: e.target.value });
-                }}
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-                <option value="critical">Critical</option>
-              </select>
 
-              <label className="field-label" htmlFor="workflow-mode">
-                Workflow
-              </label>
-              <select
-                id="workflow-mode"
-                value={mode}
-                onChange={(e) => setModeOverride(e.target.value)}
-              >
-                {(workflows.length ? workflows : FALLBACK_WORKFLOWS).map((workflow) => (
-                  <option key={workflow.id} value={workflow.id}>
-                    {workflow.label}
-                  </option>
-                ))}
-              </select>
+              <div className="stack">
+                <p className="hint">
+                  {recommendation
+                    ? `Suggested workflow: ${recommendation.label}. ${recommendation.rationale}${
+                        overridden ? ' (overridden)' : ''
+                      }`
+                    : 'Leave defaults unless you need a heavier path or custom verification.'}
+                </p>
 
-              <label className="field-label" htmlFor="task-verify">
-                Verification command
-              </label>
-              <input
-                id="task-verify"
-                placeholder="Optional — e.g. npm test"
-                value={form.verificationCommand}
-                onChange={(e) => setForm({ ...form, verificationCommand: e.target.value })}
-              />
-              <p className="hint">
-                Runs in the worktree after the writer. Blank uses <code>npm test</code> when
-                present.
-              </p>
-              <div className="two-col">
-                <div>
-                  <label className="field-label" htmlFor="task-attempts">
-                    Max attempts
-                  </label>
-                  <input
-                    id="task-attempts"
-                    type="number"
-                    min={1}
-                    value={form.maxAttempts}
-                    onChange={(e) => setForm({ ...form, maxAttempts: Number(e.target.value) })}
-                  />
+                <div className="two-col">
+                  <Field label="Risk" htmlFor="task-risk" hint="Raising risk selects a heavier workflow.">
+                    {({ id, describedBy }) => (
+                      <Select
+                        id={id}
+                        labelledBy={`${id}-label`}
+                        describedBy={describedBy}
+                        value={form.risk}
+                        options={RISK_LEVELS}
+                        onChange={(risk) => {
+                          setModeOverride(null);
+                          setForm({ ...form, risk });
+                        }}
+                      />
+                    )}
+                  </Field>
+
+                  <Field label="Workflow" htmlFor="workflow-mode">
+                    {({ id }) => (
+                      <Select
+                        id={id}
+                        labelledBy={`${id}-label`}
+                        value={mode}
+                        options={workflowOptions}
+                        onChange={setModeOverride}
+                      />
+                    )}
+                  </Field>
                 </div>
-                <div>
-                  <label className="field-label" htmlFor="task-budget">
-                    Max cost (USD)
-                  </label>
-                  <input
-                    id="task-budget"
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={form.maxActualCostUsd}
-                    onChange={(e) => setForm({ ...form, maxActualCostUsd: Number(e.target.value) })}
-                  />
-                </div>
-              </div>
 
-              <p className="field-label">Supporting documents</p>
-              <p className="hint">Optional. Stored locally with a hash.</p>
-              <div className="two-col">
-                <div>
-                  <label className="field-label" htmlFor="doc-kind">
-                    Kind
-                  </label>
-                  <select
-                    id="doc-kind"
-                    value={docDraft.kind}
-                    onChange={(e) => setDocDraft({ ...docDraft, kind: e.target.value })}
+                <Field
+                  label="Verification command"
+                  htmlFor="task-verify"
+                  optional
+                  hint="Runs in the worktree after the writer. Blank uses npm test when present."
+                >
+                  {({ id, describedBy }) => (
+                    <input
+                      id={id}
+                      aria-describedby={describedBy}
+                      placeholder="e.g. npm test"
+                      value={form.verificationCommand}
+                      onChange={(e) => setForm({ ...form, verificationCommand: e.target.value })}
+                    />
+                  )}
+                </Field>
+
+                <div className="two-col">
+                  <Field label="Max attempts" htmlFor="task-attempts">
+                    {({ id }) => (
+                      <input
+                        id={id}
+                        type="number"
+                        min={1}
+                        value={form.maxAttempts}
+                        onChange={(e) => setForm({ ...form, maxAttempts: Number(e.target.value) })}
+                      />
+                    )}
+                  </Field>
+                  <Field
+                    label="Max cost (USD)"
+                    htmlFor="task-budget"
+                    hint="A hard stop on actual spend, not an estimate."
                   >
-                    {DOCUMENT_KINDS.map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="field-label" htmlFor="doc-authority">
-                    Authority
-                  </label>
-                  <select
-                    id="doc-authority"
-                    value={docDraft.authority}
-                    onChange={(e) => setDocDraft({ ...docDraft, authority: e.target.value })}
-                  >
-                    {DOCUMENT_AUTHORITIES.map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <label className="field-label" htmlFor="doc-file">
-                Attach text file
-              </label>
-              <input
-                id="doc-file"
-                type="file"
-                accept=".md,.txt,.json,.yaml,.yml,.csv"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  const content = await file.text();
-                  setPendingDocs((current) => [
-                    ...current,
-                    {
-                      fileName: file.name,
-                      kind: docDraft.kind,
-                      authority: docDraft.authority,
-                      content,
-                    },
-                  ]);
-                  e.target.value = '';
-                }}
-              />
-              {pendingDocs.length ? (
-                <ul className="doc-list">
-                  {pendingDocs.map((doc, index) => (
-                    <li key={`${doc.fileName}-${index}`}>
-                      {doc.fileName} · {doc.kind}
-                      <button
-                        type="button"
-                        className="quiet"
-                        onClick={() =>
-                          setPendingDocs((current) => current.filter((_, i) => i !== index))
+                    {({ id, describedBy }) => (
+                      <input
+                        id={id}
+                        aria-describedby={describedBy}
+                        type="number"
+                        min={0}
+                        step={0.01}
+                        value={form.maxActualCostUsd}
+                        onChange={(e) =>
+                          setForm({ ...form, maxActualCostUsd: Number(e.target.value) })
                         }
-                      >
-                        Remove
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
+                      />
+                    )}
+                  </Field>
+                </div>
+
+                <p className="field-label">Supporting documents</p>
+                <p className="field-hint">Optional. Stored locally with a hash.</p>
+                <div className="two-col">
+                  <Field label="Kind" htmlFor="doc-kind">
+                    {({ id }) => (
+                      <Select
+                        id={id}
+                        labelledBy={`${id}-label`}
+                        value={docDraft.kind}
+                        options={DOCUMENT_KINDS}
+                        onChange={(kind) => setDocDraft({ ...docDraft, kind })}
+                      />
+                    )}
+                  </Field>
+                  <Field label="Authority" htmlFor="doc-authority">
+                    {({ id }) => (
+                      <Select
+                        id={id}
+                        labelledBy={`${id}-label`}
+                        value={docDraft.authority}
+                        options={DOCUMENT_AUTHORITIES}
+                        onChange={(authority) => setDocDraft({ ...docDraft, authority })}
+                      />
+                    )}
+                  </Field>
+                </div>
+
+                <FileDrop
+                  id="doc-file"
+                  accept=".md,.txt,.json,.yaml,.yml,.csv"
+                  label="Attach a text file"
+                  hint="drag it here or click to browse"
+                  onFile={async (file) => {
+                    const content = await file.text();
+                    setPendingDocs((current) => [
+                      ...current,
+                      {
+                        fileName: file.name,
+                        kind: docDraft.kind,
+                        authority: docDraft.authority,
+                        content,
+                      },
+                    ]);
+                  }}
+                />
+
+                {pendingDocs.length ? (
+                  <ul className="doc-list">
+                    {pendingDocs.map((doc, index) => (
+                      <li key={`${doc.fileName}-${index}`}>
+                        <div>
+                          <b>{doc.fileName}</b>
+                          <small>
+                            {doc.kind} · {doc.authority}
+                          </small>
+                        </div>
+                        <button
+                          type="button"
+                          className="quiet"
+                          onClick={() =>
+                            setPendingDocs((current) => current.filter((_, i) => i !== index))
+                          }
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             </details>
 
             {error ? (

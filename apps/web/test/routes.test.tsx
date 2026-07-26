@@ -80,12 +80,18 @@ describe('NewTask', () => {
 
     renderApp(<NewTask />);
 
-    const workflow = await screen.findByLabelText('Workflow');
-    await waitFor(() => expect(workflow).toHaveValue('bug_fix'));
+    const workflow = await screen.findByRole('combobox', { name: /Workflow/ });
+    await waitFor(() => expect(workflow).toHaveTextContent('Verified Bug Fix'));
     expect(screen.getByText(/Suggested workflow: Verified Bug Fix/)).toBeInTheDocument();
+    // The recommended entry says so in its own description, not only in the
+    // paragraph above the field.
+    await userEvent.click(workflow);
+    expect(screen.getByRole('option', { name: /Verified Bug Fix/ })).toHaveTextContent(
+      'Recommended',
+    );
 
-    await userEvent.selectOptions(workflow, 'direct');
-    expect(workflow).toHaveValue('direct');
+    await userEvent.click(screen.getByRole('option', { name: /Direct/ }));
+    expect(workflow).toHaveTextContent('Direct');
     expect(await screen.findByText(/\(overridden\)/)).toBeInTheDocument();
   });
 
