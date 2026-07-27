@@ -810,18 +810,23 @@ export function registerApi(
     if (!task) return reply.code(404).send({ error: 'Task not found' });
     // `paused` belongs here: the UI's Resume button posts to this route, and
     // rejecting it left Pause as a one-way door with no way back.
-    if (task.state !== 'ready' && task.state !== 'failed' && task.state !== 'paused') {
+    if (
+      task.state !== 'ready' &&
+      task.state !== 'failed' &&
+      task.state !== 'paused' &&
+      task.state !== 'cancelled'
+    ) {
       return reply.code(409).send({ error: `Cannot start task in state ${task.state}` });
     }
     const project = projects.get(task.projectId);
     if (!project) return reply.code(400).send({ error: 'Task project missing' });
     try {
-      // Reset failed tasks back to ready before restarting
-      if (task.state === 'failed') {
+      // Show a terminal task as ready while its continuation is prepared.
+      if (task.state === 'failed' || task.state === 'cancelled') {
         tasks.upsert({ ...task, state: 'ready', updatedAt: now() });
       }
       const started = await orchestrator.start(
-        { ...task, state: 'ready' },
+        task,
         project.resolvedPath,
         project.baseBranch,
       );

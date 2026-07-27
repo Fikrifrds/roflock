@@ -117,15 +117,16 @@ export function TaskDetail() {
     task.state === 'awaiting_confirmation' ||
     task.state === 'awaiting_acceptance' ||
     pending.length > 0;
-  const latestError =
-    task.state === 'failed'
+  const latestFailure =
+    task.state === 'failed' || task.state === 'cancelled'
       ? [...(evidence?.findings ?? [])].reverse().find((finding) => finding.severity === 'error')
       : undefined;
+  const latestError = task.state === 'failed' ? latestFailure : undefined;
   const verificationMissing = Boolean(
-    task.state === 'failed' &&
-    (latestError?.summary.includes('Verification command required') ||
-      latestError?.details?.includes('missing-verification-command') ||
-      latestError?.details?.includes('No verification command')),
+    (task.state === 'failed' || task.state === 'cancelled') &&
+    (latestFailure?.summary.includes('Verification command required') ||
+      latestFailure?.details?.includes('missing-verification-command') ||
+      latestFailure?.details?.includes('No verification command')),
   );
   const suggestedCommand = verificationSuggestion?.command ?? task.verificationCommand ?? '';
   const verificationCommand = verificationDraft || suggestedCommand;
@@ -206,7 +207,9 @@ export function TaskDetail() {
                 >
                   {savingVerification
                     ? 'Saving and retrying…'
-                    : 'Save command & retry verification'}
+                    : task.state === 'cancelled'
+                      ? 'Save command & continue verification'
+                      : 'Save command & retry verification'}
                 </button>
               </div>
             </article>
@@ -288,9 +291,17 @@ export function TaskDetail() {
               </p>
             ) : null}
             <div className="actions task-now-actions">
-              {task.state === 'ready' || task.state === 'failed' ? (
+              {task.state === 'ready' ||
+              task.state === 'failed' ||
+              (task.state === 'cancelled' && !verificationMissing) ? (
                 <button type="button" disabled={starting} onClick={() => void action('start')}>
-                  {starting ? 'Starting…' : task.state === 'failed' ? 'Retry task' : 'Start task'}
+                  {starting
+                    ? 'Starting…'
+                    : task.state === 'failed'
+                      ? 'Retry task'
+                      : task.state === 'cancelled'
+                        ? 'Continue task'
+                        : 'Start task'}
                 </button>
               ) : null}
               {!waiting && task.state === 'running' ? (

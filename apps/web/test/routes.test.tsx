@@ -8,6 +8,7 @@ import { Home } from '../src/routes/Home.js';
 import { NewTask } from '../src/routes/NewTask.js';
 import { Evidence } from '../src/routes/Evidence.js';
 import { Providers } from '../src/routes/Providers.js';
+import { TaskDetail } from '../src/routes/TaskDetail.js';
 import { WorkspaceChanges } from '../src/components/WorkspaceChanges.js';
 import type { Task } from '../src/types.js';
 import { renderApp, stubApi } from './render.js';
@@ -217,6 +218,70 @@ describe('Approvals', () => {
     expect(
       await screen.findByRole('region', { name: 'Remember this approval' }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('TaskDetail', () => {
+  it('offers to continue a cancelled task', async () => {
+    authenticated();
+    const task = {
+      id: 't1',
+      projectId: 'p1',
+      title: 'Continue me',
+      type: 'bug_fix',
+      state: 'cancelled',
+      risk: 'medium',
+      brief: 'Keep the existing worktree.',
+      maxAttempts: 3,
+      workflowGraphVersionId: 'bug_fix@2',
+      budgetPolicyId: 'local-default',
+      createdAt: '2026-07-28T00:00:00.000Z',
+      updatedAt: '2026-07-28T00:00:00.000Z',
+    };
+    stubApi({
+      ...RUNTIME,
+      '/api/health': { ok: true },
+      '/api/tasks/t1/active-execution': {
+        phase: 'reasoning',
+        roleDisplayName: 'planner',
+        providerDisplayName: 'Codex CLI',
+        configuredModelDisplayName: 'GPT-5.6 Sol',
+        permissionProfileId: 'read-only',
+        lastHeartbeatAt: '2026-07-28T00:00:00.000Z',
+        attempt: 1,
+      },
+      '/api/tasks/t1/approvals': [],
+      '/api/tasks/t1/documents': [],
+      '/api/tasks/t1/graph': {
+        taskId: 't1',
+        graphRunId: 'r1',
+        runState: 'failed',
+        graph: {
+          id: 'bug_fix',
+          version: 'bug_fix@2',
+          label: 'Verified Bug Fix',
+          description: '',
+          maxConcurrency: 2,
+          maxLoopIterations: 4,
+          edges: [],
+          nodes: [],
+        },
+      },
+      '/api/evidence/tasks/t1': { findings: [] },
+      '/api/tasks/t1': task,
+      '/api/tasks': [task],
+      '/api/projects': [{ id: 'p1', name: 'Repo', resolvedPath: '/tmp/repo', status: 'ready' }],
+      '/api/approvals': [],
+    });
+
+    renderApp(
+      <Routes>
+        <Route path="/tasks/:id" element={<TaskDetail />} />
+      </Routes>,
+      { route: '/tasks/t1' },
+    );
+
+    expect(await screen.findByRole('button', { name: 'Continue task' })).toBeInTheDocument();
   });
 });
 

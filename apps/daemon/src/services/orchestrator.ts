@@ -350,7 +350,6 @@ export class Orchestrator {
     if (commandType === 'cancel') {
       const wt = this.worktrees.getByTask(taskId);
       if (wt) this.worktrees.setStatus(taskId, 'dirty_preserved');
-      this.setTaskState(taskId, 'cancelled');
     }
     this.commands.updateStatus(id, 'completed', { completedAt: now() });
     this.bus.publish('control.commanded', { taskId, commandType });
@@ -395,15 +394,18 @@ export class Orchestrator {
     // Resume: a run interrupted by a daemon restart keeps its finished nodes and
     // its worktree, so a restart re-enters the graph where it stopped instead of
     // rewriting work the user already paid for.
-    const resume = this.resumableRun(task.id, graph);
+    const resume = this.resumableRun(task, graph);
     const existingWorktree = resume ? this.worktrees.getByTask(task.id) : undefined;
     const reusable =
-      existingWorktree?.status === 'active' && existsSync(existingWorktree.path)
+      existingWorktree &&
+      (existingWorktree.status === 'active' || existingWorktree.status === 'dirty_preserved') &&
+      existsSync(existingWorktree.path)
         ? existingWorktree
         : undefined;
 
     let worktree: { path: string; branchName: string; baseCommit: string };
     if (reusable) {
+      if (reusable.status !== 'active') this.worktrees.setStatus(task.id, 'active');
       worktree = {
         path: reusable.path,
         branchName: reusable.branchName,
@@ -437,6 +439,17 @@ export class Orchestrator {
         'INSERT INTO graph_runs (id, task_id, graph_version_id, state, started_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
       )
       .run(graphRunId, task.id, graph.version, 'running', now(), now());
+    if (reusable && resume?.completed.length) {
+      const timestamp = now();
+      const insert = this.db.prepare(
+        `INSERT INTO node_runs
+          (id, graph_run_id, node_key, state, started_at, completed_at, outcome, created_at)
+         VALUES (?, ?, ?, 'completed', ?, ?, 'resumed from previous run', ?)`,
+      );
+      for (const nodeId of resume.completed) {
+        insert.run(randomUUID(), graphRunId, nodeId, timestamp, timestamp, timestamp);
+      }
+    }
     this.setTaskState(task.id, 'running');
     if (this.forceFake) {
       this.evidence.addFinding({
@@ -457,7 +470,7 @@ export class Orchestrator {
       graph,
       worktreePath: worktree.path,
       baseCommit: worktree.baseCommit,
-      resumeCompleted: reusable ? resume : undefined,
+      resumeCompleted: reusable ? resume?.completed : undefined,
     };
   }
 
@@ -591,12 +604,19 @@ export class Orchestrator {
    * Only nodes that still exist in the pinned graph are eligible, so a version
    * mismatch can never resurrect a node the current graph does not have.
    */
-  private resumableRun(taskId: string, graph: WorkflowGraph): string[] | undefined {
+  private resumableRun(
+    task: Task,
+    graph: WorkflowGraph,
+  ): { completed: string[] } | undefined {
+    const resumableStates =
+      task.state === 'cancelled' ? "('interrupted', 'failed', 'cancelled')" : "('interrupted')";
     const previous = this.db
       .prepare(
-        "SELECT id, graph_version_id FROM graph_runs WHERE task_id = ? AND state = 'interrupted' ORDER BY created_at DESC LIMIT 1",
+        `SELECT id, graph_version_id FROM graph_runs
+         WHERE task_id = ? AND state IN ${resumableStates}
+         ORDER BY created_at DESC LIMIT 1`,
       )
-      .get(taskId) as { id: string; graph_version_id: string } | undefined;
+      .get(task.id) as { id: string; graph_version_id: string } | undefined;
     if (!previous || previous.graph_version_id !== graph.version) return undefined;
 
     const known = new Set(graph.nodes.map((node) => node.id));
@@ -610,7 +630,13 @@ export class Orchestrator {
       .map((row) => row.node_key)
       .filter((id) => known.has(id));
 
-    return completed.length ? completed : undefined;
+    return {
+      // Before a writer finishes, rerunning the planning context is safer than
+      // skipping into a later role with no prior-turn output. Once code exists,
+      // preserve it and continue at the first unfinished verification gate.
+      completed:
+        task.state === 'cancelled' && !completed.includes('writer') ? [] : completed,
+    };
   }
 
   private async executeGraph(
@@ -1177,8 +1203,10 @@ export class Orchestrator {
 
     const failed = results.find((r) => r.status === 'failed');
     const blocked = failed?.error instanceof ProviderUnavailableError ? failed.error : undefined;
+    const setupRequired =
+      failed?.error instanceof NodeFailure && failed.error.failureClass === 'setup_required';
 
-    if (blocked) {
+    if (blocked || setupRequired) {
       // `interrupted`, not `failed`: the completed nodes are still good, so the
       // next start resumes from them once the operator has pointed the role at
       // a model that answers.
@@ -1191,9 +1219,9 @@ export class Orchestrator {
         )
         .run(
           now(),
-          blocked.role,
-          blocked.refusals[0]?.reason ?? 'unavailable',
-          JSON.stringify(blocked.refusals),
+          blocked?.role ?? null,
+          setupRequired ? 'setup_required' : (blocked?.refusals[0]?.reason ?? 'unavailable'),
+          JSON.stringify(blocked?.refusals ?? []),
           graphRunId,
         );
     } else {
