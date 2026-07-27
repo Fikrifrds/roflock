@@ -46,6 +46,7 @@ import { customProviderId, ProviderRegistry } from '../services/provider-registr
 import { DocumentService, isDocumentAuthority, isDocumentKind } from '../services/documents.js';
 import { LocalSecretStore } from '../services/local-secret-store.js';
 import { checkForUpdates, getLocalVersion } from '../services/version-check.js';
+import { discoverVerificationCommand } from '../services/verification-command.js';
 
 export function registerApi(
   app: FastifyInstance,
@@ -201,6 +202,25 @@ export function registerApi(
     tasks.upsert(task);
     bus.publish('task.created', task);
     return reply.code(201).send(task);
+  });
+  app.get('/api/tasks/:id/verification-suggestion', async (request, reply) => {
+    const task = tasks.get((request.params as { id: string }).id);
+    if (!task) return reply.code(404).send({ error: 'Task not found' });
+    const project = projects.get(task.projectId);
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    return { command: await discoverVerificationCommand(project.resolvedPath) };
+  });
+  app.patch('/api/tasks/:id/verification-command', async (request, reply) => {
+    const command = (request.body as { verificationCommand?: string }).verificationCommand?.trim();
+    if (!command) return reply.code(400).send({ error: 'verificationCommand is required' });
+    const updated = tasks.updateVerificationCommand(
+      (request.params as { id: string }).id,
+      command,
+      now(),
+    );
+    if (!updated) return reply.code(404).send({ error: 'Task not found' });
+    bus.publish('task.updated', updated);
+    return updated;
   });
   /**
    * The role roster: every role, its ordered candidate list, and the model

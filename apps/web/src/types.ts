@@ -48,6 +48,7 @@ export type ActiveExecution = {
   effort?: string;
   permissionProfileId: string;
   currentActivity?: string;
+  activeTool?: string;
   activeCommandPreview?: string;
   liveOutput?: string;
   liveDiff?: {

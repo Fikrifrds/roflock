@@ -24,6 +24,8 @@ export function TaskDetail() {
   const qc = useQueryClient();
   const [actionError, setActionError] = useState('');
   const [starting, setStarting] = useState(false);
+  const [verificationDraft, setVerificationDraft] = useState('');
+  const [savingVerification, setSavingVerification] = useState(false);
   const [docDraft, setDocDraft] = useState({ kind: 'prd', authority: 'reference' });
 
   const { data: task } = useData<Task>(['task', id], `/api/tasks/${id}`, Boolean(id));
@@ -50,6 +52,11 @@ export function TaskDetail() {
   const { data: evidence } = useData<{
     findings?: Array<{ severity: string; summary: string; details?: string }>;
   }>(['evidence', id], `/api/evidence/tasks/${id}`, Boolean(id));
+  const { data: verificationSuggestion } = useData<{ command?: string }>(
+    ['verification-suggestion', id],
+    `/api/tasks/${id}/verification-suggestion`,
+    Boolean(id && task?.state === 'failed' && !task.verificationCommand),
+  );
 
   if (!task) {
     return (
@@ -68,6 +75,7 @@ export function TaskDetail() {
       ['evidence', id],
       ['task-documents', id],
       ['task-graph', id],
+      ['verification-suggestion', id],
     ]) {
       void qc.invalidateQueries({ queryKey });
     }
@@ -111,6 +119,32 @@ export function TaskDetail() {
           .reverse()
           .find((finding) => finding.severity === 'error')
       : undefined;
+  const verificationMissing = Boolean(
+    task.state === 'failed' &&
+      (latestError?.summary.includes('Verification command required') ||
+        latestError?.details?.includes('missing-verification-command') ||
+        latestError?.details?.includes('No verification command')),
+  );
+  const suggestedCommand = verificationSuggestion?.command ?? task.verificationCommand ?? '';
+  const verificationCommand = verificationDraft || suggestedCommand;
+  const saveVerificationAndRetry = async () => {
+    if (!verificationCommand.trim()) return;
+    setActionError('');
+    setSavingVerification(true);
+    try {
+      await api.request(`/api/tasks/${id}/verification-command`, {
+        method: 'PATCH',
+        body: JSON.stringify({ verificationCommand }),
+      });
+      await api.request(`/api/tasks/${id}/start`, { method: 'POST' });
+      refresh();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to save verification command');
+      refresh();
+    } finally {
+      setSavingVerification(false);
+    }
+  };
 
   return (
     <Shell>
@@ -134,6 +168,43 @@ export function TaskDetail() {
             retrying={starting}
             onRetry={() => void action('start')}
           />
+        ) : null}
+
+        {verificationMissing ? (
+          <article className="verification-recovery" role="alert">
+            <p className="eyebrow">VERIFICATION COMMAND REQUIRED</p>
+            <h3>The code change was not tested yet</h3>
+            <p className="hint">
+              This repository has no configured verification command or Node test script. Choose a
+              command below, then RoleFlock will retry from verification without repeating the work.
+            </p>
+            <label>
+              Verification command
+              <input
+                value={verificationCommand}
+                onChange={(event) => setVerificationDraft(event.target.value)}
+                placeholder="e.g. python3 -m pytest"
+              />
+            </label>
+            {verificationSuggestion?.command ? (
+              <button
+                type="button"
+                className="quiet verification-suggestion"
+                onClick={() => setVerificationDraft(verificationSuggestion.command ?? '')}
+              >
+                Use detected command: <code>{verificationSuggestion.command}</code>
+              </button>
+            ) : null}
+            <div className="actions">
+              <button
+                type="button"
+                disabled={!verificationCommand.trim() || savingVerification}
+                onClick={() => void saveVerificationAndRetry()}
+              >
+                {savingVerification ? 'Saving and retrying…' : 'Save command & retry verification'}
+              </button>
+            </div>
+          </article>
         ) : null}
 
         <div className="actions primary-actions">
@@ -176,7 +247,7 @@ export function TaskDetail() {
         </div>
 
         {pending.length > 0 ? (
-          <article className="pending-banner" role="region" aria-label="Decision needed">
+          <article id="approval-required" className="pending-banner" role="region" aria-label="Decision needed">
             <p className="eyebrow">YOUR DECISION NEEDED</p>
             <h3>Approve to continue, or reject to stop this step</h3>
             {pending.map((approval) => (
@@ -205,7 +276,7 @@ export function TaskDetail() {
         ) : null}
 
         {task.state === 'awaiting_acceptance' && pending.length === 0 ? (
-          <article className="pending-banner" role="region" aria-label="Accept the result">
+          <article id="approval-required" className="pending-banner" role="region" aria-label="Accept the result">
             <p className="eyebrow">ACCEPT THE RESULT</p>
             <h3>Verification finished — accept or reject the change</h3>
             <div className="actions">
@@ -275,12 +346,34 @@ export function TaskDetail() {
           </details>
         </article>
 
-        <LiveTurn execution={execution} finished={finished} />
+        <LiveTurn
+          execution={execution}
+          finished={finished}
+          awaitingDecision={waiting}
+          visible={task.state === 'running' || waiting}
+        />
 
         <section className="evidence-section">
           <h3>Run graph</h3>
           <GraphRunView taskId={id} />
         </section>
+
+        {waiting ? (
+          <aside className="approval-dock" role="status" aria-live="polite">
+            <span className="approval-dock-dot" aria-hidden="true" />
+            <div>
+              <strong>Action required</strong>
+              <small>
+                {pending.length
+                  ? `${pending.length} approval${pending.length === 1 ? '' : 's'} waiting for you.`
+                  : 'Review the verified result and decide whether to accept it.'}
+              </small>
+            </div>
+            <a className="buttonish" href="#approval-required">
+              Review now
+            </a>
+          </aside>
+        ) : null}
 
         <details className="documents-panel">
           <summary className="eyebrow">Supporting documents ({taskDocuments.length})</summary>

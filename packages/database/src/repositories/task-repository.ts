@@ -50,6 +50,13 @@ export class TaskRepository {
     return row ? mapTask(row) : undefined;
   }
 
+  updateVerificationCommand(id: string, verificationCommand: string | undefined, updatedAt: string): Task | undefined {
+    this.db
+      .prepare('UPDATE tasks SET verification_command = ?, updated_at = ? WHERE id = ?')
+      .run(verificationCommand ?? null, updatedAt, id);
+    return this.get(id);
+  }
+
   list(projectId?: string): Task[] {
     const rows = projectId
       ? (this.db

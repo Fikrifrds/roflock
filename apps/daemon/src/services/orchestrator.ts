@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
-import { writeFile, readFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type {
   ActiveExecution,
@@ -55,6 +55,7 @@ import { authoritativeConflictMessage, type DocumentService } from './documents.
 import { loadPriceCards } from './pricing.js';
 import { ProviderRegistry } from './provider-registry.js';
 import { RoleRouter, type RoleRoute, type RoutedRole } from './role-routing.js';
+import { discoverVerificationCommand } from './verification-command.js';
 
 /**
  * How long a provider may stay silent before its turn is abandoned.
@@ -1622,21 +1623,14 @@ export class Orchestrator {
         label: task.verificationCommand.trim(),
       };
     }
-    try {
-      const pkg = JSON.parse(await readFile(join(worktreePath, 'package.json'), 'utf8')) as {
-        scripts?: Record<string, string>;
-      };
-      if (pkg.scripts?.test) {
-        return { command: 'npm', args: ['test', '--silent'], label: 'npm test' };
-      }
-    } catch {
-      // no package.json / no test script
+    const suggested = await discoverVerificationCommand(worktreePath);
+    if (suggested) {
+      const parts = parseCommandArgv(suggested);
+      return { command: parts[0], args: parts.slice(1), label: suggested };
     }
-    return {
-      command: process.execPath,
-      args: ['-e', "throw new Error('No verification command or package test script was found')"],
-      label: 'missing-verification-command',
-    };
+    throw new Error(
+      'Verification command required: no configured command or supported test convention was found. Add one before retrying.',
+    );
   }
 
   private assertBudget(task: Task): void {
