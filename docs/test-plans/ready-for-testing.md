@@ -55,8 +55,10 @@ Threat model: `docs/security/threat-model.md`
 # Recommended for first manual pass (fake orchestration, fake hidden in UI)
 ROLEFLOCK_FORCE_FAKE=1 pnpm dev
 
-# Live routing when CLIs are installed (90s default timeout)
-# ROLEFLOCK_PROVIDER_TIMEOUT_MS=90000 pnpm dev
+# Live routing when CLIs are installed.
+# A turn is abandoned only after the provider has been silent this long
+# (default 300000ms); a CLI that keeps streaming is never cut off.
+# ROLEFLOCK_PROVIDER_IDLE_TIMEOUT_MS=300000 pnpm dev
 ```
 
 ## Current limits

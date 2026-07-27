@@ -159,7 +159,10 @@ export class ClaudeAdapter implements ProviderAdapter {
       child.on('close', (value) => resolve(value ?? 1)),
     );
     if (aborted || request.signal?.aborted) {
-      yield { type: 'invocation.interrupted', reason: 'Cancelled by operator' };
+      // Why the signal fired — operator, timeout, or anything else — is the
+      // caller's to know. Guessing "operator" here made every timeout report
+      // itself as a cancellation.
+      yield { type: 'invocation.interrupted', reason: 'Provider run aborted before completion' };
       return;
     }
     if (code === 0) {

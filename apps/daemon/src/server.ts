@@ -89,6 +89,12 @@ function reconcileInterruptedGraphRuns(db: ReturnType<typeof openMigratedDatabas
   db.prepare(
     "UPDATE node_runs SET state = 'interrupted', completed_at = ? WHERE state = 'running'",
   ).run(at);
+  // The process sweep below only closes invocations that still have a live
+  // handle, so one whose handle was already retired kept claiming to be running
+  // for the life of the database.
+  db.prepare(
+    "UPDATE invocations SET status = 'interrupted', outcome = COALESCE(outcome, 'interrupted'), completed_at = ? WHERE status = 'running'",
+  ).run(at);
 }
 
 function reconcileOrphanedProcesses(db: ReturnType<typeof openMigratedDatabase>): void {

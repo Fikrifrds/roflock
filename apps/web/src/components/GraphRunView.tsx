@@ -9,6 +9,7 @@ const NODE_TONES: Record<string, Tone> = {
   failed: 'danger',
   skipped: 'muted',
   interrupted: 'warn',
+  cancelled: 'warn',
   pending: 'muted',
 };
 

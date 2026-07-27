@@ -356,6 +356,13 @@ export function registerApi(
     const latest = new Map<string, (typeof nodeRuns)[number]>();
     for (const nodeRun of nodeRuns) latest.set(nodeRun.node_key, nodeRun);
 
+    // A run that has stopped for good will never schedule what it never
+    // started. Reporting those nodes as `pending` made a failed run look like
+    // it was still queueing work. An interrupted run is genuinely resumable, so
+    // its untouched nodes stay pending.
+    const unreachedState =
+      run && (run.state === 'failed' || run.state === 'cancelled') ? 'skipped' : 'pending';
+
     // Present only when the run stopped because no configured provider would
     // answer. The remedy is the operator's, so the UI needs enough to say what
     // refused and point at where to change it.
@@ -395,7 +402,7 @@ export function registerApi(
           required: node.required ?? false,
           writer: node.writer ?? false,
           maxAttempts: node.maxAttempts ?? 1,
-          state: latest.get(node.id)?.state ?? 'pending',
+          state: latest.get(node.id)?.state ?? unreachedState,
           outcome: latest.get(node.id)?.outcome ?? null,
           startedAt: latest.get(node.id)?.started_at ?? null,
           completedAt: latest.get(node.id)?.completed_at ?? null,

@@ -125,7 +125,8 @@ export class CodexAdapter implements ProviderAdapter {
       child.on('close', (value) => resolve(value ?? 1)),
     );
     if (aborted || request.signal?.aborted) {
-      yield { type: 'invocation.interrupted', reason: 'Cancelled by operator' };
+      // Why the signal fired is the caller's to know; see provider-claude.
+      yield { type: 'invocation.interrupted', reason: 'Provider run aborted before completion' };
       return;
     }
     if (code === 0) {

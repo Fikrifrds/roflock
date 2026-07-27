@@ -35,7 +35,7 @@ import {
   type GraphMode,
   type WorkflowGraph,
 } from '@roleflock/graph-core';
-import { NodeFailure, runGraph } from '@roleflock/graph-runtime';
+import { NodeFailure, runGraph, type NodeContext } from '@roleflock/graph-runtime';
 import {
   captureDiff,
   createWorktree,
@@ -55,6 +55,84 @@ import { authoritativeConflictMessage, type DocumentService } from './documents.
 import { loadPriceCards } from './pricing.js';
 import { ProviderRegistry } from './provider-registry.js';
 import { RoleRouter, type RoleRoute, type RoutedRole } from './role-routing.js';
+
+/**
+ * How long a provider may stay silent before its turn is abandoned.
+ *
+ * This is an idle budget, not a wall clock. A CLI that is still streaming is
+ * still working, and a real planner or writer turn routinely runs longer than
+ * any fixed cap worth setting — the old 90s wall clock killed healthy turns
+ * a minute and a half in.
+ */
+const DEFAULT_PROVIDER_IDLE_TIMEOUT_MS = 300_000;
+
+export function providerIdleTimeoutMs(): number {
+  const raw = Number(
+    process.env.ROLEFLOCK_PROVIDER_IDLE_TIMEOUT_MS ??
+      process.env.ROLEFLOCK_PROVIDER_TIMEOUT_MS ??
+      DEFAULT_PROVIDER_IDLE_TIMEOUT_MS,
+  );
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_PROVIDER_IDLE_TIMEOUT_MS;
+}
+
+export interface IdleWatchdog {
+  /** Fires when the operator aborts or the silence budget runs out. */
+  signal: AbortSignal;
+  /** Restarts the budget; call on every sign of life from the provider. */
+  touch: () => void;
+  /** True when it was the budget, not the operator, that ended the turn. */
+  expired: () => boolean;
+  dispose: () => void;
+}
+
+/**
+ * Arms the silence budget for one provider turn.
+ *
+ * The adapter is handed a single merged signal and cannot tell the operator's
+ * Stop apart from an expired budget, which is why `expired()` exists: without
+ * it a timeout arrived labelled "Cancelled by operator", classified as
+ * `cancelled`, and skipped every retry the workflow was given.
+ */
+export function createIdleWatchdog(parent: AbortSignal, budgetMs: number): IdleWatchdog {
+  const idle = new AbortController();
+  let timer: NodeJS.Timeout | undefined;
+  const touch = (): void => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => idle.abort(), budgetMs);
+    timer.unref?.();
+  };
+  touch();
+  return {
+    signal: AbortSignal.any([parent, idle.signal]),
+    touch,
+    expired: () => idle.signal.aborted,
+    dispose: () => {
+      if (timer) clearTimeout(timer);
+    },
+  };
+}
+
+/**
+ * A provider turn abandoned because the CLI stopped producing output.
+ *
+ * Classified as a timeout rather than left to the heuristic in `classifyFailure`,
+ * so the run follows its `on_timeout` edge and spends the retries the workflow
+ * declared. It is also deliberately not a provider refusal: going quiet once
+ * says nothing about the model's health, so the router must not park it.
+ */
+export class ProviderIdleTimeoutError extends NodeFailure {
+  constructor(
+    readonly idleMs: number,
+    options?: { cause?: unknown },
+  ) {
+    super(
+      `Provider timed out: no output for ${idleMs}ms (set ROLEFLOCK_PROVIDER_IDLE_TIMEOUT_MS to adjust)`,
+      'timeout',
+      options,
+    );
+    this.name = 'ProviderIdleTimeoutError';
+  }
+}
 
 interface PreparedRun {
   graphRunId: string;
@@ -517,409 +595,429 @@ export class Orchestrator {
     const { graphRunId, graph, worktreePath, baseCommit, resumeCompleted } = prepared;
     let executions = 0;
 
-    const { results } = await runGraph(
-      graph,
-      async ({ node }) => {
-        const role = node.role;
-        if (controller.signal.aborted) throw new Error('Cancelled by operator');
-        // Honour a pause before spending anything on the next node.
-        await this.waitWhilePaused(task.id, controller.signal);
-        executions += 1;
-        if (executions > task.maxAttempts * graph.nodes.length) {
-          throw new Error(`Exceeded max attempts budget (${task.maxAttempts})`);
-        }
-        this.assertBudget(task);
+    // The rows the node body has opened but not closed, keyed by node id. A
+    // failing node used to leave both of them on `running` for good, and the run
+    // graph reads exactly those rows — so the UI kept showing a node at work
+    // under a task it already called failed.
+    const openRuns = new Map<string, { nodeRunId: string; invocationId: string }>();
 
-        const nodeRunId = randomUUID();
-        this.db
-          .prepare(
-            'INSERT INTO node_runs (id, graph_run_id, node_key, state, started_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
-          )
-          .run(nodeRunId, graphRunId, node.id, 'running', now(), now());
+    const executeNode = async ({
+      node,
+    }: NodeContext): Promise<{ role: string; nodeRunId: string }> => {
+      openRuns.delete(node.id);
+      const role = node.role;
+      if (controller.signal.aborted) throw new Error('Cancelled by operator');
+      // Honour a pause before spending anything on the next node.
+      await this.waitWhilePaused(task.id, controller.signal);
+      executions += 1;
+      if (executions > task.maxAttempts * graph.nodes.length) {
+        throw new Error(`Exceeded max attempts budget (${task.maxAttempts})`);
+      }
+      this.assertBudget(task);
 
-        const route =
-          role === 'planner' || role === 'reviewer' || role === 'writer' || role === 'verifier'
-            ? await this.resolveRoute(role)
-            : undefined;
+      const nodeRunId = randomUUID();
+      const invocationId = randomUUID();
+      this.db
+        .prepare(
+          'INSERT INTO node_runs (id, graph_run_id, node_key, state, started_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run(nodeRunId, graphRunId, node.id, 'running', now(), now());
+      openRuns.set(node.id, { nodeRunId, invocationId });
 
-        const phase =
-          role === 'test'
-            ? 'running_tests'
-            : role === 'writer'
-              ? 'writing'
-              : role === 'accept' || role === 'reviewer'
-                ? 'awaiting_confirmation'
-                : 'reasoning';
-        this.updateExecution(task, graphRunId, nodeRunId, role, phase, route);
-        this.appendEvent(task.id, `node.${role}.started`, {
+      const route =
+        role === 'planner' || role === 'reviewer' || role === 'writer' || role === 'verifier'
+          ? await this.resolveRoute(role)
+          : undefined;
+
+      const phase =
+        role === 'test'
+          ? 'running_tests'
+          : role === 'writer'
+            ? 'writing'
+            : role === 'accept' || role === 'reviewer'
+              ? 'awaiting_confirmation'
+              : 'reasoning';
+      this.updateExecution(task, graphRunId, nodeRunId, role, phase, route);
+      this.appendEvent(task.id, `node.${role}.started`, {
+        graphRunId,
+        nodeRunId,
+        role,
+        providerId: route?.providerId,
+        fallbackUsed: route?.fallbackUsed,
+      });
+
+      this.invocations.create({
+        id: invocationId,
+        nodeRunId,
+        providerConnectionId: route?.providerId ?? 'deterministic',
+        configuredModelId: route?.modelId ?? 'command-runner',
+        status: 'running',
+        startedAt: now(),
+      });
+
+      const disclosureEntries = [
+        {
+          id: `task:${task.id}`,
+          content: [
+            `Title: ${task.title}`,
+            task.brief,
+            `Expected: ${task.expectedBehaviour ?? 'n/a'}`,
+            `Actual: ${task.actualBehaviour ?? 'n/a'}`,
+          ].join('\n'),
+          source: 'task.brief',
+          sensitivity: 'internal' as const,
+          priority: 100,
+        },
+        buildRepositoryMap(
+          (() => {
+            try {
+              return readdirSync(worktreePath);
+            } catch {
+              return [];
+            }
+          })(),
+        ),
+        ...(this.documents?.list(task.id) ?? [])
+          .filter((doc) => doc.extractedText)
+          .slice(0, 5)
+          .map((doc) => ({
+            id: `document:${doc.id}`,
+            content: doc.extractedText!.slice(0, 2_000),
+            source: `document:${doc.fileName}`,
+            path: doc.fileName,
+            sensitivity: 'internal' as const,
+            priority: doc.authority === 'authoritative_requirement' ? 90 : 50,
+          })),
+        ...new LocalKnowledgeRepository(this.db)
+          .list({ projectId: task.projectId, state: 'published' })
+          .slice(0, 8)
+          .map((item) => ({
+            id: `knowledge:${item.id}`,
+            content: `${item.title}\n${item.body}`,
+            source: `knowledge:${item.type}`,
+            sensitivity: 'internal' as const,
+            priority: 30,
+          })),
+      ];
+      const compiled = compileContext({
+        role: (['planner', 'reviewer', 'writer', 'test', 'verifier', 'accept'].includes(role)
+          ? role
+          : 'planner') as RoleId,
+        items: disclosureEntries,
+      });
+      this.evidence.addDisclosureManifest({
+        id: randomUUID(),
+        invocationId,
+        providerConnectionId: route?.providerId ?? 'deterministic',
+        selectedContext: {
+          role: compiled.role,
+          contract: compiled.contract,
+          totalTokens: compiled.disclosure.totalTokens,
+          totalBytes: compiled.disclosure.totalBytes,
+          entries: compiled.disclosure.entries,
+          omitted: compiled.omitted,
+        },
+        exclusions: compiled.disclosure.exclusions,
+        createdAt: now(),
+      });
+
+      if (role === 'planner' || role === 'verifier') {
+        // The adapter comes from the route invokeRole resolves per attempt, so
+        // a failover mid-turn swaps the adapter too.
+        const prompt =
+          role === 'verifier'
+            ? [
+                `VERIFIER for RoleFlock task "${task.title}" (read-only). Do not modify files.`,
+                'Judge whether the writer\'s change actually satisfies the brief.',
+                'End your reply with exactly one line:',
+                '  VERDICT: PASS',
+                'or',
+                '  VERDICT: NEEDS_CHANGES — <one sentence on what is missing>',
+                '',
+                compiled.promptBlock,
+              ].join('\n')
+            : `PLANNER for RoleFlock task "${task.title}" (read-only).\nDo not modify files.\n\n${compiled.promptBlock}`;
+
+        const invoked = await this.invokeRole({
+          role,
+          task,
           graphRunId,
           nodeRunId,
-          role,
-          providerId: route?.providerId,
-          fallbackUsed: route?.fallbackUsed,
-        });
-
-        const invocationId = randomUUID();
-        this.invocations.create({
-          id: invocationId,
-          nodeRunId,
-          providerConnectionId: route?.providerId ?? 'deterministic',
-          configuredModelId: route?.modelId ?? 'command-runner',
-          status: 'running',
-          startedAt: now(),
-        });
-
-        const disclosureEntries = [
-          {
-            id: `task:${task.id}`,
-            content: [
-              `Title: ${task.title}`,
-              task.brief,
-              `Expected: ${task.expectedBehaviour ?? 'n/a'}`,
-              `Actual: ${task.actualBehaviour ?? 'n/a'}`,
-            ].join('\n'),
-            source: 'task.brief',
-            sensitivity: 'internal' as const,
-            priority: 100,
-          },
-          buildRepositoryMap(
-            (() => {
-              try {
-                return readdirSync(worktreePath);
-              } catch {
-                return [];
-              }
-            })(),
-          ),
-          ...(this.documents?.list(task.id) ?? [])
-            .filter((doc) => doc.extractedText)
-            .slice(0, 5)
-            .map((doc) => ({
-              id: `document:${doc.id}`,
-              content: doc.extractedText!.slice(0, 2_000),
-              source: `document:${doc.fileName}`,
-              path: doc.fileName,
-              sensitivity: 'internal' as const,
-              priority: doc.authority === 'authoritative_requirement' ? 90 : 50,
-            })),
-          ...new LocalKnowledgeRepository(this.db)
-            .list({ projectId: task.projectId, state: 'published' })
-            .slice(0, 8)
-            .map((item) => ({
-              id: `knowledge:${item.id}`,
-              content: `${item.title}\n${item.body}`,
-              source: `knowledge:${item.type}`,
-              sensitivity: 'internal' as const,
-              priority: 30,
-            })),
-        ];
-        const compiled = compileContext({
-          role: (['planner', 'reviewer', 'writer', 'test', 'verifier', 'accept'].includes(role)
-            ? role
-            : 'planner') as RoleId,
-          items: disclosureEntries,
-        });
-        this.evidence.addDisclosureManifest({
-          id: randomUUID(),
           invocationId,
-          providerConnectionId: route?.providerId ?? 'deterministic',
-          selectedContext: {
-            role: compiled.role,
-            contract: compiled.contract,
-            totalTokens: compiled.disclosure.totalTokens,
-            totalBytes: compiled.disclosure.totalBytes,
-            entries: compiled.disclosure.entries,
-            omitted: compiled.omitted,
-          },
-          exclusions: compiled.disclosure.exclusions,
+          prompt,
+          cwd: worktreePath,
+          signal: controller.signal,
+          // A failover mid-turn changes who is running; reflect that in the
+          // live view rather than leaving the original provider on screen.
+          onRoute: (next) =>
+            this.updateExecution(task, graphRunId, nodeRunId, role, phase, next),
+        });
+        const output = invoked.output;
+        const served = invoked.route;
+
+        const provenance = `${role} via ${served.providerDisplayName} / ${served.modelDisplayName}${
+          served.effort ? ` (${served.effort})` : ''
+        } · ${compiled.disclosure.totalTokens} ctx tokens${
+          served.fallbackUsed ? ' · fallback' : ''
+        }`;
+
+        if (role === 'verifier') {
+          const rejection = await this.verifierRejection(worktreePath, output);
+          if (rejection) {
+            this.evidence.addFinding({
+              id: randomUUID(),
+              taskId: task.id,
+              nodeRunId,
+              severity: 'warning',
+              summary: `Verifier asked for changes — ${provenance}`,
+              details: rejection,
+              createdAt: now(),
+            });
+            this.appendEvent(task.id, 'node.verifier.needs_changes', {
+              graphRunId,
+              nodeRunId,
+              reason: rejection,
+            });
+            // Classified so the runtime follows the verifier → writer edge
+            // instead of failing the run outright.
+            throw new NodeFailure(rejection, 'needs_changes');
+          }
+        }
+
+        this.evidence.addFinding({
+          id: randomUUID(),
+          taskId: task.id,
+          nodeRunId,
+          severity: 'info',
+          summary: provenance,
+          details: output || task.brief,
           createdAt: now(),
         });
-
-        if (role === 'planner' || role === 'verifier') {
-          // The adapter comes from the route invokeRole resolves per attempt, so
-          // a failover mid-turn swaps the adapter too.
-          const prompt =
-            role === 'verifier'
-              ? [
-                  `VERIFIER for RoleFlock task "${task.title}" (read-only). Do not modify files.`,
-                  'Judge whether the writer\'s change actually satisfies the brief.',
-                  'End your reply with exactly one line:',
-                  '  VERDICT: PASS',
-                  'or',
-                  '  VERDICT: NEEDS_CHANGES — <one sentence on what is missing>',
-                  '',
-                  compiled.promptBlock,
-                ].join('\n')
-              : `PLANNER for RoleFlock task "${task.title}" (read-only).\nDo not modify files.\n\n${compiled.promptBlock}`;
-
-          const invoked = await this.invokeRole({
+      } else if (role === 'reviewer') {
+        if (route) {
+          await this.invokeRole({
             role,
             task,
             graphRunId,
             nodeRunId,
             invocationId,
-            prompt,
+            prompt: `Review plan and confirm whether writing ROLEFLOCK_FIX.md is an appropriate scope.\n\n${compiled.promptBlock}`,
             cwd: worktreePath,
             signal: controller.signal,
-            // A failover mid-turn changes who is running; reflect that in the
-            // live view rather than leaving the original provider on screen.
-            onRoute: (next) =>
-              this.updateExecution(task, graphRunId, nodeRunId, role, phase, next),
           });
-          const output = invoked.output;
-          const served = invoked.route;
-
-          const provenance = `${role} via ${served.providerDisplayName} / ${served.modelDisplayName}${
-            served.effort ? ` (${served.effort})` : ''
-          } · ${compiled.disclosure.totalTokens} ctx tokens${
-            served.fallbackUsed ? ' · fallback' : ''
-          }`;
-
-          if (role === 'verifier') {
-            const rejection = await this.verifierRejection(worktreePath, output);
-            if (rejection) {
-              this.evidence.addFinding({
-                id: randomUUID(),
-                taskId: task.id,
-                nodeRunId,
-                severity: 'warning',
-                summary: `Verifier asked for changes — ${provenance}`,
-                details: rejection,
-                createdAt: now(),
-              });
-              this.appendEvent(task.id, 'node.verifier.needs_changes', {
-                graphRunId,
-                nodeRunId,
-                reason: rejection,
-              });
-              // Classified so the runtime follows the verifier → writer edge
-              // instead of failing the run outright.
-              throw new NodeFailure(rejection, 'needs_changes');
-            }
-          }
-
+        }
+        const confirmation = createConfirmationRequest({
+          taskId: task.id,
+          graphRunId,
+          nodeRunId,
+          requestType: 'expand_scope',
+          rationale: 'Reviewer asks to confirm the proposed fix scope before writing.',
+          exactAction: {
+            kind: 'scope',
+            verb: 'confirm',
+            target: graph.id,
+            paths: ['ROLEFLOCK_FIX.md'],
+            sideEffectClass: 'local_write',
+          },
+          affectedPaths: ['ROLEFLOCK_FIX.md'],
+          riskClass: 'medium',
+          stateHash: baseCommit,
+        });
+        const autoApproved = this.tryGrantAutoApproval(confirmation, task.projectId);
+        this.confirmations.create(autoApproved.request);
+        if (autoApproved.skipped) {
           this.evidence.addFinding({
             id: randomUUID(),
             taskId: task.id,
             nodeRunId,
             severity: 'info',
-            summary: provenance,
-            details: output || task.brief,
+            summary: 'Reviewer confirmation auto-approved via grant',
+            details: confirmation.rationale,
             createdAt: now(),
           });
-        } else if (role === 'reviewer') {
-          if (route) {
+        } else {
+          this.setTaskState(task.id, 'awaiting_confirmation');
+          this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation', route);
+          this.bus.publish('approval.requested', autoApproved.request);
+          const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
+          if (decision === 'rejected') throw new Error('Confirmation rejected');
+        }
+      } else if (role === 'writer') {
+        await this.assertDocumentConflictsResolved(
+          task,
+          graphRunId,
+          nodeRunId,
+          baseCommit,
+          controller,
+        );
+        const leaseId = randomUUID();
+        const memLease = new WriterLease(worktreePath, nodeRunId);
+        if (!memLease.acquire()) throw new Error('Writer lease unavailable');
+        try {
+          this.leases.tryAcquire({
+            id: leaseId,
+            resourceType: 'writer',
+            resourceId: worktreePath,
+            ownerId: nodeRunId,
+            acquiredAt: now(),
+          });
+        } catch {
+          memLease.release();
+          throw new Error('Writer lease unavailable (durable)');
+        }
+        this.worktrees.setWriterLease(task.id, nodeRunId);
+        try {
+          const relativeTarget = 'ROLEFLOCK_FIX.md';
+          const useAgent =
+            !this.forceFake &&
+            process.env.ROLEFLOCK_CURSOR_AGENT !== '0' &&
+            route?.adapter instanceof CursorWriterAdapter &&
+            (await route.adapter.hasAgentCli());
+
+          const envelope = useAgent
+            ? {
+                worktree: worktreePath,
+                allowedPaths: ['**'],
+                allowCommands: false,
+              }
+            : {
+                worktree: worktreePath,
+                allowedPaths: [relativeTarget],
+                allowCommands: false,
+              };
+
+          if (useAgent && route?.adapter instanceof CursorWriterAdapter) {
+            const prompt = [
+              'Implement the smallest sufficient bug fix in this repository worktree.',
+              `Title: ${task.title}`,
+              `Brief: ${task.brief}`,
+              `Expected: ${task.expectedBehaviour ?? 'n/a'}`,
+              `Actual: ${task.actualBehaviour ?? 'n/a'}`,
+              'Stay inside this workspace. Prefer editing existing source over adding docs.',
+              'Do not invent secrets or reach outside the worktree.',
+            ].join('\n');
             await this.invokeRole({
               role,
               task,
               graphRunId,
               nodeRunId,
               invocationId,
-              prompt: `Review plan and confirm whether writing ROLEFLOCK_FIX.md is an appropriate scope.\n\n${compiled.promptBlock}`,
+              prompt,
               cwd: worktreePath,
               signal: controller.signal,
-            });
-          }
-          const confirmation = createConfirmationRequest({
-            taskId: task.id,
-            graphRunId,
-            nodeRunId,
-            requestType: 'expand_scope',
-            rationale: 'Reviewer asks to confirm the proposed fix scope before writing.',
-            exactAction: {
-              kind: 'scope',
-              verb: 'confirm',
-              target: graph.id,
-              paths: ['ROLEFLOCK_FIX.md'],
-              sideEffectClass: 'local_write',
-            },
-            affectedPaths: ['ROLEFLOCK_FIX.md'],
-            riskClass: 'medium',
-            stateHash: baseCommit,
-          });
-          const autoApproved = this.tryGrantAutoApproval(confirmation, task.projectId);
-          this.confirmations.create(autoApproved.request);
-          if (autoApproved.skipped) {
-            this.evidence.addFinding({
-              id: randomUUID(),
-              taskId: task.id,
-              nodeRunId,
-              severity: 'info',
-              summary: 'Reviewer confirmation auto-approved via grant',
-              details: confirmation.rationale,
-              createdAt: now(),
+              permissionEnvelope: envelope,
+              onRoute: (next) =>
+                this.updateExecution(task, graphRunId, nodeRunId, role, phase, next),
             });
           } else {
-            this.setTaskState(task.id, 'awaiting_confirmation');
-            this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation', route);
-            this.bus.publish('approval.requested', autoApproved.request);
-            const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
-            if (decision === 'rejected') throw new Error('Confirmation rejected');
-          }
-        } else if (role === 'writer') {
-          await this.assertDocumentConflictsResolved(
-            task,
-            graphRunId,
-            nodeRunId,
-            baseCommit,
-            controller,
-          );
-          const leaseId = randomUUID();
-          const memLease = new WriterLease(worktreePath, nodeRunId);
-          if (!memLease.acquire()) throw new Error('Writer lease unavailable');
-          try {
-            this.leases.tryAcquire({
-              id: leaseId,
-              resourceType: 'writer',
-              resourceId: worktreePath,
-              ownerId: nodeRunId,
-              acquiredAt: now(),
-            });
-          } catch {
-            memLease.release();
-            throw new Error('Writer lease unavailable (durable)');
-          }
-          this.worktrees.setWriterLease(task.id, nodeRunId);
-          try {
-            const relativeTarget = 'ROLEFLOCK_FIX.md';
-            const useAgent =
-              !this.forceFake &&
-              process.env.ROLEFLOCK_CURSOR_AGENT !== '0' &&
-              route?.adapter instanceof CursorWriterAdapter &&
-              (await route.adapter.hasAgentCli());
-
-            const envelope = useAgent
-              ? {
-                  worktree: worktreePath,
-                  allowedPaths: ['**'],
-                  allowCommands: false,
-                }
-              : {
-                  worktree: worktreePath,
-                  allowedPaths: [relativeTarget],
-                  allowCommands: false,
-                };
-
-            if (useAgent && route?.adapter instanceof CursorWriterAdapter) {
-              const prompt = [
-                'Implement the smallest sufficient bug fix in this repository worktree.',
-                `Title: ${task.title}`,
-                `Brief: ${task.brief}`,
-                `Expected: ${task.expectedBehaviour ?? 'n/a'}`,
-                `Actual: ${task.actualBehaviour ?? 'n/a'}`,
-                'Stay inside this workspace. Prefer editing existing source over adding docs.',
-                'Do not invent secrets or reach outside the worktree.',
-              ].join('\n');
-              await this.invokeRole({
-                role,
-                task,
-                graphRunId,
-                nodeRunId,
-                invocationId,
-                prompt,
-                cwd: worktreePath,
-                signal: controller.signal,
-                permissionEnvelope: envelope,
-                onRoute: (next) =>
-                  this.updateExecution(task, graphRunId, nodeRunId, role, phase, next),
-              });
-            } else {
-              const content = `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'leased filesystem writer'}\nVerification: ${task.verificationCommand ?? 'artefact-present / npm test / ROLEFLOCK_FORCE_FAKE'}\nMode: leased-fs-fallback\n`;
-              if (route?.adapter instanceof CursorWriterAdapter) {
-                await route.adapter.write(relativeTarget, content, envelope);
-              } else {
-                await writeFile(join(worktreePath, relativeTarget), content);
-              }
-            }
-
-            const diff = await captureDiff(worktreePath);
+            const content = `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'leased filesystem writer'}\nVerification: ${task.verificationCommand ?? 'artefact-present / npm test / ROLEFLOCK_FORCE_FAKE'}\nMode: leased-fs-fallback\n`;
             if (route?.adapter instanceof CursorWriterAdapter) {
-              assertChangedPathsAllowed(envelope, diff.changedFiles);
+              await route.adapter.write(relativeTarget, content, envelope);
+            } else {
+              await writeFile(join(worktreePath, relativeTarget), content);
             }
-            this.evidence.addArtefact({
-              id: randomUUID(),
-              taskId: task.id,
-              kind: 'diff',
-              path: useAgent ? worktreePath : join(worktreePath, relativeTarget),
-              contentRef: diff.patch,
-              metadata: {
-                changedFiles: diff.changedFiles,
-                status: diff.status,
-                providerId: route?.providerId,
-                permissionEnvelope: envelope,
-                durableLeaseId: leaseId,
-                writerMode: useAgent ? 'cursor-agent' : 'fs-fallback',
-              },
-              createdAt: now(),
-            });
-          } finally {
-            this.leases.release(leaseId, now());
-            memLease.release();
-            this.worktrees.setWriterLease(task.id, null);
           }
-        } else if (role === 'test') {
-          const verification = await this.resolveVerification(task, worktreePath);
-          // A non-zero exit is a verification result, not an orchestration error:
-          // it must still be recorded as evidence before the node fails.
-          const { passed, exitCode, stdout, stderr } = await runCommand({
-            command: verification.command,
-            args: verification.args,
-            cwd: worktreePath,
-            sandboxRoot: worktreePath,
-            timeoutMs: 60_000,
-          }).then(
-            (result) => ({
-              passed: true,
-              exitCode: result.exitCode ?? 0,
-              stdout: result.stdout,
-              stderr: result.stderr,
-            }),
-            (error: unknown) => {
-              if (!(error instanceof CommandError)) throw error;
-              return {
-                passed: false,
-                exitCode: error.result.exitCode ?? undefined,
-                stdout: error.result.stdout,
-                stderr: error.result.stderr,
-              };
-            },
-          );
-          this.evidence.addTestRun({
+
+          const diff = await captureDiff(worktreePath);
+          if (route?.adapter instanceof CursorWriterAdapter) {
+            assertChangedPathsAllowed(envelope, diff.changedFiles);
+          }
+          this.evidence.addArtefact({
             id: randomUUID(),
             taskId: task.id,
-            nodeRunId,
-            command: verification.label,
-            exitCode,
-            stdoutRef: stdout,
-            stderrRef: stderr,
-            passed,
+            kind: 'diff',
+            path: useAgent ? worktreePath : join(worktreePath, relativeTarget),
+            contentRef: diff.patch,
+            metadata: {
+              changedFiles: diff.changedFiles,
+              status: diff.status,
+              providerId: route?.providerId,
+              permissionEnvelope: envelope,
+              durableLeaseId: leaseId,
+              writerMode: useAgent ? 'cursor-agent' : 'fs-fallback',
+            },
             createdAt: now(),
           });
-          if (!passed) {
-            // Classified explicitly so the runtime routes this back to the writer
-            // instead of treating it as an unknown orchestration error.
-            throw new NodeFailure(
-              `Verification failed (${verification.label})${stderr ? `: ${stderr.slice(0, 400)}` : ''}`,
-              'verification_failed',
-            );
-          }
-        } else if (role === 'accept') {
-          this.setTaskState(task.id, 'awaiting_acceptance');
-          this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation');
-          const decision = await this.waitForAcceptance(task.id, controller.signal);
-          if (decision === 'rejected') throw new Error('Human rejected the change');
+        } finally {
+          this.leases.release(leaseId, now());
+          memLease.release();
+          this.worktrees.setWriterLease(task.id, null);
         }
+      } else if (role === 'test') {
+        const verification = await this.resolveVerification(task, worktreePath);
+        // A non-zero exit is a verification result, not an orchestration error:
+        // it must still be recorded as evidence before the node fails.
+        const { passed, exitCode, stdout, stderr } = await runCommand({
+          command: verification.command,
+          args: verification.args,
+          cwd: worktreePath,
+          sandboxRoot: worktreePath,
+          timeoutMs: 60_000,
+        }).then(
+          (result) => ({
+            passed: true,
+            exitCode: result.exitCode ?? 0,
+            stdout: result.stdout,
+            stderr: result.stderr,
+          }),
+          (error: unknown) => {
+            if (!(error instanceof CommandError)) throw error;
+            return {
+              passed: false,
+              exitCode: error.result.exitCode ?? undefined,
+              stdout: error.result.stdout,
+              stderr: error.result.stderr,
+            };
+          },
+        );
+        this.evidence.addTestRun({
+          id: randomUUID(),
+          taskId: task.id,
+          nodeRunId,
+          command: verification.label,
+          exitCode,
+          stdoutRef: stdout,
+          stderrRef: stderr,
+          passed,
+          createdAt: now(),
+        });
+        if (!passed) {
+          // Classified explicitly so the runtime routes this back to the writer
+          // instead of treating it as an unknown orchestration error.
+          throw new NodeFailure(
+            `Verification failed (${verification.label})${stderr ? `: ${stderr.slice(0, 400)}` : ''}`,
+            'verification_failed',
+          );
+        }
+      } else if (role === 'accept') {
+        this.setTaskState(task.id, 'awaiting_acceptance');
+        this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation');
+        const decision = await this.waitForAcceptance(task.id, controller.signal);
+        if (decision === 'rejected') throw new Error('Human rejected the change');
+      }
 
-        this.invocations.updateStatus(invocationId, 'completed', 'success', now());
-        // Deterministic nodes spend no provider quota, so nothing is metered
-        // for them. Provider turns record their own usage in `invokeRole`,
-        // where the CLI's reported numbers are still in hand.
-        this.applyBudgetWarning(task, nodeRunId);
-        this.db
-          .prepare('UPDATE node_runs SET state = ?, completed_at = ?, outcome = ? WHERE id = ?')
-          .run('completed', now(), 'success', nodeRunId);
-        this.bus.publish('execution.updated', this.executions.getByTask(task.id));
-        return { role, nodeRunId };
+      this.invocations.updateStatus(invocationId, 'completed', 'success', now());
+      // Deterministic nodes spend no provider quota, so nothing is metered
+      // for them. Provider turns record their own usage in `invokeRole`,
+      // where the CLI's reported numbers are still in hand.
+      this.applyBudgetWarning(task, nodeRunId);
+      this.db
+        .prepare('UPDATE node_runs SET state = ?, completed_at = ?, outcome = ? WHERE id = ?')
+        .run('completed', now(), 'success', nodeRunId);
+      this.bus.publish('execution.updated', this.executions.getByTask(task.id));
+      openRuns.delete(node.id);
+      return { role, nodeRunId };
+    };
+
+    const { results } = await runGraph(
+      graph,
+      async (context) => {
+        try {
+          return await executeNode(context);
+        } catch (error) {
+          this.closeFailedNodeRun(openRuns.get(context.node.id), error, controller.signal.aborted);
+          throw error;
+        }
       },
       {
         signal: controller.signal,
@@ -971,6 +1069,7 @@ export class Orchestrator {
         blocked
           ? `${message}\n\nChange the model for this role on the Roles page, then start the task again — it resumes from the steps that already finished.`
           : message,
+        openRuns.get(failed.nodeId)?.nodeRunId,
       );
       if (!controller.signal.aborted) this.setTaskState(task.id, 'failed');
       throw failed.error instanceof Error ? failed.error : new Error(message);
@@ -1006,16 +1105,52 @@ export class Orchestrator {
     };
   }
 
-  private recordFailure(taskId: string, summary: string, details: string): void {
+  private recordFailure(
+    taskId: string,
+    summary: string,
+    details: string,
+    nodeRunId?: string,
+  ): void {
     this.evidence.addFinding({
       id: randomUUID(),
       taskId,
+      nodeRunId,
       severity: 'error',
       summary,
       details,
       createdAt: now(),
     });
     this.bus.publish('task.failed', { taskId, error: details });
+  }
+
+  /**
+   * Closes the rows a failed node left open.
+   *
+   * Only the success path used to write a terminal state, so a failed node kept
+   * a `running` node run and a `running` invocation on record for good. Both are
+   * what the run graph and the process reconciler read, so leaving them meant
+   * the failure was invisible everywhere except the task's own state.
+   */
+  private closeFailedNodeRun(
+    open: { nodeRunId: string; invocationId: string } | undefined,
+    error: unknown,
+    cancelled: boolean,
+  ): void {
+    if (!open) return;
+    const message = error instanceof Error ? error.message : String(error);
+    const state = cancelled ? 'cancelled' : 'failed';
+    const at = now();
+    this.invocations.updateStatus(
+      open.invocationId,
+      state,
+      cancelled ? 'cancelled' : 'error',
+      at,
+      JSON.stringify({ message: message.slice(0, 2_000) }),
+    );
+    this.db
+      .prepare('UPDATE node_runs SET state = ?, completed_at = ?, outcome = ? WHERE id = ?')
+      .run(state, at, message.slice(0, 400), open.nodeRunId);
+    this.closeProcessHandles(open.nodeRunId, 'unknown');
   }
 
   private async assertDocumentConflictsResolved(
@@ -1159,6 +1294,10 @@ export class Orchestrator {
         return { output: invoked.output, route, usage: invoked.usage };
       } catch (error) {
         if (input.signal.aborted) throw error;
+        // A turn that went quiet is not a refusal. Parking the candidate would
+        // walk the role down its fallback list over one slow reply, and end on
+        // "no provider available" when every provider was in fact healthy.
+        if (error instanceof ProviderIdleTimeoutError) throw error;
 
         const message = error instanceof Error ? error.message : String(error);
         const kind = classifyProviderFailure(message);
@@ -1210,14 +1349,8 @@ export class Orchestrator {
     }
   }
 
-  private providerTimeoutMs(): number {
-    const raw = Number(process.env.ROLEFLOCK_PROVIDER_TIMEOUT_MS ?? 90_000);
-    return Number.isFinite(raw) && raw > 0 ? raw : 90_000;
-  }
-
-  private invocationSignal(parent: AbortSignal): AbortSignal {
-    const timeout = AbortSignal.timeout(this.providerTimeoutMs());
-    return AbortSignal.any([parent, timeout]);
+  private providerIdleTimeoutMs(): number {
+    return providerIdleTimeoutMs();
   }
 
   private async consumeInvocation(input: {
@@ -1237,12 +1370,13 @@ export class Orchestrator {
   }): Promise<{ output: string; usage?: ReportedUsage }> {
     let output = '';
     let usage: ReportedUsage | undefined;
+    const watchdog = createIdleWatchdog(input.signal, this.providerIdleTimeoutMs());
     try {
       for await (const event of input.adapter.invoke({
         invocationId: input.invocationId,
         prompt: input.prompt,
         cwd: input.cwd,
-        signal: this.invocationSignal(input.signal),
+        signal: watchdog.signal,
         permissionEnvelope: input.permissionEnvelope,
         model: input.model,
         effort: input.effort,
@@ -1261,6 +1395,9 @@ export class Orchestrator {
           });
         },
       })) {
+        // Any event is proof of life. The turn is only abandoned when the
+        // provider goes quiet, never for taking its time.
+        watchdog.touch();
         if (event.type === 'heartbeat') {
           const execution = this.executions.getByNodeRun(input.nodeRunId);
           if (execution) {
@@ -1282,14 +1419,15 @@ export class Orchestrator {
       }
     } catch (error) {
       this.closeProcessHandles(input.nodeRunId, 'unknown');
+      // Operator first: only a Stop makes the parent signal fire, and that is
+      // the one abort a retry must not paper over.
       if (input.signal.aborted) throw new Error('Cancelled by operator', { cause: error });
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error(
-          `Provider invocation timed out after ${this.providerTimeoutMs()}ms (set ROLEFLOCK_PROVIDER_TIMEOUT_MS to adjust)`,
-          { cause: error },
-        );
+      if (watchdog.expired() || (error instanceof Error && error.name === 'AbortError')) {
+        throw new ProviderIdleTimeoutError(this.providerIdleTimeoutMs(), { cause: error });
       }
       throw error;
+    } finally {
+      watchdog.dispose();
     }
     this.closeProcessHandles(input.nodeRunId, 'terminated');
     return { output, usage };
