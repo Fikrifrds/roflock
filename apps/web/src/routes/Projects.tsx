@@ -20,6 +20,7 @@ export function Projects() {
   const [name, setName] = useState('');
   const [nameTouched, setNameTouched] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [choosing, setChoosing] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -41,11 +42,20 @@ export function Projects() {
           onSubmit={async (event: FormEvent) => {
             event.preventDefault();
             setError('');
+            setNotice('');
             try {
-              await api.request('/api/projects', {
-                method: 'POST',
-                body: JSON.stringify({ path, name: name.trim() || undefined }),
-              });
+              const project = await api.request<Project & { gitInitialized?: boolean }>(
+                '/api/projects',
+                {
+                  method: 'POST',
+                  body: JSON.stringify({ path, name: name.trim() || undefined }),
+                },
+              );
+              setNotice(
+                project.gitInitialized
+                  ? `${project.name} was added. RoleFlock initialized Git with an empty first commit.`
+                  : `${project.name} was added.`,
+              );
               setPath('');
               setName('');
               setNameTouched(false);
@@ -127,6 +137,11 @@ export function Projects() {
           {error ? (
             <p className="error" role="alert">
               {error}
+            </p>
+          ) : null}
+          {notice ? (
+            <p className="hint" role="status">
+              {notice}
             </p>
           ) : null}
         </form>

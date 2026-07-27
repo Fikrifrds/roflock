@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, realpath, lstat, access, stat } from 'node:fs/promises';
+import { mkdir, realpath, lstat, access, stat, readdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
@@ -13,7 +13,11 @@ export interface Repository {
 }
 
 export type RepositoryRegistrationErrorCode =
-  'PATH_NOT_FOUND' | 'NOT_A_DIRECTORY' | 'NOT_GIT_REPOSITORY' | 'NO_INITIAL_COMMIT';
+  | 'PATH_NOT_FOUND'
+  | 'NOT_A_DIRECTORY'
+  | 'NOT_GIT_REPOSITORY'
+  | 'NO_INITIAL_COMMIT'
+  | 'NON_EMPTY_NON_GIT_DIRECTORY';
 
 export class RepositoryRegistrationError extends Error {
   constructor(
@@ -38,10 +42,7 @@ export const DEFAULT_DENIED_GLOBS = [
   '**/*.key',
 ];
 
-export async function registerRepository(
-  path: string,
-  deniedPathGlobs = DEFAULT_DENIED_GLOBS,
-): Promise<Repository> {
+async function resolveProjectDirectory(path: string): Promise<string> {
   let root: string;
   try {
     root = await realpath(path);
@@ -58,7 +59,14 @@ export async function registerRepository(
       `Project path must be a folder: ${path}`,
     );
   }
+  return root;
+}
 
+export async function registerRepository(
+  path: string,
+  deniedPathGlobs = DEFAULT_DENIED_GLOBS,
+): Promise<Repository> {
+  const root = await resolveProjectDirectory(path);
   let stdout: string;
   try {
     ({ stdout } = await exec('git', ['-C', root, 'rev-parse', '--is-inside-work-tree']));
@@ -91,6 +99,40 @@ export async function registerRepository(
     gitDir: await realpath(resolve(root, gitDirRaw.stdout.trim())),
     deniedPathGlobs,
   };
+}
+
+/**
+ * Bootstraps a brand-new project without staging any user files. Restricting
+ * this to a truly empty folder prevents an innocent "Add project" click from
+ * committing secrets or an existing unreviewed codebase.
+ */
+export async function initializeEmptyRepository(
+  path: string,
+  deniedPathGlobs = DEFAULT_DENIED_GLOBS,
+): Promise<Repository> {
+  const root = await resolveProjectDirectory(path);
+  const entries = await readdir(root);
+  if (entries.length > 0) {
+    throw new RepositoryRegistrationError(
+      'NON_EMPTY_NON_GIT_DIRECTORY',
+      'This folder is not a Git repository and already contains files. Initialize and review Git manually before adding it.',
+    );
+  }
+
+  await exec('git', ['-C', root, 'init', '--initial-branch=main']);
+  await exec('git', [
+    '-C',
+    root,
+    '-c',
+    'user.name=RoleFlock',
+    '-c',
+    'user.email=roleflock@local.invalid',
+    'commit',
+    '--allow-empty',
+    '-m',
+    'Initial commit',
+  ]);
+  return registerRepository(root, deniedPathGlobs);
 }
 
 export function matchesGlob(path: string, glob: string): boolean {

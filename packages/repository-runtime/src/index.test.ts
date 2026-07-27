@@ -1,9 +1,15 @@
-import { mkdtempSync, rmSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
-import { WriterLease, assertSafePath, createWorktree, registerRepository } from './index.js';
+import {
+  WriterLease,
+  assertSafePath,
+  createWorktree,
+  initializeEmptyRepository,
+  registerRepository,
+} from './index.js';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -39,6 +45,39 @@ describe('repository-runtime', () => {
     await expect(registerRepository(plain)).rejects.toMatchObject({
       code: 'NO_INITIAL_COMMIT',
     });
+  });
+
+  it('initializes an empty project with a safe empty first commit', async () => {
+    const plain = mkdtempSync(join(tmpdir(), 'rf-new-project-'));
+    dirs.push(plain);
+
+    const repository = await initializeEmptyRepository(plain);
+
+    expect(repository.root).toBe(realpathSync(plain));
+    expect(
+      execFileSync('git', ['-C', plain, 'branch', '--show-current'], {
+        encoding: 'utf8',
+      }).trim(),
+    ).toBe('main');
+    expect(
+      execFileSync('git', ['-C', plain, 'log', '-1', '--pretty=%s'], {
+        encoding: 'utf8',
+      }).trim(),
+    ).toBe('Initial commit');
+    expect(execFileSync('git', ['-C', plain, 'status', '--porcelain'], { encoding: 'utf8' })).toBe(
+      '',
+    );
+  });
+
+  it('does not initialize or stage a non-empty folder', async () => {
+    const plain = mkdtempSync(join(tmpdir(), 'rf-existing-project-'));
+    dirs.push(plain);
+    writeFileSync(join(plain, '.env'), 'SECRET=keep-me-out\n');
+
+    await expect(initializeEmptyRepository(plain)).rejects.toMatchObject({
+      code: 'NON_EMPTY_NON_GIT_DIRECTORY',
+    });
+    expect(existsSync(join(plain, '.git'))).toBe(false);
   });
 
   it('denies .env and symlink escapes', async () => {

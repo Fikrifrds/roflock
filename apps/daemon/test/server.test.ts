@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -82,7 +82,7 @@ describe('daemon boundary', () => {
     });
     expect(res.statusCode).toBe(200);
   });
-  it('returns an actionable validation error for a folder that is not a Git repository', async () => {
+  it('initializes and registers an empty folder as a new Git project', async () => {
     const { app } = await server();
     const folder = await mkdtemp(join(tmpdir(), 'roleflock-plain-project-'));
     const res = await app.inject({
@@ -95,10 +95,36 @@ describe('daemon boundary', () => {
       },
       payload: { path: folder },
     });
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({
+      resolvedPath: await realpath(folder),
+      gitInitialized: true,
+    });
+    const { execFileSync } = await import('node:child_process');
+    expect(
+      execFileSync('git', ['-C', folder, 'log', '-1', '--pretty=%s'], {
+        encoding: 'utf8',
+      }).trim(),
+    ).toBe('Initial commit');
+  });
+  it('does not auto-commit files from a non-Git folder', async () => {
+    const { app } = await server();
+    const folder = await mkdtemp(join(tmpdir(), 'roleflock-existing-project-'));
+    await writeFile(join(folder, '.env'), 'SECRET=do-not-commit\n');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers: {
+        'x-roleflock-token': 'test-token',
+        'x-roleflock-csrf': 'test-csrf',
+        'content-type': 'application/json',
+      },
+      payload: { path: folder },
+    });
     expect(res.statusCode).toBe(422);
     expect(res.json()).toMatchObject({
-      code: 'NOT_GIT_REPOSITORY',
-      error: expect.stringMatching(/initial commit/i),
+      code: 'NON_EMPTY_NON_GIT_DIRECTORY',
+      error: expect.stringMatching(/already contains files/i),
     });
   });
   it('rejects mutations from non-local origins', async () => {

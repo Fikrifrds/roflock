@@ -24,7 +24,11 @@ import { compileContext, ROLE_CONTRACTS, type RoleId } from '@roleflock/context-
 import { getWorkflowGraph, recommendWorkflow, workflowGraphs } from '@roleflock/graph-core';
 import { budgetStatus } from '@roleflock/usage-ledger';
 import { EFFORT_LEVELS, isEffort } from '@roleflock/provider-core';
-import { registerRepository, RepositoryRegistrationError } from '@roleflock/repository-runtime';
+import {
+  initializeEmptyRepository,
+  registerRepository,
+  RepositoryRegistrationError,
+} from '@roleflock/repository-runtime';
 import type { Session } from '../auth.js';
 import { EventBus } from '../services/event-bus.js';
 import { chooseDirectory, DirectoryPickerCancelled } from '../services/directory-picker.js';
@@ -139,14 +143,29 @@ export function registerApi(
     const body = request.body as { path?: string; name?: string; baseBranch?: string };
     if (!body.path) return reply.code(400).send({ error: 'path is required' });
     let repository;
+    let gitInitialized = false;
     try {
       repository = await registerRepository(body.path);
     } catch (error) {
-      if (error instanceof RepositoryRegistrationError) {
+      if (error instanceof RepositoryRegistrationError && error.code === 'NOT_GIT_REPOSITORY') {
+        try {
+          repository = await initializeEmptyRepository(body.path);
+          gitInitialized = true;
+        } catch (initializationError) {
+          if (initializationError instanceof RepositoryRegistrationError) {
+            const statusCode = initializationError.code === 'PATH_NOT_FOUND' ? 404 : 422;
+            return reply
+              .code(statusCode)
+              .send({ code: initializationError.code, error: initializationError.message });
+          }
+          throw initializationError;
+        }
+      } else if (error instanceof RepositoryRegistrationError) {
         const statusCode = error.code === 'PATH_NOT_FOUND' ? 404 : 422;
         return reply.code(statusCode).send({ code: error.code, error: error.message });
+      } else {
+        throw error;
       }
-      throw error;
     }
     const time = now();
     const folderName = repository.root.split('/').filter(Boolean).pop() ?? 'Repository';
@@ -163,7 +182,7 @@ export function registerApi(
     };
     projects.create(project);
     bus.publish('project.created', project);
-    return reply.code(201).send(project);
+    return reply.code(201).send({ ...project, gitInitialized });
   });
   app.get('/api/projects', async () => projects.list());
   app.patch('/api/projects/:id', async (request, reply) => {
