@@ -9,6 +9,7 @@ import {
   EvidenceRepository,
   LocalKnowledgeRepository,
   PriceCardRepository,
+  ProviderConnectionRepository,
   ProjectRepository,
   QuotaSnapshotRepository,
   TaskRepository,
@@ -41,8 +42,9 @@ import {
   ROUTED_ROLES,
   isRoutedRole,
 } from '../services/role-defaults.js';
-import { ProviderRegistry } from '../services/provider-registry.js';
+import { customProviderId, ProviderRegistry } from '../services/provider-registry.js';
 import { DocumentService, isDocumentAuthority, isDocumentKind } from '../services/documents.js';
+import { LocalSecretStore } from '../services/local-secret-store.js';
 import { checkForUpdates, getLocalVersion } from '../services/version-check.js';
 
 export function registerApi(
@@ -54,6 +56,7 @@ export function registerApi(
   providers: ProviderRegistry,
   documents: DocumentService,
   dataDir: string,
+  providerSecrets: LocalSecretStore,
   runtime: { host: string; port: number },
 ): void {
   const projects = new ProjectRepository(db),
@@ -63,6 +66,7 @@ export function registerApi(
     disclosureGrants = new DisclosureGrantRepository(db),
     evidence = new EvidenceRepository(db),
     usage = new UsageRepository(db),
+    providerConnections = new ProviderConnectionRepository(db),
     audit = new AuditRepository(db);
   app.get('/api/health', async () => ({
     ok: true,
@@ -828,8 +832,25 @@ export function registerApi(
       return reply.code(400).send({ error: 'displayName, endpoint, and model are required' });
     }
     try {
+      const id = customProviderId({ id: body.id, displayName: body.displayName });
+      if (providers.has(id) || providerConnections.has(id)) {
+        throw new Error(`Provider already registered: ${id}`);
+      }
+      const apiKeySecretId = body.apiKey ? `provider-api-key:${id}` : undefined;
+      if (apiKeySecretId) await providerSecrets.set(apiKeySecretId, body.apiKey ?? '');
+      const timestamp = now();
+      providerConnections.createCustom({
+        id,
+        displayName: body.displayName.trim(),
+        endpoint: body.endpoint.trim(),
+        model: body.model.trim(),
+        apiKeySecretId,
+        status: 'ready',
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
       const registered = providers.registerCustom({
-        id: body.id,
+        id,
         displayName: body.displayName,
         endpoint: body.endpoint,
         apiKey: body.apiKey ?? '',

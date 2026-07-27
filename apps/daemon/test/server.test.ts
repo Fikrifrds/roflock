@@ -229,6 +229,40 @@ describe('daemon boundary', () => {
     const providers = listed.json() as Array<{ id: string }>;
     expect(providers.some((p) => p.id === body.id)).toBe(true);
   });
+  it('restores custom providers after the daemon restarts', async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), 'roleflock-provider-restart-'));
+    const session = { token: 'test-token', csrf: 'test-csrf' };
+    const headers = {
+      'x-roleflock-token': session.token,
+      'x-roleflock-csrf': session.csrf,
+      'content-type': 'application/json',
+    };
+    const first = await createServer({ dataDir, session });
+    const created = await first.app.inject({
+      method: 'POST',
+      url: '/api/providers',
+      headers,
+      payload: {
+        displayName: 'Persistent provider',
+        endpoint: 'http://127.0.0.1:11434/v1',
+        model: 'llama3.2',
+        apiKey: 'not-returned-to-the-client',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    const { id } = created.json() as { id: string };
+    await first.app.close();
+
+    const restarted = await createServer({ dataDir, session });
+    servers.push(restarted);
+    const listed = await restarted.app.inject({ method: 'GET', url: '/api/providers', headers });
+    expect(listed.statusCode).toBe(200);
+    const provider = (listed.json() as Array<Record<string, unknown>>).find(
+      (item) => item.id === id,
+    );
+    expect(provider).toMatchObject({ id, displayName: 'Persistent provider' });
+    expect(JSON.stringify(provider)).not.toContain('not-returned-to-the-client');
+  });
   it('exposes provider account and auth action endpoints', async () => {
     const { app } = await server();
     const headers = {

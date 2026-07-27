@@ -5,7 +5,11 @@ import { join } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastify, { type FastifyInstance } from 'fastify';
 import statik from '@fastify/static';
-import { openMigratedDatabase, ProcessHandleRepository } from '@roleflock/database';
+import {
+  openMigratedDatabase,
+  ProcessHandleRepository,
+  ProviderConnectionRepository,
+} from '@roleflock/database';
 import { OUTCOME_UNKNOWN, reconcileProcess } from '@roleflock/run-control';
 import {
   authenticate,
@@ -20,6 +24,7 @@ import { Orchestrator } from './services/orchestrator.js';
 import { seedPricingDefaults } from './services/pricing.js';
 import { ProviderRegistry } from './services/provider-registry.js';
 import { DocumentService } from './services/documents.js';
+import { LocalSecretStore } from './services/local-secret-store.js';
 
 export interface ServerOptions {
   dataDir?: string;
@@ -80,9 +85,27 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
   reconcileInterruptedGraphRuns(db);
   const bus = new EventBus();
   const providers = new ProviderRegistry();
+  const providerConnections = new ProviderConnectionRepository(db);
+  const providerSecrets = new LocalSecretStore(dataDir);
+  for (const connection of providerConnections.listCustom()) {
+    try {
+      providers.registerCustom({
+        id: connection.id,
+        displayName: connection.displayName,
+        endpoint: connection.endpoint,
+        model: connection.model,
+        apiKey: connection.apiKeySecretId ? (await providerSecrets.get(connection.apiKeySecretId)) ?? '' : '',
+      });
+    } catch (error) {
+      app.log.warn(
+        { err: error, providerId: connection.id },
+        'Unable to restore custom provider connection',
+      );
+    }
+  }
   const documents = new DocumentService(db, join(dataDir, 'documents'));
   const orchestrator = new Orchestrator(db, bus, join(dataDir, 'worktrees'), providers, documents);
-  registerApi(app, db, session, bus, orchestrator, providers, documents, dataDir, {
+  registerApi(app, db, session, bus, orchestrator, providers, documents, dataDir, providerSecrets, {
     host,
     port,
   });

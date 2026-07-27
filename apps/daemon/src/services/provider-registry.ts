@@ -43,6 +43,13 @@ export interface CustomProviderInput {
   model: string;
 }
 
+export function customProviderId(input: Pick<CustomProviderInput, 'id' | 'displayName'>): string {
+  return (
+    input.id?.trim() ||
+    `custom_${input.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`.replace(/^_|_$/g, '')
+  );
+}
+
 const providerNames: Record<string, string> = {
   fake: 'Deterministic stand-in (test mode)',
   claude: 'Claude CLI',
@@ -159,9 +166,7 @@ export class ProviderRegistry {
   }
 
   registerCustom(input: CustomProviderInput): RegisteredProvider {
-    const id =
-      input.id?.trim() ||
-      `custom_${input.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`.replace(/^_|_$/g, '');
+    const id = customProviderId(input);
     if (this.has(id)) {
       throw new Error(`Provider already registered: ${id}`);
     }

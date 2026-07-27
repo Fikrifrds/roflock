@@ -51,6 +51,8 @@ export type { AuditEvent } from './repositories/audit-repository.js';
 export { ControlCommandRepository } from './repositories/control-command-repository.js';
 export { ProcessHandleRepository } from './repositories/process-handle-repository.js';
 export { LeaseRepository } from './repositories/lease-repository.js';
+export { ProviderConnectionRepository } from './repositories/provider-connection-repository.js';
+export type { CustomProviderConnection } from './repositories/provider-connection-repository.js';
 export {
   RoleAssignmentRepository,
   ProviderCooldownRepository,

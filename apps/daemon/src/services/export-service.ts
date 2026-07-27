@@ -142,7 +142,15 @@ export function backupLocalData(dataDir: string): { backupDir: string; files: st
 
 export function deleteLocalData(dataDir: string): { deleted: string[] } {
   const deleted: string[] = [];
-  for (const name of ['roleflock.db', 'roleflock.db-wal', 'roleflock.db-shm', 'documents', 'worktrees']) {
+  for (const name of [
+    'roleflock.db',
+    'roleflock.db-wal',
+    'roleflock.db-shm',
+    'provider-secrets.key',
+    'provider-secrets.json',
+    'documents',
+    'worktrees',
+  ]) {
     const path = join(dataDir, name);
     if (!existsSync(path)) continue;
     rmSync(path, { recursive: true, force: true });
