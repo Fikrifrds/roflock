@@ -2,7 +2,7 @@ import { access, mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CommandError, runCommand } from './index.js';
+import { CommandError, parseCommandArgv, runCommand } from './index.js';
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -19,6 +19,26 @@ async function sandbox() {
 }
 
 describe('command-runner', () => {
+  it('parses quoted argv without using a shell', () => {
+    expect(parseCommandArgv('pnpm test -- --grep "handles spaces"')).toEqual([
+      'pnpm',
+      'test',
+      '--',
+      '--grep',
+      'handles spaces',
+    ]);
+    expect(parseCommandArgv('node -e \'console.log("ok")\'')).toEqual([
+      'node',
+      '-e',
+      'console.log("ok")',
+    ]);
+  });
+
+  it('rejects malformed command fields', () => {
+    expect(() => parseCommandArgv('')).toThrow(/empty/i);
+    expect(() => parseCommandArgv('node "unfinished')).toThrow(/unmatched quote/i);
+  });
+
   it('rejects cwd outside sandboxRoot', async () => {
     const root = await sandbox();
     const outside = await mkdtemp(join(tmpdir(), 'rf-out-'));

@@ -27,7 +27,7 @@ import {
   WorktreeRepository,
   type SqliteDb,
 } from '@roleflock/database';
-import { runCommand, CommandError } from '@roleflock/command-runner';
+import { runCommand, CommandError, parseCommandArgv } from '@roleflock/command-runner';
 import {
   getWorkflowGraph,
   graphVersionId,
@@ -65,6 +65,7 @@ import { RoleRouter, type RoleRoute, type RoutedRole } from './role-routing.js';
  * a minute and a half in.
  */
 const DEFAULT_PROVIDER_IDLE_TIMEOUT_MS = 300_000;
+const DEFAULT_VERIFICATION_TIMEOUT_MS = 300_000;
 
 export function providerIdleTimeoutMs(): number {
   const raw = Number(
@@ -73,6 +74,13 @@ export function providerIdleTimeoutMs(): number {
       DEFAULT_PROVIDER_IDLE_TIMEOUT_MS,
   );
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_PROVIDER_IDLE_TIMEOUT_MS;
+}
+
+export function verificationTimeoutMs(): number {
+  const raw = Number(
+    process.env.ROLEFLOCK_VERIFICATION_TIMEOUT_MS ?? DEFAULT_VERIFICATION_TIMEOUT_MS,
+  );
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_VERIFICATION_TIMEOUT_MS;
 }
 
 export interface IdleWatchdog {
@@ -176,7 +184,10 @@ export class ProviderUnavailableError extends Error {
   ) {
     const summary = refusals.length
       ? refusals
-          .map((r) => `${r.providerDisplayName}/${r.modelDisplayName} (${r.reason.replaceAll('_', ' ')})`)
+          .map(
+            (r) =>
+              `${r.providerDisplayName}/${r.modelDisplayName} (${r.reason.replaceAll('_', ' ')})`,
+          )
           .join(', ')
       : 'no candidate was reachable';
     super(`No provider available for ${role}: ${summary}`);
@@ -425,6 +436,17 @@ export class Orchestrator {
       )
       .run(graphRunId, task.id, graph.version, 'running', now(), now());
     this.setTaskState(task.id, 'running');
+    if (this.forceFake) {
+      this.evidence.addFinding({
+        id: randomUUID(),
+        taskId: task.id,
+        severity: 'warning',
+        summary: 'Simulation mode — no real provider or repository fix was verified',
+        details:
+          'ROLEFLOCK_FORCE_FAKE=1 uses scripted model output, creates a demonstration artefact, and runs only a simulation check. Do not treat this run as production evidence.',
+        createdAt: now(),
+      });
+    }
     const bootstrapNode = graph.nodes[0]?.id ?? 'planner';
     this.updateExecution(task, graphRunId, randomUUID(), bootstrapNode, 'preparing');
     this.bus.publish('task.started', { taskId: task.id, graphRunId });
@@ -728,7 +750,7 @@ export class Orchestrator {
           role === 'verifier'
             ? [
                 `VERIFIER for RoleFlock task "${task.title}" (read-only). Do not modify files.`,
-                'Judge whether the writer\'s change actually satisfies the brief.',
+                "Judge whether the writer's change actually satisfies the brief.",
                 'End your reply with exactly one line:',
                 '  VERDICT: PASS',
                 'or',
@@ -749,8 +771,7 @@ export class Orchestrator {
           signal: controller.signal,
           // A failover mid-turn changes who is running; reflect that in the
           // live view rather than leaving the original provider on screen.
-          onRoute: (next) =>
-            this.updateExecution(task, graphRunId, nodeRunId, role, phase, next),
+          onRoute: (next) => this.updateExecution(task, graphRunId, nodeRunId, role, phase, next),
         });
         const output = invoked.output;
         const served = invoked.route;
@@ -801,7 +822,7 @@ export class Orchestrator {
             graphRunId,
             nodeRunId,
             invocationId,
-            prompt: `Review plan and confirm whether writing ROLEFLOCK_FIX.md is an appropriate scope.\n\n${compiled.promptBlock}`,
+            prompt: `Review the proposed source-code change and confirm whether its repository scope is appropriate.\n\n${compiled.promptBlock}`,
             cwd: worktreePath,
             signal: controller.signal,
           });
@@ -816,10 +837,10 @@ export class Orchestrator {
             kind: 'scope',
             verb: 'confirm',
             target: graph.id,
-            paths: ['ROLEFLOCK_FIX.md'],
+            paths: ['**'],
             sideEffectClass: 'local_write',
           },
-          affectedPaths: ['ROLEFLOCK_FIX.md'],
+          affectedPaths: ['**'],
           riskClass: 'medium',
           stateHash: baseCommit,
         });
@@ -861,24 +882,37 @@ export class Orchestrator {
             ownerId: nodeRunId,
             acquiredAt: now(),
           });
-        } catch {
+        } catch (error) {
           memLease.release();
-          throw new Error('Writer lease unavailable (durable)');
+          const detail = error instanceof Error ? error.message : String(error);
+          throw new Error(`Writer lease unavailable (durable): ${detail}`, { cause: error });
         }
         this.worktrees.setWriterLease(task.id, nodeRunId);
         try {
-          const relativeTarget = 'ROLEFLOCK_FIX.md';
+          const relativeTarget = 'ROLEFLOCK_SIMULATION.md';
+          let writerRoute = route;
+          const cursorReady =
+            route?.adapter instanceof CursorWriterAdapter &&
+            process.env.ROLEFLOCK_CURSOR_AGENT !== '0' &&
+            (await route.adapter.hasAgentCli());
           const useAgent =
             !this.forceFake &&
-            process.env.ROLEFLOCK_CURSOR_AGENT !== '0' &&
-            route?.adapter instanceof CursorWriterAdapter &&
-            (await route.adapter.hasAgentCli());
+            Boolean(
+              route?.adapter.capabilities.writes &&
+              (!(route.adapter instanceof CursorWriterAdapter) || cursorReady),
+            );
+
+          if (!this.forceFake && !useAgent) {
+            throw new Error(
+              `The selected writer (${route?.providerDisplayName ?? 'unknown provider'}) cannot edit the leased worktree.`,
+            );
+          }
 
           const envelope = useAgent
             ? {
                 worktree: worktreePath,
                 allowedPaths: ['**'],
-                allowCommands: false,
+                allowCommands: true,
               }
             : {
                 worktree: worktreePath,
@@ -886,7 +920,7 @@ export class Orchestrator {
                 allowCommands: false,
               };
 
-          if (useAgent && route?.adapter instanceof CursorWriterAdapter) {
+          if (useAgent) {
             const prompt = [
               'Implement the smallest sufficient bug fix in this repository worktree.',
               `Title: ${task.title}`,
@@ -896,7 +930,7 @@ export class Orchestrator {
               'Stay inside this workspace. Prefer editing existing source over adding docs.',
               'Do not invent secrets or reach outside the worktree.',
             ].join('\n');
-            await this.invokeRole({
+            const invoked = await this.invokeRole({
               role,
               task,
               graphRunId,
@@ -906,22 +940,32 @@ export class Orchestrator {
               cwd: worktreePath,
               signal: controller.signal,
               permissionEnvelope: envelope,
-              onRoute: (next) =>
-                this.updateExecution(task, graphRunId, nodeRunId, role, phase, next),
+              onRoute: (next) => {
+                writerRoute = next;
+                this.updateExecution(task, graphRunId, nodeRunId, role, phase, next);
+              },
             });
+            writerRoute = invoked.route;
           } else {
-            const content = `# RoleFlock verified fix\n\n${task.brief}\n\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nProvider: ${route?.providerDisplayName ?? 'leased filesystem writer'}\nVerification: ${task.verificationCommand ?? 'artefact-present / npm test / ROLEFLOCK_FORCE_FAKE'}\nMode: leased-fs-fallback\n`;
-            if (route?.adapter instanceof CursorWriterAdapter) {
-              await route.adapter.write(relativeTarget, content, envelope);
-            } else {
-              await writeFile(join(worktreePath, relativeTarget), content);
-            }
+            const content = `# RoleFlock simulation artefact\n\nThis file demonstrates the workflow only. It is not a verified source-code fix.\n\nBrief: ${task.brief}\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nMode: simulation\n`;
+            await writeFile(join(worktreePath, relativeTarget), content);
           }
 
           const diff = await captureDiff(worktreePath);
-          if (route?.adapter instanceof CursorWriterAdapter) {
-            assertChangedPathsAllowed(envelope, diff.changedFiles);
+          assertChangedPathsAllowed(envelope, diff.changedFiles);
+          if (!diff.changedFiles.length) {
+            throw new Error('Writer completed without changing any files in the leased worktree.');
           }
+          this.publishLiveProgress(nodeRunId, {
+            activity: `Wrote ${diff.changedFiles.length} file(s) · +${diff.added}/−${diff.removed}`,
+            liveDiff: {
+              patch: diff.patch.slice(0, 48_000),
+              status: diff.status,
+              changedFiles: diff.changedFiles,
+              added: diff.added,
+              removed: diff.removed,
+            },
+          });
           this.evidence.addArtefact({
             id: randomUUID(),
             taskId: task.id,
@@ -931,10 +975,12 @@ export class Orchestrator {
             metadata: {
               changedFiles: diff.changedFiles,
               status: diff.status,
-              providerId: route?.providerId,
+              added: diff.added,
+              removed: diff.removed,
+              providerId: writerRoute?.providerId,
               permissionEnvelope: envelope,
               durableLeaseId: leaseId,
-              writerMode: useAgent ? 'cursor-agent' : 'fs-fallback',
+              writerMode: useAgent ? `${writerRoute?.providerId ?? 'agent'}-agent` : 'simulation',
             },
             createdAt: now(),
           });
@@ -945,20 +991,30 @@ export class Orchestrator {
         }
       } else if (role === 'test') {
         const verification = await this.resolveVerification(task, worktreePath);
+        this.publishLiveProgress(nodeRunId, {
+          activity: `Running ${verification.label}`,
+          append: `$ ${verification.command}${verification.args.length ? ` ${verification.args.join(' ')}` : ''}\n`,
+        });
         // A non-zero exit is a verification result, not an orchestration error:
         // it must still be recorded as evidence before the node fails.
-        const { passed, exitCode, stdout, stderr } = await runCommand({
+        const { passed, exitCode, stdout, stderr, timedOut } = await runCommand({
           command: verification.command,
           args: verification.args,
           cwd: worktreePath,
           sandboxRoot: worktreePath,
-          timeoutMs: 60_000,
+          timeoutMs: verificationTimeoutMs(),
+          onChunk: (stream, chunk) => {
+            this.publishLiveProgress(nodeRunId, {
+              append: stream === 'stderr' ? chunk : chunk,
+            });
+          },
         }).then(
           (result) => ({
             passed: true,
             exitCode: result.exitCode ?? 0,
             stdout: result.stdout,
             stderr: result.stderr,
+            timedOut: false,
           }),
           (error: unknown) => {
             if (!(error instanceof CommandError)) throw error;
@@ -967,6 +1023,7 @@ export class Orchestrator {
               exitCode: error.result.exitCode ?? undefined,
               stdout: error.result.stdout,
               stderr: error.result.stderr,
+              timedOut: error.result.timedOut,
             };
           },
         );
@@ -985,7 +1042,11 @@ export class Orchestrator {
           // Classified explicitly so the runtime routes this back to the writer
           // instead of treating it as an unknown orchestration error.
           throw new NodeFailure(
-            `Verification failed (${verification.label})${stderr ? `: ${stderr.slice(0, 400)}` : ''}`,
+            `${
+              timedOut
+                ? `Verification timed out after ${verificationTimeoutMs()} ms`
+                : 'Verification failed'
+            } (${verification.label})${stderr ? `: ${stderr.slice(0, 400)}` : ''}`,
             'verification_failed',
           );
         }
@@ -1371,6 +1432,44 @@ export class Orchestrator {
     let output = '';
     let usage: ReportedUsage | undefined;
     const watchdog = createIdleWatchdog(input.signal, this.providerIdleTimeoutMs());
+    // Cap what the live projection stores. The evidence finding still gets the
+    // full text; this is only so the task page stays readable while streaming.
+    const liveCap = 24_000;
+    let lastPublish = 0;
+    let lastDiffAt = 0;
+    const worktree = input.permissionEnvelope?.worktree;
+
+    const flushLive = async (force = false): Promise<void> => {
+      const at = Date.now();
+      if (!force && at - lastPublish < 250) return;
+      lastPublish = at;
+      let liveDiff: ActiveExecution['liveDiff'];
+      if (worktree && (force || at - lastDiffAt > 1_500)) {
+        lastDiffAt = at;
+        try {
+          const diff = await captureDiff(worktree);
+          liveDiff = {
+            patch: diff.patch.slice(0, 48_000),
+            status: diff.status,
+            changedFiles: diff.changedFiles,
+            added: diff.added,
+            removed: diff.removed,
+          };
+        } catch {
+          // A worktree that is mid-write can briefly refuse git; skip this tick.
+        }
+      }
+      this.publishLiveProgress(input.nodeRunId, {
+        output: output.length > liveCap ? `…\n${output.slice(-liveCap)}` : output,
+        liveDiff,
+        activity: worktree
+          ? liveDiff && liveDiff.changedFiles.length
+            ? `Writing · ${liveDiff.changedFiles.length} file(s) · +${liveDiff.added}/−${liveDiff.removed}`
+            : 'Writing…'
+          : undefined,
+      });
+    };
+
     try {
       for await (const event of input.adapter.invoke({
         invocationId: input.invocationId,
@@ -1406,7 +1505,10 @@ export class Orchestrator {
             this.bus.publish('execution.updated', execution);
           }
         }
-        if (event.type === 'model.output.delta') output += event.text;
+        if (event.type === 'model.output.delta') {
+          output += event.text;
+          await flushLive();
+        }
         // The CLI's own numbers. Anything shown as a token count or a cost has
         // to come from here rather than from a plausible-looking constant.
         if (event.type === 'usage.updated') usage = event.usage as ReportedUsage;
@@ -1417,6 +1519,7 @@ export class Orchestrator {
           throw new Error(event.reason);
         }
       }
+      await flushLive(true);
     } catch (error) {
       this.closeProcessHandles(input.nodeRunId, 'unknown');
       // Operator first: only a Stop makes the parent signal fire, and that is
@@ -1431,6 +1534,33 @@ export class Orchestrator {
     }
     this.closeProcessHandles(input.nodeRunId, 'terminated');
     return { output, usage };
+  }
+
+  /**
+   * Pushes live turn text (and optionally a worktree diff) onto the active
+   * execution projection so the task page can stream what is happening.
+   */
+  private publishLiveProgress(
+    nodeRunId: string,
+    update: {
+      output?: string;
+      append?: string;
+      liveDiff?: ActiveExecution['liveDiff'];
+      activity?: string;
+    },
+  ): void {
+    const execution = this.executions.getByNodeRun(nodeRunId);
+    if (!execution) return;
+    if (update.output !== undefined) execution.liveOutput = update.output;
+    if (update.append) {
+      const next = `${execution.liveOutput ?? ''}${update.append}`;
+      execution.liveOutput = next.length > 24_000 ? `…\n${next.slice(-24_000)}` : next;
+    }
+    if (update.liveDiff) execution.liveDiff = update.liveDiff;
+    if (update.activity) execution.currentActivity = update.activity;
+    execution.lastHeartbeatAt = now();
+    this.executions.upsert(execution);
+    this.bus.publish('execution.updated', execution);
   }
 
   /** Marks any handle for a node as finished, so it is not reconciled later. */
@@ -1479,13 +1609,13 @@ export class Orchestrator {
     if (this.forceFake) {
       return {
         command: process.execPath,
-        args: ['-e', 'console.log("RoleFlock deterministic test passed")'],
-        label: 'deterministic-fake',
+        args: ['-e', 'console.log("Simulation check passed — this is not a real repository test")'],
+        label: 'simulation-check',
       };
     }
     if (task.verificationCommand?.trim()) {
-      const parts = task.verificationCommand.trim().split(/\s+/).filter(Boolean);
-      const command = parts[0]!;
+      const parts = parseCommandArgv(task.verificationCommand);
+      const command = parts[0];
       return {
         command,
         args: parts.slice(1),
@@ -1504,11 +1634,8 @@ export class Orchestrator {
     }
     return {
       command: process.execPath,
-      args: [
-        '-e',
-        "require('fs').accessSync('ROLEFLOCK_FIX.md'); console.log('verified artefact present')",
-      ],
-      label: 'artefact-present',
+      args: ['-e', "throw new Error('No verification command or package test script was found')"],
+      label: 'missing-verification-command',
     };
   }
 
@@ -1601,6 +1728,10 @@ export class Orchestrator {
       permissionProfileId: role === 'writer' ? 'worktree-write' : 'read-only',
       currentActivity: route?.fallbackUsed ? `${role} executing (fallback)` : `${role} executing`,
       activeCommandPreview: role === 'test' ? 'verification command' : undefined,
+      // A new node starts a fresh transcript; leaving the previous turn's text
+      // made the live panel look like the old role was still speaking.
+      liveOutput: '',
+      liveDiff: undefined,
       startedAt: timestamp,
       lastHeartbeatAt: timestamp,
       attempt: 1,
@@ -1651,7 +1782,11 @@ export interface VerifierVerdict {
  * have its example parsed as the answer.
  */
 export function parseVerifierVerdict(output: string | undefined): VerifierVerdict {
-  const matches = [...(output ?? '').matchAll(/VERDICT:\s*(PASS|NEEDS[_\s]CHANGES)\b[^\S\n]*(?:[—–:-]\s*)?([^\n]*)/gi)];
+  const matches = [
+    ...(output ?? '').matchAll(
+      /VERDICT:\s*(PASS|NEEDS[_\s]CHANGES)\b[^\S\n]*(?:[—–:-]\s*)?([^\n]*)/gi,
+    ),
+  ];
   const last = matches.at(-1);
   if (!last) return { decision: 'inconclusive' };
 

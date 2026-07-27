@@ -18,13 +18,38 @@ export async function discoverCodex(
   return resolved ? { status: 'ready', binary: resolved } : { status: 'missing' };
 }
 
-/** Read-oriented Codex adapter used for verifier turns. */
+/**
+ * Builds an explicit, non-interactive Codex command.
+ *
+ * RoleFlock never inherits a permissive sandbox choice from a user's Codex
+ * configuration: reasoning roles are read-only and a writer is restricted to
+ * the leased worktree.
+ */
+export function codexExecArgs(request: InvocationRequest): string[] {
+  const worktree = request.permissionEnvelope?.worktree;
+  const args = [
+    'exec',
+    '--json',
+    '--skip-git-repo-check',
+    '--ephemeral',
+    '--sandbox',
+    worktree ? 'workspace-write' : 'read-only',
+  ];
+  const workspace = worktree ?? request.cwd;
+  if (workspace) args.push('--cd', workspace);
+  if (request.model && request.model !== 'default') args.push('-m', request.model);
+  if (request.effort) args.push('-c', `model_reasoning_effort="${request.effort}"`);
+  args.push(request.prompt);
+  return args;
+}
+
+/** Sandboxed Codex adapter for both reasoning and leased writer turns. */
 export class CodexAdapter implements ProviderAdapter {
   readonly id = 'codex';
   readonly capabilities: ProviderCapabilities = {
     streaming: true,
-    tools: false,
-    writes: false,
+    tools: true,
+    writes: true,
     headless: true,
   };
 
@@ -54,12 +79,28 @@ export class CodexAdapter implements ProviderAdapter {
   async listModels(): Promise<ProviderModel[]> {
     return [
       { id: 'default', displayName: 'Account default', family: 'default' },
-      { id: 'gpt-5.6-sol', displayName: 'GPT-5.6 Sol — frontier agentic coding', family: 'gpt-5.6-sol' },
-      { id: 'gpt-5.6-terra', displayName: 'GPT-5.6 Terra — balanced everyday work', family: 'gpt-5.6-terra' },
-      { id: 'gpt-5.6-luna', displayName: 'GPT-5.6 Luna — fast and affordable', family: 'gpt-5.6-luna' },
+      {
+        id: 'gpt-5.6-sol',
+        displayName: 'GPT-5.6 Sol — frontier agentic coding',
+        family: 'gpt-5.6-sol',
+      },
+      {
+        id: 'gpt-5.6-terra',
+        displayName: 'GPT-5.6 Terra — balanced everyday work',
+        family: 'gpt-5.6-terra',
+      },
+      {
+        id: 'gpt-5.6-luna',
+        displayName: 'GPT-5.6 Luna — fast and affordable',
+        family: 'gpt-5.6-luna',
+      },
       { id: 'gpt-5.5', displayName: 'GPT-5.5 — complex coding and research', family: 'gpt-5.5' },
       { id: 'gpt-5.4', displayName: 'GPT-5.4 — strong everyday coding', family: 'gpt-5.4' },
-      { id: 'gpt-5.4-mini', displayName: 'GPT-5.4 mini — small and cost-efficient', family: 'gpt-5.4' },
+      {
+        id: 'gpt-5.4-mini',
+        displayName: 'GPT-5.4 mini — small and cost-efficient',
+        family: 'gpt-5.4',
+      },
     ];
   }
 
@@ -71,16 +112,11 @@ export class CodexAdapter implements ProviderAdapter {
     yield { type: 'invocation.started', invocationId: request.invocationId };
     yield { type: 'heartbeat', at: new Date().toISOString() };
 
-    // `--skip-git-repo-check` because RoleFlock runs inside a git worktree the
-    // CLI has not been told to trust; without it `codex exec` refuses to start.
-    const args = ['exec', '--json', '--skip-git-repo-check'];
-    if (request.model && request.model !== 'default') args.push('-m', request.model);
-    // Codex takes reasoning effort as a config override rather than a flag.
-    if (request.effort) args.push('-c', `model_reasoning_effort="${request.effort}"`);
-    args.push(request.prompt);
+    const args = codexExecArgs(request);
+    const cwd = request.permissionEnvelope?.worktree ?? request.cwd;
 
     const child = spawn(health.binary!, args, {
-      cwd: request.cwd,
+      cwd,
       signal: request.signal,
     });
     if (child.pid) request.onSpawn?.(child.pid);

@@ -44,6 +44,12 @@ describe('role defaults', () => {
     });
     expect(DEFAULT_ROLE_ASSIGNMENTS.planner[1]?.modelId).toBe('gpt-5.6-sol-high');
     expect(DEFAULT_ROLE_ASSIGNMENTS.writer[0]?.modelId).toBe('cursor-grok-4.5-high');
+    expect(
+      DEFAULT_ROLE_ASSIGNMENTS.writer.some(
+        (candidate) =>
+          candidate.providerConnectionId === 'codex' && candidate.modelId === 'gpt-5.6-sol',
+      ),
+    ).toBe(true);
     expect(DEFAULT_ROLE_ASSIGNMENTS.reviewer[0]?.modelId).toBe('gpt-5.6-terra-medium');
     expect(DEFAULT_ROLE_ASSIGNMENTS.reviewer[1]?.modelId).toBe('claude-opus-5-low');
   });
@@ -114,10 +120,18 @@ describe('RoleRouter', () => {
   });
 
   it('carries the configured effort onto the route', async () => {
-    h.router.replaceRole('writer', [
+    h.router.replaceRole('reviewer', [
       { providerConnectionId: 'fake', modelId: 'phase0-fake', effort: 'xhigh' },
     ]);
-    expect((await h.router.route('writer'))?.effort).toBe('xhigh');
+    expect((await h.router.route('reviewer'))?.effort).toBe('xhigh');
+  });
+
+  it('never routes a live writer turn to a read-only provider', async () => {
+    h.router.replaceRole('writer', [{ providerConnectionId: 'fake', modelId: 'phase0-fake' }]);
+    expect(await h.router.route('writer')).toBeNull();
+    expect(h.router.skippedFor('writer')).toEqual([
+      expect.objectContaining({ reason: 'unsupported_capability' }),
+    ]);
   });
 
   it('parks a quota-exhausted candidate and moves to the next one', async () => {

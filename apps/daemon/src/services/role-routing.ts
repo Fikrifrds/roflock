@@ -21,7 +21,7 @@ export type { RoutedRole };
 export interface SkippedCandidate {
   providerId: string;
   modelId: string;
-  reason: 'disabled' | 'unknown_provider' | 'unhealthy' | 'cooling_down';
+  reason: 'disabled' | 'unknown_provider' | 'unsupported_capability' | 'unhealthy' | 'cooling_down';
   detail?: string;
 }
 
@@ -65,9 +65,9 @@ const now = () => new Date().toISOString();
  *
  * The preference list belongs to the user; this walks it in order and reports
  * honestly. A candidate is passed over when it is disabled, unregistered,
- * unhealthy, or cooling down after a refusal — and every skip is recorded on
- * the route, because a substitution the user cannot see is worse than a failure
- * they can.
+ * unhealthy, missing the role's required capability, or cooling down after a
+ * refusal — and every skip is recorded on the route, because a substitution
+ * the user cannot see is worse than a failure they can.
  */
 export class RoleRouter {
   private readonly assignments: RoleAssignmentRepository;
@@ -217,6 +217,16 @@ export class RoleRouter {
           modelId,
           reason: 'unknown_provider',
           detail: `Provider "${providerId}" is not registered`,
+        });
+        continue;
+      }
+
+      if (role === 'writer' && !adapter.capabilities.writes) {
+        skipped.push({
+          providerId,
+          modelId,
+          reason: 'unsupported_capability',
+          detail: `Provider "${providerId}" does not support repository writes`,
         });
         continue;
       }

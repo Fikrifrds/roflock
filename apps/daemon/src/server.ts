@@ -34,7 +34,21 @@ export interface ServerHandle {
   port: number;
   dataDir: string;
 }
+
+const DEFAULT_PORT = 4178;
+
+export function resolvePort(value = process.env.ROLEFLOCK_PORT): number {
+  if (value === undefined || value.trim() === '') return DEFAULT_PORT;
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(`Invalid ROLEFLOCK_PORT: ${value}. Expected an integer from 1 to 65535.`);
+  }
+  return port;
+}
+
 export async function createServer(options: ServerOptions = {}): Promise<ServerHandle> {
+  const host = options.host ?? '127.0.0.1';
+  const port = options.port ?? resolvePort();
   const dataDir =
     options.dataDir ?? process.env.ROLEFLOCK_DATA_DIR ?? join(homedir(), '.roleflock');
   mkdirSync(dataDir, { recursive: true });
@@ -68,11 +82,14 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
   const providers = new ProviderRegistry();
   const documents = new DocumentService(db, join(dataDir, 'documents'));
   const orchestrator = new Orchestrator(db, bus, join(dataDir, 'worktrees'), providers, documents);
-  registerApi(app, db, session, bus, orchestrator, providers, documents, dataDir);
+  registerApi(app, db, session, bus, orchestrator, providers, documents, dataDir, {
+    host,
+    port,
+  });
   const webDist = join(process.cwd(), 'apps', 'web', 'dist');
   if (existsSync(webDist)) await app.register(statik, { root: webDist, wildcard: false });
   app.addHook('onClose', async () => db.close());
-  return { app, session, host: options.host ?? '127.0.0.1', port: options.port ?? 4178, dataDir };
+  return { app, session, host, port, dataDir };
 }
 
 /**

@@ -215,10 +215,7 @@ function extractStreamText(line: string): string | undefined {
   }
 }
 
-/**
- * Cursor writer adapter. Prefer live Cursor Agent CLI when installed; otherwise
- * fall back to a leased filesystem write under the permission envelope.
- */
+/** Cursor writer adapter backed by the live Cursor Agent CLI. */
 export class CursorWriterAdapter implements ProviderAdapter {
   readonly id = 'cursor';
   readonly capabilities: ProviderCapabilities = {
@@ -233,13 +230,6 @@ export class CursorWriterAdapter implements ProviderAdapter {
     private readonly binaryHint = process.env.CURSOR_AGENT_PATH ?? process.env.CURSOR_PATH,
   ) {}
 
-  private assertEnvelope(envelope: PermissionEnvelope | undefined): PermissionEnvelope {
-    if (!envelope?.worktree) {
-      throw new Error('Cursor writer requires a worktree permission envelope');
-    }
-    return envelope;
-  }
-
   async healthCheck(): Promise<ProviderHealth> {
     const discovery = await discoverCursor(this.binaryHint);
     if (discovery.status === 'ready') {
@@ -248,12 +238,7 @@ export class CursorWriterAdapter implements ProviderAdapter {
         detail: `Cursor Agent CLI ready (${discovery.binary})`,
       };
     }
-    return {
-      status: 'ready',
-      detail:
-        discovery.detail ??
-        'Sandboxed filesystem writer ready; Cursor Agent CLI was not found on PATH.',
-    };
+    return discovery;
   }
 
   async detectCapabilities(): Promise<ProviderCapabilities> {
@@ -354,8 +339,8 @@ export class CursorWriterAdapter implements ProviderAdapter {
         stderr += d;
       });
       // Aborting a spawned child makes Node emit `error` on it. With no listener
-        // that is an unhandled error event, which takes the whole daemon down —
-        // pressing Stop killed the process that was meant to do the stopping.
+      // that is an unhandled error event, which takes the whole daemon down —
+      // pressing Stop killed the process that was meant to do the stopping.
       let aborted = false;
       child.on('error', (error: NodeJS.ErrnoException) => {
         if (error.name === 'AbortError') aborted = true;
@@ -415,30 +400,14 @@ export class CursorWriterAdapter implements ProviderAdapter {
       return;
     }
 
-    // Without Agent CLI, perform the leased write described by the envelope.
-    const writeEnvelope = this.assertEnvelope(envelope);
-    const target = writeEnvelope.allowedPaths.find((path) => path !== '**' && path !== '*');
-    if (!target) {
-      yield {
-        type: 'invocation.failed',
-        error: {
-          code: 'CURSOR_ENVELOPE',
-          message:
-            'Cursor Agent CLI missing and permission envelope has no concrete allowedPaths for fallback write',
-          retryable: false,
-        },
-      };
-      return;
-    }
-    await this.write(
-      target,
-      typeof request.prompt === 'string' ? request.prompt : String(request.prompt),
-      writeEnvelope,
-    );
     yield {
-      type: 'model.output.delta',
-      text: `Wrote ${target} under worktree lease (Cursor Agent CLI not available)`,
+      type: 'invocation.failed',
+      error: {
+        code: 'CURSOR_AGENT_MISSING',
+        message:
+          'Cursor Agent CLI is required for live writer turns; no filesystem fallback was used.',
+        retryable: false,
+      },
     };
-    yield { type: 'invocation.completed', output: { written: target, mode: 'fs-fallback' } };
   }
 }

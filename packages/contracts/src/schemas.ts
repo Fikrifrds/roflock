@@ -141,6 +141,21 @@ export const ActiveExecutionSchema = z.object({
   currentActivity: z.string().optional(),
   activeTool: z.string().optional(),
   activeCommandPreview: z.string().optional(),
+  /**
+   * Streaming transcript of the current turn. Truncated in the projection so
+   * the live view stays readable; the full text still lands in evidence.
+   */
+  liveOutput: z.string().optional(),
+  /** Live worktree diff while a writer is mid-turn. */
+  liveDiff: z
+    .object({
+      patch: z.string(),
+      status: z.string(),
+      changedFiles: z.array(z.string()),
+      added: z.number().int().nonnegative(),
+      removed: z.number().int().nonnegative(),
+    })
+    .optional(),
   startedAt: z.string(),
   lastHeartbeatAt: z.string(),
   attempt: z.number().int().positive(),

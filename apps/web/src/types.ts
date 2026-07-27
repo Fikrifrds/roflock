@@ -49,6 +49,14 @@ export type ActiveExecution = {
   permissionProfileId: string;
   currentActivity?: string;
   activeCommandPreview?: string;
+  liveOutput?: string;
+  liveDiff?: {
+    patch: string;
+    status: string;
+    changedFiles: string[];
+    added: number;
+    removed: number;
+  };
   lastHeartbeatAt: string;
   attempt: number;
   actualCost?: number;

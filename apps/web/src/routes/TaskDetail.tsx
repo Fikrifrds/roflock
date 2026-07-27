@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { Field, FileDrop } from '../components/Field.js';
 import { BlockedBanner } from '../components/BlockedBanner.js';
 import { GraphRunView } from '../components/GraphRunView.js';
+import { LiveTurn } from '../components/LiveTurn.js';
 import { Select } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
 import { Empty, Section, StatusPill } from '../components/primitives.js';
@@ -104,9 +105,12 @@ export function TaskDetail() {
     task.state === 'awaiting_confirmation' ||
     task.state === 'awaiting_acceptance' ||
     pending.length > 0;
-  const latestError = [...(evidence?.findings ?? [])]
-    .reverse()
-    .find((finding) => finding.severity === 'error');
+  const latestError =
+    task.state === 'failed' || task.state === 'cancelled'
+      ? [...(evidence?.findings ?? [])]
+          .reverse()
+          .find((finding) => finding.severity === 'error')
+      : undefined;
 
   return (
     <Shell>
@@ -270,6 +274,8 @@ export function TaskDetail() {
             </dl>
           </details>
         </article>
+
+        <LiveTurn execution={execution} finished={finished} />
 
         <section className="evidence-section">
           <h3>Run graph</h3>

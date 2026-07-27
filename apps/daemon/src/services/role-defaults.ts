@@ -44,6 +44,7 @@ export const DEFAULT_ROLE_ASSIGNMENTS: Record<RoutedRole, RoleCandidateInput[]> 
   writer: [
     { providerConnectionId: 'cursor', modelId: 'cursor-grok-4.5-high', effort: 'high' },
     { providerConnectionId: 'cursor', modelId: 'claude-opus-5-high', effort: 'high' },
+    { providerConnectionId: 'codex', modelId: 'gpt-5.6-sol', effort: 'high' },
     { providerConnectionId: 'cursor', modelId: 'composer-2.5', effort: 'medium' },
   ],
   reviewer: [

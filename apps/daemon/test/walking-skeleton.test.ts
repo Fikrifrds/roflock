@@ -145,6 +145,22 @@ describe('verified bug fix walking skeleton', () => {
     };
     expect(evidenceBody.testRuns.length).toBeGreaterThan(0);
     expect(evidenceBody.artefacts.length).toBeGreaterThan(0);
+    expect(evidenceBody.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          severity: 'warning',
+          summary: expect.stringMatching(/Simulation mode/i),
+        }),
+      ]),
+    );
+    expect(evidenceBody.testRuns).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          command: 'simulation-check',
+          stdout_ref: expect.stringMatching(/not a real repository test/i),
+        }),
+      ]),
+    );
 
     const usage = await app.inject({
       method: 'GET',

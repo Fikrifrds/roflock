@@ -124,6 +124,8 @@ export async function captureDiff(worktreePath: string): Promise<{
   status: string;
   patch: string;
   changedFiles: string[];
+  added: number;
+  removed: number;
 }> {
   const status = (await exec('git', ['-C', worktreePath, 'status', '--porcelain'])).stdout;
   const patch = (await exec('git', ['-C', worktreePath, 'diff', 'HEAD'])).stdout;
@@ -131,7 +133,13 @@ export async function captureDiff(worktreePath: string): Promise<{
     .split('\n')
     .map((line) => line.trim().slice(3).trim())
     .filter(Boolean);
-  return { status, patch, changedFiles };
+  let added = 0;
+  let removed = 0;
+  for (const line of patch.split('\n')) {
+    if (line.startsWith('+') && !line.startsWith('+++')) added += 1;
+    else if (line.startsWith('-') && !line.startsWith('---')) removed += 1;
+  }
+  return { status, patch, changedFiles, added, removed };
 }
 
 export async function preserveWorktree(worktreePath: string): Promise<void> {

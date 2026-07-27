@@ -164,6 +164,21 @@ header i::before {
   background: currentColor;
 }
 
+.simulation-banner {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: var(--space-3) max(var(--space-6), 4vw);
+  border-bottom: 1px solid var(--warn-line);
+  background: var(--warn-wash);
+  color: var(--text-body);
+  font-size: var(--text-sm);
+}
+
+.simulation-banner strong {
+  color: var(--warn);
+}
+
 .live {
   color: var(--ok);
 }
@@ -854,6 +869,65 @@ textarea.compact {
   color: var(--text);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
+}
+
+.live-turn {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  margin: 0 0 var(--space-6);
+  background: var(--surface-sunken);
+  display: grid;
+  gap: var(--space-5);
+}
+
+.live-turn-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.live-turn-header .eyebrow {
+  margin: 0;
+}
+
+.live-turn h4 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.live-diff-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.diff-add {
+  color: #7dcea0;
+  font-weight: 700;
+}
+
+.diff-del {
+  color: #e07a5f;
+  font-weight: 700;
+}
+
+.output-pane,
+.diff-pane {
+  margin: 0;
+  max-height: 320px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff-pane {
+  max-height: 420px;
 }
 
 .task-header {

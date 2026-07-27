@@ -63,8 +63,8 @@ Use **Verified Fix** (bug-fix workflow) when you want a governed path: plan → 
 
 ## Honest limits
 
-- **Cursor writer:** uses Cursor Agent CLI when installed (`agent -p --force`); otherwise a leased `ROLEFLOCK_FIX.md` write under the permission envelope.
-- **Fake provider:** hidden from the Providers inventory by default; use `ROLEFLOCK_FORCE_FAKE=1` or `ROLEFLOCK_INCLUDE_FAKE=1` for deterministic runs.
+- **Writer:** uses Cursor Agent or Codex inside the leased worktree. A missing writer CLI fails closed; no markdown fallback is presented as a fix.
+- **Fake provider:** hidden from the Providers inventory by default. `ROLEFLOCK_FORCE_FAKE=1` is a labelled simulation, not repository verification.
 - **Live CLIs:** planner/verifier may invoke Claude/Codex when discovered; failures surface in task state — read the error text on Start.
 
 ## If something fails

@@ -2,7 +2,17 @@ import { launchUrl, sessionFilePath } from './auth.js';
 import { createServer } from './server.js';
 
 const { app, session, host, port, dataDir } = await createServer();
-await app.listen({ host, port });
+try {
+  await app.listen({ host, port });
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code === 'EADDRINUSE') {
+    process.stderr.write(
+      `RoleFlock could not start: ${host}:${port} is already in use.\n` +
+        `Choose another port, for example: ROLEFLOCK_PORT=${port + 1} pnpm start\n`,
+    );
+  }
+  throw error;
+}
 
 const url = launchUrl(host, port, session);
 app.log.info({ host, port, sessionFile: sessionFilePath(dataDir) }, 'RoleFlock daemon listening');

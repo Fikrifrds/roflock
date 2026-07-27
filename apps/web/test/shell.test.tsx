@@ -39,4 +39,27 @@ describe('Shell', () => {
     expect(screen.getByRole('link', { name: 'Skip to content' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Connected'));
   });
+
+  it('keeps simulation mode visibly distinct from real verification', async () => {
+    localStorage.setItem('roleflock-token', 'tok');
+    stubApi({
+      '/api/runtime/info': {
+        csrf: 'csrf',
+        host: '127.0.0.1',
+        port: 4178,
+        version: '0.1.0',
+        forcedProvider: 'fake',
+      },
+    });
+
+    renderApp(
+      <Shell>
+        <p>simulation content</p>
+      </Shell>,
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /results are not production verification/i,
+    );
+  });
 });

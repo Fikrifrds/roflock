@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
+import { Route, Routes } from 'react-router-dom';
 import { GraphRunView } from '../src/components/GraphRunView.js';
 import { Approvals } from '../src/routes/Approvals.js';
 import { Home } from '../src/routes/Home.js';
 import { NewTask } from '../src/routes/NewTask.js';
+import { Evidence } from '../src/routes/Evidence.js';
 import { renderApp, stubApi } from './render.js';
 
 const RUNTIME = { '/api/runtime/info': { csrf: 'csrf' } };
@@ -152,6 +154,51 @@ describe('Approvals', () => {
     expect(
       await screen.findByRole('region', { name: 'Remember this approval' }),
     ).toBeInTheDocument();
+  });
+});
+
+describe('Evidence', () => {
+  it('summarises outcome, diff, tests, and warnings before the raw ledger', async () => {
+    authenticated();
+    stubApi({
+      ...RUNTIME,
+      '/api/tasks/t1': { id: 't1', state: 'awaiting_acceptance' },
+      '/api/evidence/tasks/t1': {
+        findings: [{ id: 'f1', severity: 'warning', summary: 'Review this' }],
+        testRuns: [
+          { id: 'tr1', passed: 1, command: 'pnpm test' },
+          { id: 'tr2', passed: 0, command: 'pnpm lint' },
+        ],
+        artefacts: [
+          {
+            id: 'a1',
+            kind: 'diff',
+            metadata_json: JSON.stringify({
+              changedFiles: ['src/a.ts', 'src/b.ts'],
+              added: 12,
+              removed: 3,
+            }),
+          },
+        ],
+        disclosures: [],
+      },
+      '/api/usage/tasks/t1': { summary: { actualCostUsd: 0.02, shadowCostUsd: 0.1 } },
+    });
+
+    renderApp(
+      <Routes>
+        <Route path="/tasks/:id/evidence" element={<Evidence />} />
+      </Routes>,
+      { route: '/tasks/t1/evidence' },
+    );
+
+    const summary = await screen.findByRole('generic', { name: 'Verification summary' });
+    await waitFor(() => {
+      expect(summary).toHaveTextContent('awaiting acceptance');
+      expect(summary).toHaveTextContent('2 files · +12/−3');
+      expect(summary).toHaveTextContent('1 passed · 1 failed');
+      expect(summary).toHaveTextContent('$0.0200');
+    });
   });
 });
 

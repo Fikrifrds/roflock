@@ -52,7 +52,7 @@ describe('CursorWriterAdapter sandbox', () => {
     expect(() => assertChangedPathsAllowed(envelope, ['src/a.js'])).not.toThrow();
   });
 
-  it('falls back to leased write when Agent CLI is forced off', async () => {
+  it('fails closed when Agent CLI is forced off', async () => {
     vi.stubEnv('ROLEFLOCK_CURSOR_AGENT', '0');
     const root = await mkdtemp(join(tmpdir(), 'rf-cursor-fb-'));
     cleanup.push(async () => rm(root, { recursive: true, force: true }));
@@ -73,8 +73,8 @@ describe('CursorWriterAdapter sandbox', () => {
       events.push(event);
     }
 
-    expect(events.some((e) => e.type === 'invocation.completed')).toBe(true);
-    await expect(readFile(join(root, 'ROLEFLOCK_FIX.md'), 'utf8')).resolves.toBe('fix body');
+    expect(events.some((e) => e.type === 'invocation.failed')).toBe(true);
+    await expect(readFile(join(root, 'ROLEFLOCK_FIX.md'), 'utf8')).rejects.toThrow();
   });
 
   async function writeFakeBinary(path: string, help: string): Promise<string> {

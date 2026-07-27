@@ -1,4 +1,11 @@
 export type ApiClient = ReturnType<typeof createApi>;
+export type RuntimeInfo = {
+  csrf: string;
+  host: string;
+  port: number;
+  version: string;
+  forcedProvider: string | null;
+};
 
 export class UnauthorizedError extends Error {
   constructor() {
@@ -52,7 +59,7 @@ export function createApi() {
       throw new UnauthorizedError();
     }
     if (!response.ok) throw new Error(`Daemon returned ${response.status}`);
-    const info = (await response.json()) as { csrf: string };
+    const info = (await response.json()) as RuntimeInfo;
     csrf = info.csrf;
     localStorage.setItem(CSRF_KEY, csrf);
     return info;

@@ -5,23 +5,23 @@
 
 ## Exit gate checklist
 
-| Gate                                                                                  | Status                                                         |
-| ------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Phase 0 / daemon acceptance suites pass                                               | Pass (`pnpm test` — 174 tests, 0 skipped)                      |
-| Graph-runtime acceptance suite passes                                                 | Pass (`packages/graph-core`, `packages/graph-runtime`)         |
-| Lint is a real linter, not a second typecheck                                         | Pass (`pnpm lint` → ESLint 9 flat config, 0 errors)            |
-| Localhost auth + CSRF + origin                                                        | Pass — token is file-delivered (0600), never served by the API |
-| Path/symlink deny + writer lease                                                      | Pass (in-memory + durable SQLite lease)                        |
-| Users can install via `pnpm`, connect providers, register repo, complete Verified Fix | Pass (live CLIs; `ROLEFLOCK_FORCE_FAKE=1` for an offline pass)                                 |
-| Privacy claims match data flow                                                        | Pass (first-run gate + Privacy page)                           |
-| Cost/quota labels truthful | Pass — token counts come from the CLI or are marked unknown; actual and shadow never summed |
-| Local export/delete                                                                   | Pass                                                           |
-| Crash recovery docs                                                                   | Pass (`docs/crash-recovery.md`)                                |
-| Benchmark recorded without marketing claims                                           | Pass (`docs/benchmarks/baseline.md`)                           |
-| Threat model                                                                          | Pass (`docs/security/threat-model.md`)                         |
-| Web UI has automated coverage                                                         | Pass (39 tests: session, shell, routes, graph view, model picker)   |
-| Public site copy                                                                      | Draft markdown in `docs/public/` (deploy deferred)             |
-| Installer DMG                                                                         | Deferred (`pnpm start`)                                        |
+| Gate                                                                                  | Status                                                                                      |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Phase 0 / daemon acceptance suites pass                                               | Pass (`pnpm test` — 174 tests, 0 skipped)                                                   |
+| Graph-runtime acceptance suite passes                                                 | Pass (`packages/graph-core`, `packages/graph-runtime`)                                      |
+| Lint is a real linter, not a second typecheck                                         | Pass (`pnpm lint` → ESLint 9 flat config, 0 errors)                                         |
+| Localhost auth + CSRF + origin                                                        | Pass — token is file-delivered (0600), never served by the API                              |
+| Path/symlink deny + writer lease                                                      | Pass (in-memory + durable SQLite lease)                                                     |
+| Users can install via `pnpm`, connect providers, register repo, complete Verified Fix | Pass (live CLIs; `ROLEFLOCK_FORCE_FAKE=1` for an offline pass)                              |
+| Privacy claims match data flow                                                        | Pass (first-run gate + Privacy page)                                                        |
+| Cost/quota labels truthful                                                            | Pass — token counts come from the CLI or are marked unknown; actual and shadow never summed |
+| Local export/delete                                                                   | Pass                                                                                        |
+| Crash recovery docs                                                                   | Pass (`docs/crash-recovery.md`)                                                             |
+| Benchmark recorded without marketing claims                                           | Pass (`docs/benchmarks/baseline.md`)                                                        |
+| Threat model                                                                          | Pass (`docs/security/threat-model.md`)                                                      |
+| Web UI has automated coverage                                                         | Pass (39 tests: session, shell, routes, graph view, model picker)                           |
+| Public site copy                                                                      | Draft markdown in `docs/public/` (deploy deferred)                                          |
+| Installer DMG                                                                         | Deferred (`pnpm start`)                                                                     |
 
 ## M8 graph runtime status
 
@@ -41,7 +41,7 @@ Not implemented: user-authored graphs. Templates are the only graph source, whic
 
 ## Honest remaining limits
 
-- Writer prefers Cursor Agent CLI (`agent -p --force`) when installed and authenticated; otherwise produces a leased `ROLEFLOCK_FIX.md` artefact under a permission envelope. Post-write path checks keep changes inside the worktree.
+- Writer uses Cursor Agent or Codex when installed and authenticated. Missing live writers fail closed; post-write path checks keep changes inside the leased worktree.
 - The verifier rejects on two grounds: an empty worktree diff, and its own `VERDICT: NEEDS_CHANGES` line. A reply with no parseable verdict is inconclusive rather than a rejection, since the required deterministic check already gates acceptance.
 - Roles are an ordered provider+model list per role, editable at `/roles`. A candidate that reports exhausted quota, an unknown model, or a dead session is parked on a cooldown and the router moves to the next entry; the substitution is recorded as evidence and in the audit log.
 - Cursor Agent reports an unusable model on stderr while exiting 0. The adapter inspects output as well as the exit code, so a mistyped model id fails over instead of producing an empty run that reports success.

@@ -13,6 +13,15 @@ export interface LeaseRecord {
 export class LeaseRepository {
   constructor(private readonly db: SqliteDb) {}
 
+  /**
+   * Takes the lease, or throws if another owner still holds it.
+   *
+   * The table has a UNIQUE(resource_type, resource_id) key that outlives a
+   * release — `released_at` is set, the row stays. A naive INSERT after a clean
+   * release therefore fails with a constraint error even though nobody holds
+   * the resource. Reclaiming the released row (or inserting only when none
+   * exists) is what makes a second writer turn on the same worktree possible.
+   */
   tryAcquire(record: LeaseRecord): LeaseRecord {
     const existing = this.db
       .prepare(
@@ -27,20 +36,43 @@ export class LeaseRepository {
       );
     }
 
-    this.db
+    const prior = this.db
       .prepare(
-        `INSERT INTO runtime_leases
-          (id, resource_type, resource_id, owner_id, acquired_at, expires_at, released_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL)`,
+        `SELECT id FROM runtime_leases WHERE resource_type = ? AND resource_id = ?`,
       )
-      .run(
-        record.id,
-        record.resourceType,
-        record.resourceId,
-        record.ownerId,
-        record.acquiredAt,
-        record.expiresAt ?? null,
-      );
+      .get(record.resourceType, record.resourceId) as { id: string } | undefined;
+
+    if (prior) {
+      this.db
+        .prepare(
+          `UPDATE runtime_leases
+           SET id = ?, owner_id = ?, acquired_at = ?, expires_at = ?, released_at = NULL
+           WHERE resource_type = ? AND resource_id = ?`,
+        )
+        .run(
+          record.id,
+          record.ownerId,
+          record.acquiredAt,
+          record.expiresAt ?? null,
+          record.resourceType,
+          record.resourceId,
+        );
+    } else {
+      this.db
+        .prepare(
+          `INSERT INTO runtime_leases
+            (id, resource_type, resource_id, owner_id, acquired_at, expires_at, released_at)
+           VALUES (?, ?, ?, ?, ?, ?, NULL)`,
+        )
+        .run(
+          record.id,
+          record.resourceType,
+          record.resourceId,
+          record.ownerId,
+          record.acquiredAt,
+          record.expiresAt ?? null,
+        );
+    }
     return record;
   }
 

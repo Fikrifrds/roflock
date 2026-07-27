@@ -6,7 +6,7 @@
 - Local UI (dev): http://127.0.0.1:5173
 - Local daemon: http://127.0.0.1:4178
 
-## Status: ready for local Verified Fix
+## Status: reliable local beta
 
 See [`docs/test-plans/mvp-readiness.md`](docs/test-plans/mvp-readiness.md) for the Public MVP exit-gate checklist.
 
@@ -14,7 +14,7 @@ Implemented and covered by automated tests:
 
 - Verified bug-fix flow (planner → approval → writer → verification → verifier → accept)
 - Per-role provider and model choice with automatic failover when a quota runs out
-- Optional verification command (`npm test`, custom argv, or artefact check)
+- Required real verification (`npm test` or a custom argv command); a live run fails closed when neither exists
 - Direct / Fast / Standard / Bug Fix / Critical workflow modes, pinned to an immutable graph version
 - Graph runtime: typed failure edges, bounded retry loops, concurrency limits, one writer per worktree
 - Read-only run graph on Task detail, showing live node state and failure routes
@@ -33,6 +33,10 @@ Threat model: [`docs/security/threat-model.md`](docs/security/threat-model.md)
 ## Setup
 
 Requires Node 24+ and pnpm 11+.
+
+For live agent runs, install and authenticate at least one writer-capable CLI:
+Codex or Cursor Agent. The Providers page reports a missing CLI as unavailable;
+RoleFlock no longer substitutes a generated markdown file for a live code change.
 
 ```bash
 pnpm install
@@ -71,6 +75,13 @@ second local user out.
 
 State: `~/.roleflock/roleflock.db` (override with `ROLEFLOCK_DATA_DIR`).
 
+If port `4178` is occupied, choose another one consistently for daemon and Vite:
+
+```bash
+ROLEFLOCK_PORT=4312 pnpm dev
+ROLEFLOCK_PORT=4312 pnpm dev:web
+```
+
 **Important:** restart both daemon and web after pulling new code. If Start fails, the UI shows the error text.
 
 ## Suggested first test path
@@ -82,7 +93,10 @@ State: `~/.roleflock/roleflock.db` (override with `ROLEFLOCK_DATA_DIR`).
 5. Accept when verification finishes
 6. Open Evidence + Providers
 
-Use `ROLEFLOCK_FORCE_FAKE=1 pnpm dev` for a deterministic first pass without live CLIs.
+Use `ROLEFLOCK_FORCE_FAKE=1 pnpm dev` only for a deterministic UI/workflow
+simulation without live CLIs. The UI and exported evidence label it as
+**simulation**; its scripted output and `simulation-check` are not proof that a
+repository fix works.
 
 ## Roles and models
 
@@ -92,12 +106,12 @@ quota, and falls through to the next when one refuses.
 
 Shipping defaults:
 
-| Role | Preference | Falls back to |
-|------|-----------|---------------|
-| Planner / lead | Cursor · `claude-opus-5-high` | `gpt-5.6-sol-high`, then Codex `gpt-5.6-sol`, then Claude CLI `opus` |
-| Executor | Cursor · `cursor-grok-4.5-high` | `claude-opus-5-high`, then `composer-2.5` |
-| Reviewer | Cursor · `gpt-5.6-terra-medium` | `claude-opus-5-low`, then Codex `gpt-5.6-terra` |
-| Verifier | Cursor · `gpt-5.6-terra-high` | `claude-opus-5-medium`, then Codex `gpt-5.6-terra` |
+| Role           | Preference                      | Falls back to                                                        |
+| -------------- | ------------------------------- | -------------------------------------------------------------------- |
+| Planner / lead | Cursor · `claude-opus-5-high`   | `gpt-5.6-sol-high`, then Codex `gpt-5.6-sol`, then Claude CLI `opus` |
+| Executor       | Cursor · `cursor-grok-4.5-high` | `claude-opus-5-high`, then Codex `gpt-5.6-sol`, then `composer-2.5`  |
+| Reviewer       | Cursor · `gpt-5.6-terra-medium` | `claude-opus-5-low`, then Codex `gpt-5.6-terra`                      |
+| Verifier       | Cursor · `gpt-5.6-terra-high`   | `claude-opus-5-medium`, then Codex `gpt-5.6-terra`                   |
 
 There is no fake provider. It is not in any list and it is not even registered
 unless `ROLEFLOCK_FORCE_FAKE=1` or `ROLEFLOCK_INCLUDE_FAKE=1` asks for it, so it
@@ -127,9 +141,10 @@ documents is clamped rather than forwarded.
 
 ## Notes
 
-- **Fake provider** is omitted from the Providers UI unless `ROLEFLOCK_INCLUDE_FAKE=1`; use `ROLEFLOCK_FORCE_FAKE=1` for deterministic orchestration.
+- **Fake provider** is omitted from the Providers UI unless `ROLEFLOCK_INCLUDE_FAKE=1`; `ROLEFLOCK_FORCE_FAKE=1` is visibly labelled simulation and never production verification.
 - Claude / Codex / Cursor appear on Providers with `ready` or `missing` based on PATH; login via provider auth actions.
-- **Cursor writer:** sandboxed filesystem writes under a permission envelope + writer lease — full Cursor Agent CLI loop still deferred.
+- **Writer:** Cursor Agent or Codex edits only the leased worktree. Codex uses an explicit `workspace-write` sandbox; all non-writer Codex turns are explicitly `read-only`.
+- A live run without a custom verification command or a package test script fails closed instead of accepting artefact presence as a test.
 - Planner/verifier may invoke Claude/Codex when discovered and not forced fake.
 - Provider discovery spawns the real CLIs and caches the result for 15s, so the Providers page does not respawn subprocesses on every poll.
 - `pnpm url` reprints the launch URL; `ROLEFLOCK_ROTATE_TOKEN=1` rotates the session token.

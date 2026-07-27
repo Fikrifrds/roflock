@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
-import { UnauthorizedError } from '../lib/api.js';
+import { UnauthorizedError, type RuntimeInfo } from '../lib/api.js';
 import { api, queryClient } from '../lib/client.js';
 
 type Connection = 'connecting' | 'live' | 'unauthorized' | 'error';
@@ -39,6 +39,7 @@ function Unauthorized() {
 
 export function Shell({ children }: { children: ReactNode }) {
   const [connection, setConnection] = useState<Connection>('connecting');
+  const [runtime, setRuntime] = useState<RuntimeInfo>();
 
   useEffect(() => {
     let closeStream: (() => void) | undefined;
@@ -46,8 +47,9 @@ export function Shell({ children }: { children: ReactNode }) {
 
     void api
       .bootstrap()
-      .then(() => {
+      .then((info) => {
         if (cancelled) return;
+        setRuntime(info);
         setConnection('live');
         closeStream = api.stream(() => {
           void queryClient.invalidateQueries();
@@ -99,6 +101,12 @@ export function Shell({ children }: { children: ReactNode }) {
           {CONNECTION_LABELS[connection]}
         </i>
       </header>
+      {runtime?.forcedProvider === 'fake' ? (
+        <aside className="simulation-banner" role="alert">
+          <strong>Simulation mode.</strong> Providers, code changes, and tests are scripted; results
+          are not production verification.
+        </aside>
+      ) : null}
       <main id="main">{children}</main>
     </>
   );

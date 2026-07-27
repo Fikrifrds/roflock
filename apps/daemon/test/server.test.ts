@@ -2,7 +2,7 @@ import { mkdtemp, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createServer } from '../src/server.js';
+import { createServer, resolvePort } from '../src/server.js';
 
 const servers: Awaited<ReturnType<typeof createServer>>[] = [];
 afterEach(async () => {
@@ -18,6 +18,29 @@ async function server() {
 }
 
 describe('daemon boundary', () => {
+  it('validates an environment-provided daemon port', () => {
+    expect(resolvePort('4312')).toBe(4312);
+    expect(() => resolvePort('not-a-port')).toThrow(/ROLEFLOCK_PORT/);
+    expect(() => resolvePort('70000')).toThrow(/1 to 65535/);
+  });
+
+  it('reports the configured runtime address consistently', async () => {
+    const instance = await createServer({
+      dataDir: await mkdtemp(join(tmpdir(), 'roleflock-port-')),
+      session: { token: 'test-token', csrf: 'test-csrf' },
+      port: 4312,
+    });
+    servers.push(instance);
+    const health = await instance.app.inject({ method: 'GET', url: '/api/health' });
+    const runtime = await instance.app.inject({
+      method: 'GET',
+      url: '/api/runtime/info',
+      headers: { 'x-roleflock-token': 'test-token' },
+    });
+    expect(health.json()).toMatchObject({ host: '127.0.0.1', port: 4312 });
+    expect(runtime.json()).toMatchObject({ host: '127.0.0.1', port: 4312 });
+  });
+
   it('defaults to loopback-only bind', async () => expect((await server()).host).toBe('127.0.0.1'));
   it('has no raw shell execution endpoint', async () => {
     const { app } = await server();

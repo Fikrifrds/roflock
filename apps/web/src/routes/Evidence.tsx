@@ -5,7 +5,7 @@ import { Shell } from '../components/Shell.js';
 import { Empty, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { downloadJson, formatValue, parseJsonField } from '../lib/format.js';
-import type { EvidenceBundle, Usage } from '../types.js';
+import type { EvidenceBundle, Task, Usage } from '../types.js';
 
 export function Evidence() {
   const { id = '' } = useParams();
@@ -15,6 +15,7 @@ export function Evidence() {
     Boolean(id),
   );
   const { data: usage } = useData<Usage>(['usage', id], `/api/usage/tasks/${id}`, Boolean(id));
+  const { data: task } = useData<Task>(['task', id], `/api/tasks/${id}`, Boolean(id));
   const [exportNote, setExportNote] = useState('');
 
   const exportJson = async (path: string, filename: string) => {
@@ -28,10 +29,61 @@ export function Evidence() {
   };
 
   const disclosures = data?.disclosures ?? [];
+  const tests = data?.testRuns ?? [];
+  const passedTests = tests.filter((row) => {
+    const value = (row as { passed?: unknown }).passed;
+    return value === true || value === 1;
+  }).length;
+  const failedTests = tests.filter((row) => {
+    const value = (row as { passed?: unknown }).passed;
+    return value === false || value === 0;
+  }).length;
+  const warnings = (data?.findings ?? []).filter((row) => {
+    const severity = String((row as { severity?: unknown }).severity ?? '').toLowerCase();
+    return severity === 'warning' || severity === 'error';
+  }).length;
+  const latestArtefact = [...(data?.artefacts ?? [])]
+    .reverse()
+    .find((row) => (row as { kind?: unknown }).kind === 'diff') as
+    { metadata_json?: string } | undefined;
+  const latestMeta = parseJsonField(latestArtefact?.metadata_json);
+  const latestMetaObject =
+    latestMeta && !Array.isArray(latestMeta) ? (latestMeta as Record<string, unknown>) : {};
+  const changedFiles = Array.isArray(latestMetaObject.changedFiles)
+    ? latestMetaObject.changedFiles.length
+    : 0;
+  const added = typeof latestMetaObject.added === 'number' ? latestMetaObject.added : 0;
+  const removed = typeof latestMetaObject.removed === 'number' ? latestMetaObject.removed : 0;
 
   return (
     <Shell>
       <Section title="Evidence ledger">
+        <div className="status-strip" aria-label="Verification summary">
+          <div>
+            <span>Task outcome</span>
+            <b>{task?.state?.replaceAll('_', ' ') ?? 'Loading…'}</b>
+          </div>
+          <div>
+            <span>Repository change</span>
+            <b>
+              {changedFiles} file{changedFiles === 1 ? '' : 's'} · +{added}/−{removed}
+            </b>
+          </div>
+          <div>
+            <span>Verification</span>
+            <b>
+              {passedTests} passed · {failedTests} failed
+            </b>
+          </div>
+          <div>
+            <span>Warnings / errors</span>
+            <b>{warnings}</b>
+          </div>
+          <div>
+            <span>Recorded cost</span>
+            <b>${(usage?.summary?.actualCostUsd ?? 0).toFixed(4)}</b>
+          </div>
+        </div>
         <div className="actions">
           <button
             type="button"
@@ -60,7 +112,56 @@ export function Evidence() {
 
         <EvidenceSection title="Findings" items={data?.findings ?? []} />
         <EvidenceSection title="Test runs" items={data?.testRuns ?? []} />
-        <EvidenceSection title="Artefacts / diff" items={data?.artefacts ?? []} />
+
+        <section className="evidence-section">
+          <h3>Artefacts / diff</h3>
+          {data?.artefacts?.length ? (
+            data.artefacts.map((row, index) => {
+              const artefact = row as {
+                id?: string;
+                kind?: string;
+                path?: string;
+                content_ref?: string;
+                metadata_json?: string;
+                created_at?: string;
+              };
+              const meta = parseJsonField(artefact.metadata_json);
+              const metaObj = meta && !Array.isArray(meta) ? (meta as Record<string, unknown>) : {};
+              const files = Array.isArray(metaObj.changedFiles)
+                ? (metaObj.changedFiles as string[])
+                : [];
+              const added = typeof metaObj.added === 'number' ? metaObj.added : undefined;
+              const removed = typeof metaObj.removed === 'number' ? metaObj.removed : undefined;
+              return (
+                <article className="evidence-item" key={String(artefact.id ?? index)}>
+                  <p>
+                    <span>kind</span> {artefact.kind ?? '—'}
+                  </p>
+                  <p>
+                    <span>path</span> {artefact.path ?? '—'}
+                  </p>
+                  {files.length || added !== undefined ? (
+                    <p className="live-diff-meta">
+                      {added !== undefined ? <span className="diff-add">+{added}</span> : null}
+                      {removed !== undefined ? <span className="diff-del">−{removed}</span> : null}
+                      {files.length ? <span className="hint">{files.join(', ')}</span> : null}
+                    </p>
+                  ) : null}
+                  {artefact.content_ref ? (
+                    <pre className="diff-pane" tabIndex={0}>
+                      {artefact.content_ref}
+                    </pre>
+                  ) : null}
+                  <p>
+                    <span>created</span> {artefact.created_at ?? '—'}
+                  </p>
+                </article>
+              );
+            })
+          ) : (
+            <Empty message="No artefacts / diff recorded yet." />
+          )}
+        </section>
 
         <section className="evidence-section">
           <h3>Usage</h3>

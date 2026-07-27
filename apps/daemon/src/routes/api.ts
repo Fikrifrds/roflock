@@ -54,6 +54,7 @@ export function registerApi(
   providers: ProviderRegistry,
   documents: DocumentService,
   dataDir: string,
+  runtime: { host: string; port: number },
 ): void {
   const projects = new ProjectRepository(db),
     tasks = new TaskRepository(db),
@@ -68,8 +69,8 @@ export function registerApi(
     status: 'ok',
     product: 'RoleFlock',
     version: '0.1.0',
-    host: '127.0.0.1',
-    port: 4178,
+    host: runtime.host,
+    port: runtime.port,
     service: 'roleflock-daemon',
   }));
   /**
@@ -84,8 +85,8 @@ export function registerApi(
       path: '/',
     });
     return {
-      host: '127.0.0.1',
-      port: 4178,
+      host: runtime.host,
+      port: runtime.port,
       csrf: session.csrf,
       version: getLocalVersion(),
       forcedProvider: process.env.ROLEFLOCK_FORCE_FAKE === '1' ? 'fake' : null,
@@ -260,9 +261,7 @@ export function registerApi(
         return reply.code(400).send({ error: `Unknown provider: ${providerId}` });
       }
       if (item.effort !== undefined && item.effort !== null && !isEffort(item.effort)) {
-        return reply
-          .code(400)
-          .send({ error: `effort must be one of ${EFFORT_LEVELS.join(', ')}` });
+        return reply.code(400).send({ error: `effort must be one of ${EFFORT_LEVELS.join(', ')}` });
       }
       candidates.push({
         providerConnectionId: providerId,
