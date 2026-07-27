@@ -221,12 +221,12 @@ export class RoleRouter {
         continue;
       }
 
-      if (role === 'writer' && !adapter.capabilities.writes) {
+      if (role === 'writer' && !adapter.capabilities.writes && !adapter.capabilities.patches) {
         skipped.push({
           providerId,
           modelId,
           reason: 'unsupported_capability',
-          detail: `Provider "${providerId}" does not support repository writes`,
+          detail: `Provider "${providerId}" supports neither repository writes nor validated patches`,
         });
         continue;
       }

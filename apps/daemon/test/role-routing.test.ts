@@ -134,6 +134,28 @@ describe('RoleRouter', () => {
     ]);
   });
 
+  it('routes an OpenAI-compatible Qwen model as a validated patch writer', async () => {
+    h.registry.registerCustom({
+      id: 'qwen',
+      displayName: 'Qwen',
+      endpoint: 'http://127.0.0.1:1234/v1',
+      apiKey: 'test-only',
+      model: 'qwen3-coder',
+    });
+    h.router.replaceRole('writer', [{ providerConnectionId: 'qwen', modelId: 'qwen3-coder' }]);
+
+    const route = await h.router.route('writer');
+    expect(route).toMatchObject({
+      providerId: 'qwen',
+      providerDisplayName: 'Qwen',
+      modelId: 'qwen3-coder',
+    });
+    expect(route?.adapter.capabilities).toMatchObject({
+      writes: false,
+      patches: true,
+    });
+  });
+
   it('parks a quota-exhausted candidate and moves to the next one', async () => {
     h.router.replaceRole('planner', [
       { providerConnectionId: 'fake', modelId: 'expensive' },

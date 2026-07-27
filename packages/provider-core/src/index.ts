@@ -4,7 +4,7 @@ import type { InvocationEvent } from '@roleflock/contracts';
 
 const execFileAsync = promisify(execFile);
 
-export interface ProviderCapabilities { streaming: boolean; tools: boolean; writes: boolean; headless: boolean; }
+export interface ProviderCapabilities { streaming: boolean; tools: boolean; writes: boolean; patches?: boolean; headless: boolean; }
 export interface ProviderHealth {
   status: 'ready' | 'missing' | 'unauthenticated' | 'error';
   detail?: string;

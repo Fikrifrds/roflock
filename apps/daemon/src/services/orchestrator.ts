@@ -52,6 +52,7 @@ import { CursorWriterAdapter, assertChangedPathsAllowed } from '@roleflock/provi
 import { budgetStatus, estimateInvocationCost } from '@roleflock/usage-ledger';
 import { EventBus } from './event-bus.js';
 import { authoritativeConflictMessage, type DocumentService } from './documents.js';
+import { applyModelPatch, buildPatchWriterContext } from './model-patch.js';
 import { loadPriceCards } from './pricing.js';
 import { ProviderRegistry } from './provider-registry.js';
 import { RoleRouter, type RoleRoute, type RoutedRole } from './role-routing.js';
@@ -936,43 +937,67 @@ export class Orchestrator {
             route?.adapter instanceof CursorWriterAdapter &&
             process.env.ROLEFLOCK_CURSOR_AGENT !== '0' &&
             (await route.adapter.hasAgentCli());
-          const useAgent =
+          const directWriter =
             !this.forceFake &&
             Boolean(
               route?.adapter.capabilities.writes &&
               (!(route.adapter instanceof CursorWriterAdapter) || cursorReady),
             );
+          const patchWriter = !this.forceFake && Boolean(route?.adapter.capabilities.patches);
+          let appliedValidatedPatch = false;
 
-          if (!this.forceFake && !useAgent) {
+          if (!this.forceFake && !directWriter && !patchWriter) {
+            const skipped = this.router
+              .skippedFor('writer')
+              .map((candidate) => candidate.detail ?? candidate.reason)
+              .join('; ');
             throw new Error(
-              `The selected writer (${route?.providerDisplayName ?? 'unknown provider'}) cannot edit the leased worktree.`,
+              route
+                ? `The selected writer (${route.providerDisplayName} / ${route.modelDisplayName}) supports neither direct writes nor validated patches.`
+                : `No configured writer can edit the leased worktree${skipped ? `: ${skipped}` : '.'}`,
             );
           }
 
-          const envelope = useAgent
-            ? {
-                worktree: worktreePath,
-                allowedPaths: ['**'],
-                allowCommands: true,
-              }
-            : {
-                worktree: worktreePath,
-                allowedPaths: [relativeTarget],
-                allowCommands: false,
-              };
+          const envelope =
+            directWriter || patchWriter
+              ? {
+                  worktree: worktreePath,
+                  allowedPaths: ['**'],
+                  allowCommands: true,
+                }
+              : {
+                  worktree: worktreePath,
+                  allowedPaths: [relativeTarget],
+                  allowCommands: false,
+                };
 
-          if (useAgent) {
-            const prompt = [
-              'Implement the smallest sufficient bug fix in this repository worktree.',
-              `Title: ${task.title}`,
-              `Brief: ${task.brief}`,
-              `Expected: ${task.expectedBehaviour ?? 'n/a'}`,
-              `Actual: ${task.actualBehaviour ?? 'n/a'}`,
-              '',
-              compiled.promptBlock,
-              'Stay inside this workspace. Prefer editing existing source over adding docs.',
-              'Do not invent secrets or reach outside the worktree.',
-            ].join('\n');
+          if (directWriter || patchWriter) {
+            // Build once, but only send it to API-only patch providers. Direct
+            // agents inspect the worktree themselves and should not pay the
+            // token cost. A route failover can therefore switch modes safely.
+            const patchContext = await buildPatchWriterContext(worktreePath, task.brief);
+            const prompt = (activeRoute: RoleRoute) =>
+              [
+                'Implement the smallest sufficient bug fix in this repository worktree.',
+                `Title: ${task.title}`,
+                `Brief: ${task.brief}`,
+                `Expected: ${task.expectedBehaviour ?? 'n/a'}`,
+                `Actual: ${task.actualBehaviour ?? 'n/a'}`,
+                '',
+                compiled.promptBlock,
+                activeRoute.adapter.capabilities.patches && !activeRoute.adapter.capabilities.writes
+                  ? [
+                      'You cannot call filesystem tools in this turn.',
+                      'Return ONLY one git-style unified diff beginning with "diff --git".',
+                      'Do not wrap it in commentary. Do not use absolute paths or paths containing "..".',
+                      'The diff will be path-validated and checked with `git apply --check` before application.',
+                      '',
+                      patchContext,
+                    ].join('\n')
+                  : '',
+                'Stay inside this workspace. Prefer editing existing source over adding docs.',
+                'Do not invent secrets or reach outside the worktree.',
+              ].join('\n');
             const invoked = await this.invokeRole({
               role,
               task,
@@ -989,6 +1014,17 @@ export class Orchestrator {
               },
             });
             writerRoute = invoked.route;
+            nodeOutput = invoked.output;
+            const resolvedPatchWriter =
+              invoked.route.adapter.capabilities.patches &&
+              !invoked.route.adapter.capabilities.writes;
+            if (resolvedPatchWriter) {
+              const applied = await applyModelPatch(invoked.output, envelope);
+              appliedValidatedPatch = true;
+              this.publishLiveProgress(nodeRunId, {
+                activity: `Validated and applied ${applied.paths.length} model patch path(s)`,
+              });
+            }
           } else {
             const content = `# RoleFlock simulation artefact\n\nThis file demonstrates the workflow only. It is not a verified source-code fix.\n\nBrief: ${task.brief}\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nMode: simulation\n`;
             await writeFile(join(worktreePath, relativeTarget), content);
@@ -1013,7 +1049,7 @@ export class Orchestrator {
             id: randomUUID(),
             taskId: task.id,
             kind: 'diff',
-            path: useAgent ? worktreePath : join(worktreePath, relativeTarget),
+            path: directWriter || patchWriter ? worktreePath : join(worktreePath, relativeTarget),
             contentRef: diff.patch,
             metadata: {
               changedFiles: diff.changedFiles,
@@ -1023,7 +1059,11 @@ export class Orchestrator {
               providerId: writerRoute?.providerId,
               permissionEnvelope: envelope,
               durableLeaseId: leaseId,
-              writerMode: useAgent ? `${writerRoute?.providerId ?? 'agent'}-agent` : 'simulation',
+              writerMode: appliedValidatedPatch
+                ? `${writerRoute?.providerId ?? 'model'}-validated-patch`
+                : directWriter || writerRoute?.adapter.capabilities.writes
+                  ? `${writerRoute?.providerId ?? 'agent'}-agent`
+                  : 'simulation',
             },
             createdAt: now(),
           });
@@ -1332,7 +1372,7 @@ export class Orchestrator {
     graphRunId: string;
     nodeRunId: string;
     invocationId: string;
-    prompt: string;
+    prompt: string | ((route: RoleRoute) => string);
     cwd: string;
     signal: AbortSignal;
     permissionEnvelope?: { worktree: string; allowedPaths: string[]; allowCommands?: boolean };
@@ -1381,7 +1421,7 @@ export class Orchestrator {
           adapter: route.adapter,
           invocationId: input.invocationId,
           nodeRunId: input.nodeRunId,
-          prompt: input.prompt,
+          prompt: typeof input.prompt === 'function' ? input.prompt(route) : input.prompt,
           cwd: input.cwd,
           signal: input.signal,
           permissionEnvelope: input.permissionEnvelope,

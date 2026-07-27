@@ -13,6 +13,7 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
     streaming: true,
     tools: false,
     writes: false,
+    patches: true,
     headless: true,
   };
 
