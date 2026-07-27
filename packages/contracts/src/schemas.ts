@@ -146,6 +146,17 @@ export const ActiveExecutionSchema = z.object({
    * the live view stays readable; the full text still lands in evidence.
    */
   liveOutput: z.string().optional(),
+  /** Provider reasoning stream progress, kept separate from deliverable output. */
+  reasoningChars: z.number().int().nonnegative().optional(),
+  /** Most recent earlier turn with captured output, retained for continuity. */
+  previousTurn: z
+    .object({
+      roleDisplayName: z.string(),
+      providerDisplayName: z.string(),
+      configuredModelDisplayName: z.string(),
+      liveOutput: z.string(),
+    })
+    .optional(),
   /** Live worktree diff while a writer is mid-turn. */
   liveDiff: z
     .object({
@@ -162,6 +173,8 @@ export const ActiveExecutionSchema = z.object({
   maxAttempts: z.number().int().positive(),
   actualCost: z.number().optional(),
   shadowCost: z.number().optional(),
+  inputTokens: z.number().int().nonnegative().optional(),
+  outputTokens: z.number().int().nonnegative().optional(),
   usageConfidence: UsageConfidenceSchema,
   pauseRequested: z.boolean(),
   stopRequested: z.boolean(),
@@ -231,6 +244,7 @@ export type EventEnvelope = z.infer<typeof EventEnvelopeSchema>;
 export const InvocationEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('invocation.started'), invocationId: z.string() }),
   z.object({ type: z.literal('model.output.delta'), text: z.string() }),
+  z.object({ type: z.literal('model.reasoning.delta'), text: z.string() }),
   z.object({
     type: z.literal('phase.changed'),
     phase: ExecutionPhaseSchema,

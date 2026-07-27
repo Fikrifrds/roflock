@@ -27,6 +27,22 @@ function graph(nodes: GraphNode[], overrides: Partial<WorkflowGraph> = {}): Work
 }
 
 describe('graph runtime', () => {
+  it('does not route setup requirements back through the writer', async () => {
+    const ran: string[] = [];
+    const result = await runGraph(bugFixGraph, async ({ node: current }) => {
+      ran.push(current.id);
+      if (current.id === 'test') {
+        throw new NodeFailure('Verification command required', 'setup_required');
+      }
+    });
+
+    expect(ran.filter((id) => id === 'writer')).toHaveLength(1);
+    expect(ran.filter((id) => id === 'test')).toHaveLength(1);
+    expect(result.results.find((item) => item.nodeId === 'test')?.failureClass).toBe(
+      'setup_required',
+    );
+  });
+
   it('runs a dependency-ordered graph to completion', async () => {
     const order: string[] = [];
     const result = await runGraph(directGraph, async ({ node: n }) => {

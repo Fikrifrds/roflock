@@ -5,7 +5,6 @@ import { Field, FileDrop } from '../components/Field.js';
 import { BlockedBanner } from '../components/BlockedBanner.js';
 import { GraphRunView } from '../components/GraphRunView.js';
 import { LiveTurn } from '../components/LiveTurn.js';
-import { TaskJourney } from '../components/TaskJourney.js';
 import { TaskWorkspaceHeader } from '../components/TaskWorkspaceHeader.js';
 import { WorkspaceChanges } from '../components/WorkspaceChanges.js';
 import { Select } from '../components/Select.js';
@@ -119,7 +118,7 @@ export function TaskDetail() {
     task.state === 'awaiting_acceptance' ||
     pending.length > 0;
   const latestError =
-    task.state === 'failed' || task.state === 'cancelled'
+    task.state === 'failed'
       ? [...(evidence?.findings ?? [])].reverse().find((finding) => finding.severity === 'error')
       : undefined;
   const verificationMissing = Boolean(
@@ -155,7 +154,6 @@ export function TaskDetail() {
   return (
     <Shell>
       <TaskWorkspaceHeader task={task} activeView={workspaceView} />
-      <TaskJourney task={task} runView={runView} />
       {workspaceView === 'changes' ? (
         <WorkspaceChanges task={task} />
       ) : (
@@ -282,16 +280,13 @@ export function TaskDetail() {
                     : (execution?.currentActivity ?? 'Idle')}
               </p>
             </div>
-            <dl className="task-now-assignment">
-              <div>
-                <dt>Role</dt>
-                <dd>{finished ? '—' : (execution?.roleDisplayName ?? 'Waiting')}</dd>
-              </div>
-              <div>
-                <dt>Provider</dt>
-                <dd>{finished ? '—' : (execution?.providerDisplayName ?? '—')}</dd>
-              </div>
-            </dl>
+            {!finished ? (
+              <p className="task-now-assignment">
+                <span>{execution?.roleDisplayName ?? 'Waiting'}</span>
+                <span aria-hidden="true">·</span>
+                <strong>{execution?.providerDisplayName ?? 'Provider pending'}</strong>
+              </p>
+            ) : null}
             <div className="actions task-now-actions">
               {task.state === 'ready' || task.state === 'failed' ? (
                 <button type="button" disabled={starting} onClick={() => void action('start')}>
@@ -346,19 +341,9 @@ export function TaskDetail() {
                     ['Permission', execution?.permissionProfileId ?? '—'],
                     ['Command', execution?.activeCommandPreview ?? '—'],
                     ['Heartbeat', execution?.lastHeartbeatAt ?? '—'],
-                    ['Actual cost', `$${(execution?.actualCost ?? 0).toFixed(4)}`],
                     [
-                      'Budget left',
-                      task.maxActualCostUsd === undefined
-                        ? 'No hard cap'
-                        : `$${Math.max(
-                            0,
-                            task.maxActualCostUsd - (execution?.actualCost ?? 0),
-                          ).toFixed(4)}`,
-                    ],
-                    [
-                      'Shadow cost',
-                      `$${(execution?.shadowCost ?? 0).toFixed(4)} (estimate, not a bill)`,
+                      'Tokens',
+                      `${(execution?.inputTokens ?? 0).toLocaleString()} input · ${(execution?.outputTokens ?? 0).toLocaleString()} output`,
                     ],
                     ['Usage confidence', execution?.usageConfidence ?? 'exact'],
                   ] as const
@@ -372,14 +357,7 @@ export function TaskDetail() {
             </div>
           </details>
 
-          <LiveTurn
-            execution={execution}
-            finished={finished}
-            awaitingDecision={waiting}
-            visible={task.state === 'running' || waiting}
-          />
-
-          <details className="workflow-map-panel">
+          <details className="workflow-map-panel" open>
             <summary>
               <div>
                 <span className="eyebrow">Workflow map</span>
@@ -389,10 +367,16 @@ export function TaskDetail() {
                     : `${completedGraphNodes} of ${graphNodes.length} steps complete`}
                 </strong>
               </div>
-              <span>View graph</span>
             </summary>
             <GraphRunView taskId={id} execution={execution} />
           </details>
+
+          <LiveTurn
+            execution={execution}
+            finished={finished}
+            awaitingDecision={waiting}
+            visible={task.state === 'running' || waiting}
+          />
 
           {waiting ? (
             <aside className="approval-dock" role="status" aria-live="polite">

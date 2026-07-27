@@ -91,8 +91,14 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
             return;
           }
           try {
-            const delta = JSON.parse(data).choices?.[0]?.delta?.content;
-            if (typeof delta === 'string') yield { type: 'model.output.delta', text: delta };
+            const delta = JSON.parse(data).choices?.[0]?.delta;
+            const reasoning = delta?.reasoning_content ?? delta?.reasoning;
+            if (typeof reasoning === 'string' && reasoning) {
+              yield { type: 'model.reasoning.delta', text: reasoning };
+            }
+            if (typeof delta?.content === 'string' && delta.content) {
+              yield { type: 'model.output.delta', text: delta.content };
+            }
           } catch {
             /* ignore malformed SSE frame */
           }

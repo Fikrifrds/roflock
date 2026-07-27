@@ -54,6 +54,13 @@ export type ActiveExecution = {
   activeTool?: string;
   activeCommandPreview?: string;
   liveOutput?: string;
+  reasoningChars?: number;
+  previousTurn?: {
+    roleDisplayName: string;
+    providerDisplayName: string;
+    configuredModelDisplayName: string;
+    liveOutput: string;
+  };
   liveDiff?: {
     patch: string;
     status: string;
@@ -65,6 +72,8 @@ export type ActiveExecution = {
   attempt: number;
   actualCost?: number;
   shadowCost?: number;
+  inputTokens?: number;
+  outputTokens?: number;
   usageConfidence?: string;
 };
 

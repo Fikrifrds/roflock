@@ -528,6 +528,8 @@ export class Orchestrator {
     if (execution) {
       execution.actualCost = costs.actualCostUsd;
       execution.shadowCost = costs.shadowCostUsd;
+      execution.inputTokens = costs.inputTokens;
+      execution.outputTokens = costs.outputTokens;
       execution.usageConfidence = confidence;
       this.executions.upsert(execution);
     }
@@ -1513,12 +1515,14 @@ export class Orchestrator {
     effort?: Effort;
   }): Promise<{ output: string; usage?: ReportedUsage }> {
     let output = '';
+    let reasoningChars = 0;
     let usage: ReportedUsage | undefined;
     const watchdog = createIdleWatchdog(input.signal, this.providerIdleTimeoutMs());
     // Cap what the live projection stores. The evidence finding still gets the
     // full text; this is only so the task page stays readable while streaming.
     const liveCap = 24_000;
     let lastPublish = 0;
+    let lastReasoningPublish = 0;
     let lastDiffAt = 0;
     const worktree = input.permissionEnvelope?.worktree;
 
@@ -1550,6 +1554,17 @@ export class Orchestrator {
             ? `Writing · ${liveDiff.changedFiles.length} file(s) · +${liveDiff.added}/−${liveDiff.removed}`
             : 'Writing…'
           : undefined,
+      });
+    };
+    const flushReasoning = (force = false): void => {
+      const at = Date.now();
+      if (!force && at - lastReasoningPublish < 250) return;
+      lastReasoningPublish = at;
+      this.publishLiveProgress(input.nodeRunId, {
+        reasoningChars,
+        activity: output
+          ? undefined
+          : `Reasoning stream active · ${reasoningChars.toLocaleString()} chars received`,
       });
     };
 
@@ -1592,6 +1607,10 @@ export class Orchestrator {
           output += event.text;
           await flushLive();
         }
+        if (event.type === 'model.reasoning.delta') {
+          reasoningChars += event.text.length;
+          flushReasoning();
+        }
         // The CLI's own numbers. Anything shown as a token count or a cost has
         // to come from here rather than from a plausible-looking constant.
         if (event.type === 'usage.updated') usage = event.usage as ReportedUsage;
@@ -1602,6 +1621,7 @@ export class Orchestrator {
           throw new Error(event.reason);
         }
       }
+      if (reasoningChars) flushReasoning(true);
       await flushLive(true);
     } catch (error) {
       this.closeProcessHandles(input.nodeRunId, 'unknown');
@@ -1630,6 +1650,7 @@ export class Orchestrator {
       append?: string;
       liveDiff?: ActiveExecution['liveDiff'];
       activity?: string;
+      reasoningChars?: number;
     },
   ): void {
     const execution = this.executions.getByNodeRun(nodeRunId);
@@ -1640,6 +1661,7 @@ export class Orchestrator {
       execution.liveOutput = next.length > 24_000 ? `…\n${next.slice(-24_000)}` : next;
     }
     if (update.liveDiff) execution.liveDiff = update.liveDiff;
+    if (update.reasoningChars !== undefined) execution.reasoningChars = update.reasoningChars;
     if (update.activity) execution.currentActivity = update.activity;
     execution.lastHeartbeatAt = now();
     this.executions.upsert(execution);
@@ -1710,8 +1732,9 @@ export class Orchestrator {
       const parts = parseCommandArgv(suggested);
       return { command: parts[0], args: parts.slice(1), label: suggested };
     }
-    throw new Error(
+    throw new NodeFailure(
       'Verification command required: no configured command or supported test convention was found. Add one before retrying.',
+      'setup_required',
     );
   }
 
@@ -1814,6 +1837,8 @@ export class Orchestrator {
       maxAttempts: task.maxAttempts,
       actualCost: costs.actualCostUsd,
       shadowCost: costs.shadowCostUsd,
+      inputTokens: costs.inputTokens,
+      outputTokens: costs.outputTokens,
       // A deterministic node spends no provider quota, so its cost really is
       // exactly zero. A provider turn overwrites this from what the CLI reported.
       usageConfidence: route ? 'estimated' : 'exact',

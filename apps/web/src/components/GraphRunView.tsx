@@ -212,10 +212,11 @@ export function GraphRunView({
   const isWorking = data.runState === 'running' || Boolean(activeNode);
   const completedCount = graph.nodes.filter((node) => node.state === 'completed').length;
   const activeLabel = activeNode?.id.replaceAll('_', ' ');
-  const currentActivity =
-    execution?.currentActivity ??
-    execution?.activeCommandPreview ??
-    (activeLabel ? `Running the ${activeLabel} step` : null);
+  const currentActivity = isWorking
+    ? execution?.currentActivity ??
+      execution?.activeCommandPreview ??
+      (activeLabel ? `Running the ${activeLabel} step` : null)
+    : null;
   // Failure edges are the interesting ones: they are the routes a user cannot
   // infer from the happy-path node list alone.
   const failureEdges = graph.edges.filter((edge) => edge.when !== 'always');

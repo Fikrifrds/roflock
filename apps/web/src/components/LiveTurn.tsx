@@ -148,8 +148,11 @@ export function LiveTurn({
   visible?: boolean;
 }) {
   const outputRef = useRef<HTMLPreElement>(null);
+  const previousOutputRef = useRef<HTMLPreElement>(null);
   const output = execution?.liveOutput ?? '';
   const diff = execution?.liveDiff;
+  const previousTurn = execution?.previousTurn;
+  const reasoningChars = execution?.reasoningChars ?? 0;
   const activity = execution?.currentActivity?.trim();
   const provider = execution?.providerDisplayName ?? 'Provider sedang dipilih';
   const model = execution?.configuredModelDisplayName ?? 'Model sedang dipilih';
@@ -194,7 +197,9 @@ export function LiveTurn({
           <div>
             <strong>{activity || 'Thinking…'}</strong>
             <small>
-              {output
+              {reasoningChars > 0 && !output
+                ? `Provider reasoning is streaming (${reasoningChars.toLocaleString()} characters received); implementation output will follow.`
+                : output
                 ? 'The model or command is still streaming output.'
                 : 'Waiting for the first response from the model or command.'}
             </small>
@@ -237,6 +242,18 @@ export function LiveTurn({
           </div>
         )}
       </article>
+
+      {previousTurn ? (
+        <details className="previous-turn">
+          <summary>
+            <span>Previous {previousTurn.roleDisplayName} output</span>
+            <small>
+              {previousTurn.providerDisplayName} / {previousTurn.configuredModelDisplayName}
+            </small>
+          </summary>
+          <ReadableOutput output={previousTurn.liveOutput} outputRef={previousOutputRef} />
+        </details>
+      ) : null}
     </section>
   );
 }

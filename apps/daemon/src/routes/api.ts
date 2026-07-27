@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import type { Task } from '@roleflock/contracts';
+import type { ActiveExecution, Task } from '@roleflock/contracts';
 import {
   AuditRepository,
   ApprovalGrantRepository,
@@ -855,13 +855,32 @@ export function registerApi(
   }
   app.get('/api/tasks/:id/active-execution', async (request) => {
     const taskId = (request.params as { id: string }).id;
-    const row = db
+    const rows = db
       .prepare(
-        `SELECT projection_json FROM active_executions WHERE task_id = ? ORDER BY updated_at DESC LIMIT 1`,
+        `SELECT projection_json FROM active_executions
+         WHERE task_id = ? ORDER BY updated_at DESC LIMIT 25`,
       )
-      .get(taskId) as { projection_json?: string } | undefined;
-    if (!row?.projection_json) return null;
-    return JSON.parse(row.projection_json);
+      .all(taskId) as Array<{ projection_json: string }>;
+    if (!rows.length) return null;
+    const executions = rows.map(
+      (row) => JSON.parse(row.projection_json) as ActiveExecution,
+    );
+    const latest = executions[0]!;
+    const previous = executions.find(
+      (execution) =>
+        execution.nodeRunId !== latest.nodeRunId && Boolean(execution.liveOutput?.trim()),
+    );
+    return {
+      ...latest,
+      previousTurn: previous
+        ? {
+            roleDisplayName: previous.roleDisplayName,
+            providerDisplayName: previous.providerDisplayName,
+            configuredModelDisplayName: previous.configuredModelDisplayName,
+            liveOutput: previous.liveOutput!,
+          }
+        : undefined,
+    };
   });
   app.get(
     '/api/runs/:id',

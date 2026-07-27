@@ -19,6 +19,7 @@ export type FailureClass =
   | 'timeout'
   | 'provider_error'
   | 'budget_exhausted'
+  | 'setup_required'
   | 'cancelled'
   | 'unknown';
 
@@ -87,6 +88,10 @@ const ROUTES: Record<FailureClass, EdgeCondition[]> = {
   timeout: ['on_timeout', 'on_fail'],
   provider_error: ['on_provider_error', 'on_fail'],
   budget_exhausted: ['on_budget_exhausted'],
+  // Missing operator configuration is not an implementation failure. Stop at
+  // the gate so retry can resume there instead of sending unchanged code back
+  // through the writer.
+  setup_required: [],
   cancelled: [],
   unknown: ['on_fail'],
 };
