@@ -227,7 +227,17 @@ describe('Evidence', () => {
       ...RUNTIME,
       '/api/tasks/t1': { id: 't1', state: 'awaiting_acceptance' },
       '/api/evidence/tasks/t1': {
-        findings: [{ id: 'f1', severity: 'warning', summary: 'Review this' }],
+        findings: [
+          {
+            id: 'f1',
+            node_run_id: 'node-1',
+            severity: 'warning',
+            summary: 'Review this',
+            details:
+              '## Verification risks\n\n- Persistence can fail\n- Keyboard focus can be lost.## Recommended action\n\n```js\nlocalStorage.setItem(key, value);\n```',
+            created_at: '2026-07-27T20:57:39.418Z',
+          },
+        ],
         testRuns: [
           { id: 'tr1', passed: 1, command: 'pnpm test' },
           { id: 'tr2', passed: 0, command: 'pnpm lint' },
@@ -264,6 +274,14 @@ describe('Evidence', () => {
     });
     expect(screen.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Workflow' })).toHaveAttribute('href', '/tasks/t1');
+    expect(screen.getByRole('heading', { name: 'Review this' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Verification risks' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Recommended action' })).toBeInTheDocument();
+    expect(screen.getByText('Persistence can fail')).toBeInTheDocument();
+    expect(screen.getByText('localStorage.setItem(key, value);')).toBeInTheDocument();
+    expect(screen.queryByText('## Verification risks')).not.toBeInTheDocument();
+    expect(screen.queryByText('## Recommended action')).not.toBeInTheDocument();
+    expect(screen.getByText('Technical details')).toBeInTheDocument();
   });
 });
 
