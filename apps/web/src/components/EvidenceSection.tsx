@@ -1,13 +1,15 @@
 import type { ReactNode } from 'react';
-import { formatValue } from '../lib/format.js';
+import { formatTimestamp, formatTokenCount, formatValue, parseJsonField } from '../lib/format.js';
 import { Empty } from './primitives.js';
 
-const TECHNICAL_FIELDS = new Set(['id', 'task_id', 'node_run_id']);
+const TECHNICAL_FIELDS = new Set(['id', 'task_id', 'node_run_id', 'invocation_id']);
 
-function formatTimestamp(value: unknown): string {
-  if (typeof value !== 'string') return '';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+function isTimestampField(key: string): boolean {
+  return /(?:created|updated)_?at$/i.test(key);
+}
+
+function displayFieldValue(key: string, value: unknown): string {
+  return isTimestampField(key) ? formatTimestamp(value) : formatValue(value);
 }
 
 function inlineMarkup(text: string): ReactNode[] {
@@ -169,6 +171,149 @@ function FindingCard({ item, index }: { item: Record<string, unknown>; index: nu
   );
 }
 
+function DisclosureCard({ item, index }: { item: Record<string, unknown>; index: number }) {
+  const selectedRaw = parseJsonField(item.selected_context_json);
+  const selected =
+    selectedRaw && !Array.isArray(selectedRaw) ? (selectedRaw as Record<string, unknown>) : {};
+  const contract =
+    selected.contract && typeof selected.contract === 'object' && !Array.isArray(selected.contract)
+      ? (selected.contract as Record<string, unknown>)
+      : {};
+  const exclusionsRaw = parseJsonField(item.exclusions_json);
+  const exclusions = Array.isArray(exclusionsRaw)
+    ? exclusionsRaw.map(String)
+    : Object.keys(exclusionsRaw);
+  const entries = Array.isArray(selected.entries)
+    ? (selected.entries as Array<{ source?: string; tokens?: number }>)
+    : [];
+  const omitted = Array.isArray(selected.omitted)
+    ? (selected.omitted as Array<{ id?: string; reason?: string }>)
+    : [];
+  const role = String(selected.role ?? 'Unknown role');
+  const provider = String(item.provider_connection_id ?? 'Unknown provider');
+  const createdAt = formatTimestamp(item.created_at);
+  const technical = Object.entries(item).filter(
+    ([key, value]) => TECHNICAL_FIELDS.has(key) && value !== null && value !== undefined,
+  );
+
+  return (
+    <article className="evidence-record disclosure-record" key={String(item.id ?? index)}>
+      <header className="evidence-record-header">
+        <span className="evidence-severity">{provider}</span>
+        <div>
+          <h4>{role.replaceAll('_', ' ')} context disclosure</h4>
+          {createdAt ? <time dateTime={String(item.created_at)}>{createdAt}</time> : null}
+        </div>
+      </header>
+
+      <div className="disclosure-summary">
+        <div>
+          <span>Selected context</span>
+          <strong>{formatTokenCount(selected.totalTokens)} tokens</strong>
+        </div>
+        <div>
+          <span>Payload</span>
+          <strong>{formatTokenCount(selected.totalBytes)} bytes</strong>
+        </div>
+        <div>
+          <span>Sources</span>
+          <strong>{entries.length}</strong>
+        </div>
+        <div>
+          <span>Omitted</span>
+          <strong>{omitted.length}</strong>
+        </div>
+      </div>
+
+      <div className="disclosure-groups">
+        {contract.purpose ? (
+          <div>
+            <span className="evidence-record-label">Context policy</span>
+            <p className="disclosure-purpose">{String(contract.purpose)}</p>
+            <div className="evidence-chip-list">
+              <span className="evidence-chip">
+                Limit · {formatTokenCount(contract.maxTokens)} tokens
+              </span>
+              <span className="evidence-chip evidence-chip-muted">
+                {contract.allowWrites ? 'Writes allowed' : 'Read only'}
+              </span>
+              <span className="evidence-chip evidence-chip-muted">
+                {contract.allowCommands ? 'Commands allowed' : 'No commands'}
+              </span>
+              {Array.isArray(contract.allowedSensitivity)
+                ? contract.allowedSensitivity.map((sensitivity) => (
+                    <span className="evidence-chip evidence-chip-muted" key={String(sensitivity)}>
+                      {String(sensitivity)}
+                    </span>
+                  ))
+                : null}
+            </div>
+          </div>
+        ) : null}
+
+        <div>
+          <span className="evidence-record-label">Selected sources</span>
+          <div className="evidence-chip-list">
+            {entries.length ? (
+              entries.map((entry, entryIndex) => (
+                <span className="evidence-chip" key={`${entry.source ?? 'source'}-${entryIndex}`}>
+                  {entry.source ?? 'Unknown source'}
+                  {entry.tokens === undefined ? '' : ` · ${formatTokenCount(entry.tokens)} tok`}
+                </span>
+              ))
+            ) : (
+              <span className="hint">No sources selected.</span>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <span className="evidence-record-label">Excluded by policy</span>
+          <div className="evidence-chip-list">
+            {exclusions.length ? (
+              exclusions.map((exclusion) => (
+                <span className="evidence-chip evidence-chip-muted" key={exclusion}>
+                  {exclusion}
+                </span>
+              ))
+            ) : (
+              <span className="hint">No exclusions recorded.</span>
+            )}
+          </div>
+        </div>
+
+        {omitted.length ? (
+          <div>
+            <span className="evidence-record-label">Omitted context</span>
+            <ul className="disclosure-omitted">
+              {omitted.map((entry, omittedIndex) => (
+                <li key={`${entry.id ?? 'omitted'}-${omittedIndex}`}>
+                  <strong>{entry.id ?? 'Unknown item'}</strong>
+                  <span>{entry.reason ?? 'No reason recorded'}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+
+      {technical.length ? (
+        <details className="evidence-technical">
+          <summary>Technical details</summary>
+          <dl>
+            {technical.map(([key, value]) => (
+              <div key={key}>
+                <dt>{key.replaceAll('_', ' ')}</dt>
+                <dd>{formatValue(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      ) : null}
+    </article>
+  );
+}
+
 export function EvidenceSection({
   title,
   items,
@@ -177,6 +322,7 @@ export function EvidenceSection({
   items: Array<Record<string, unknown>>;
 }) {
   const findings = title === 'Findings';
+  const disclosures = title === 'Disclosures';
 
   return (
     <section className="evidence-section">
@@ -188,12 +334,18 @@ export function EvidenceSection({
               <FindingCard item={item} index={index} key={String(item.id ?? index)} />
             ))}
           </div>
+        ) : disclosures ? (
+          <div className="evidence-record-list">
+            {items.map((item, index) => (
+              <DisclosureCard item={item} index={index} key={String(item.id ?? index)} />
+            ))}
+          </div>
         ) : (
           items.map((item, index) => (
             <article className="evidence-item" key={String(item.id ?? index)}>
               {Object.entries(item).map(([key, value]) => (
                 <p key={key}>
-                  <span>{key.replace(/_/g, ' ')}</span> {formatValue(value)}
+                  <span>{key.replace(/_/g, ' ')}</span> {displayFieldValue(key, value)}
                 </p>
               ))}
             </article>

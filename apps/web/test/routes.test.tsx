@@ -253,7 +253,29 @@ describe('Evidence', () => {
             }),
           },
         ],
-        disclosures: [],
+        disclosures: [
+          {
+            id: 'd1',
+            invocation_id: 'inv-1',
+            provider_connection_id: 'codex',
+            selected_context_json: JSON.stringify({
+              role: 'planner',
+              contract: {
+                purpose: 'Read-only planning from the task brief and repository map',
+                maxTokens: 4000,
+                allowWrites: false,
+                allowCommands: false,
+                allowedSensitivity: ['internal'],
+              },
+              totalTokens: 38,
+              totalBytes: 152,
+              entries: [{ source: 'task.brief', tokens: 37 }],
+              omitted: [{ id: 'knowledge:old', reason: 'Superseded' }],
+            }),
+            exclusions_json: JSON.stringify(['.env', '**/*.pem']),
+            created_at: '2026-07-27T20:59:09.534Z',
+          },
+        ],
       },
       '/api/usage/tasks/t1': { summary: { actualCostUsd: 0.02, shadowCostUsd: 0.1 } },
     });
@@ -281,7 +303,13 @@ describe('Evidence', () => {
     expect(screen.getByText('localStorage.setItem(key, value);')).toBeInTheDocument();
     expect(screen.queryByText('## Verification risks')).not.toBeInTheDocument();
     expect(screen.queryByText('## Recommended action')).not.toBeInTheDocument();
-    expect(screen.getByText('Technical details')).toBeInTheDocument();
+    expect(screen.getAllByText('Technical details')).toHaveLength(2);
+    expect(screen.getByRole('heading', { name: 'planner context disclosure' })).toBeInTheDocument();
+    expect(screen.getByText('Read only')).toBeInTheDocument();
+    expect(screen.getByText('task.brief · 37 tok')).toBeInTheDocument();
+    expect(screen.getByText('.env')).toBeInTheDocument();
+    expect(screen.queryByText('selected context json', { exact: true })).not.toBeInTheDocument();
+    expect(document.querySelector('time[datetime="2026-07-27T20:59:09.534Z"]')).toBeInTheDocument();
   });
 });
 

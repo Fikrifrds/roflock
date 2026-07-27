@@ -6,7 +6,7 @@ import { TaskJourney } from '../components/TaskJourney.js';
 import { TaskWorkspaceHeader } from '../components/TaskWorkspaceHeader.js';
 import { Empty, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
-import { downloadJson, formatValue, parseJsonField } from '../lib/format.js';
+import { downloadJson, formatTimestamp, formatValue, parseJsonField } from '../lib/format.js';
 import type { EvidenceBundle, GraphRunView, Task, Usage } from '../types.js';
 
 export function Evidence() {
@@ -174,7 +174,7 @@ export function Evidence() {
                     </pre>
                   ) : null}
                   <p>
-                    <span>created</span> {artefact.created_at ?? '—'}
+                    <span>created</span> {formatTimestamp(artefact.created_at)}
                   </p>
                 </article>
               );

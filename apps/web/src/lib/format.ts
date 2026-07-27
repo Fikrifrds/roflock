@@ -99,6 +99,17 @@ export function formatTokenCount(value: unknown): string {
   }).format(count);
 }
 
+export function formatTimestamp(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '—';
+  if (typeof value !== 'string') return formatValue(value);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
 /** Local usage is a measured token count, not an inferred dollar bill. */
 export function formatUsage(usage: Record<string, unknown>): string {
   const input = Number(usage.inputTokens ?? usage.input_tokens ?? 0);
