@@ -59,7 +59,7 @@ async function waitFor(
 }
 
 describe('verified bug fix walking skeleton', () => {
-  it('runs planner→reviewer confirmation→writer→test→verifier→accept', async () => {
+  it('runs parallel planners→reviewer confirmation→writer→test→verifier→accept', async () => {
     const { app, repoDir, headers } = await boot();
 
     const project = await app.inject({
@@ -101,6 +101,46 @@ describe('verified bug fix walking skeleton', () => {
       '/api/approvals',
       (body) => Array.isArray(body) && body.length > 0,
     )) as Array<{ id: string }>;
+
+    const planningGraph = (
+      await app.inject({
+        method: 'GET',
+        url: `/api/tasks/${taskBody.id}/graph`,
+        headers,
+      })
+    ).json() as {
+      graph: {
+        version: string;
+        maxConcurrency: number;
+        nodes: Array<{
+          id: string;
+          state: string;
+          dependsOn: string[];
+          focus: string | null;
+          primaryProviderId: string | null;
+          primaryModelId: string | null;
+        }>;
+      };
+    };
+    const graphNode = (id: string) =>
+      planningGraph.graph.nodes.find((candidate) => candidate.id === id)!;
+    expect(planningGraph.graph.version).toBe('bug_fix@2');
+    expect(planningGraph.graph.maxConcurrency).toBe(2);
+    expect(graphNode('planner').state).toBe('completed');
+    expect(graphNode('planner_tests').state).toBe('completed');
+    // The graph intentionally shows the configured primary model, not the
+    // deterministic test adapter or a fallback used by an individual turn.
+    expect(graphNode('planner').primaryProviderId).toBeTruthy();
+    expect(graphNode('planner').primaryModelId).toBeTruthy();
+    expect(graphNode('planner_tests').primaryProviderId).toBe(
+      graphNode('planner').primaryProviderId,
+    );
+    expect(graphNode('planner_tests').primaryModelId).toBe(graphNode('planner').primaryModelId);
+    expect(graphNode('planner').focus).not.toBe(graphNode('planner_tests').focus);
+    expect(graphNode('reviewer').dependsOn).toEqual(['planner', 'planner_tests']);
+    expect(graphNode('reviewer').state).toBe('running');
+    expect(graphNode('reviewer').primaryProviderId).toBeTruthy();
+    expect(graphNode('reviewer').primaryModelId).toBeTruthy();
 
     const approved = await app.inject({
       method: 'POST',
@@ -147,6 +187,12 @@ describe('verified bug fix walking skeleton', () => {
     expect(evidenceBody.artefacts.length).toBeGreaterThan(0);
     expect(evidenceBody.findings).toEqual(
       expect.arrayContaining([
+        expect.objectContaining({
+          summary: expect.stringMatching(/^planner via /),
+        }),
+        expect.objectContaining({
+          summary: expect.stringMatching(/^planner_tests via /),
+        }),
         expect.objectContaining({
           severity: 'warning',
           summary: expect.stringMatching(/Simulation mode/i),

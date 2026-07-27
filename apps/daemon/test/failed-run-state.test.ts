@@ -133,6 +133,7 @@ describe('a failed run leaves no node still claiming to work', () => {
 
     expect(runView.runState).toBe('failed');
     expect(node('planner').state).toBe('completed');
+    expect(node('planner_tests').state).toBe('completed');
     // The failing node used to stay `running` for good, because only the
     // success path ever wrote a terminal state.
     expect(node('reviewer').state).toBe('failed');

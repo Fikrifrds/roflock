@@ -121,6 +121,7 @@ describe('daemon recovery', () => {
     expect(runView.runState).toBe('interrupted');
     expect(runView.graph.version).toMatch(/^bug_fix@\d+$/);
     expect(runView.graph.nodes.find((n) => n.id === 'planner')?.state).toBe('completed');
+    expect(runView.graph.nodes.find((n) => n.id === 'planner_tests')?.state).toBe('completed');
     expect(runView.graph.nodes.find((n) => n.id === 'writer')?.state).toBe('pending');
 
     const recoveredApprovals = (await restarted.app.inject({

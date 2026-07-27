@@ -59,7 +59,7 @@ type NodePosition = { x: number; y: number; depth: number; height: number };
 
 function nodeDescriptor(node: GraphNode) {
   return [
-    KIND_LABELS[node.kind] ?? node.kind,
+    node.role === 'reviewer' ? 'AI review · You approve' : (KIND_LABELS[node.kind] ?? node.kind),
     node.writer ? 'writer' : '',
     node.required ? 'required gate' : '',
     node.maxAttempts > 1 ? `up to ${node.maxAttempts} attempts` : '',
@@ -75,6 +75,7 @@ function wrappedLineCount(value: string, charactersPerLine = 27) {
 function nodeHeight(node: GraphNode) {
   let height = NODE_MIN_HEIGHT;
   height += Math.max(0, wrappedLineCount(nodeDescriptor(node)) - 1) * 17;
+  if (node.focus) height += 16 + wrappedLineCount(node.focus, 29) * 16;
   if (node.primaryProviderDisplayName && node.primaryModelDisplayName) {
     height += 24 + Math.max(0, wrappedLineCount(node.primaryModelDisplayName, 24) - 1) * 15;
   }
@@ -84,6 +85,11 @@ function nodeHeight(node: GraphNode) {
     height += wrappedLineCount(`after ${node.dependsOn.join(', ')}`) * 17;
   }
   return height;
+}
+
+function nodeMark(node: GraphNode, index: number) {
+  if (node.role === 'reviewer') return 'AI · YOU';
+  return KIND_MARKS[node.kind] ?? String(index + 1).padStart(2, '0');
 }
 
 function layoutGraph(nodes: GraphNode[], failureEdgeCount: number) {
@@ -357,7 +363,7 @@ export function GraphRunView({
                 }}
               >
                 <div className="graph-node-order" aria-hidden="true">
-                  <span>{KIND_MARKS[node.kind] ?? String(index + 1).padStart(2, '0')}</span>
+                  <span>{nodeMark(node, index)}</span>
                 </div>
                 <div className="graph-node-head">
                   <b>{node.id.replaceAll('_', ' ')}</b>
@@ -366,6 +372,7 @@ export function GraphRunView({
                   </StatusPill>
                 </div>
                 <small>{nodeDescriptor(node)}</small>
+                {node.focus ? <small className="graph-node-focus">{node.focus}</small> : null}
                 {node.primaryProviderDisplayName && node.primaryModelDisplayName ? (
                   <span className="graph-node-model">
                     <small>Primary AI</small>

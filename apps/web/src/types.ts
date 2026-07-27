@@ -196,6 +196,7 @@ export type GraphRunView = {
       required: boolean;
       writer: boolean;
       maxAttempts: number;
+      focus: string | null;
       primaryProviderId: string | null;
       primaryProviderDisplayName: string | null;
       primaryModelId: string | null;

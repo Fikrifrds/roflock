@@ -3522,6 +3522,14 @@ pre {
   overflow-wrap: anywhere;
 }
 
+.graph-node-focus {
+  display: block;
+  padding-left: 9px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  color: var(--text-muted) !important;
+  line-height: 1.4;
+}
+
 .graph-node-head {
   display: flex;
   flex-wrap: wrap;

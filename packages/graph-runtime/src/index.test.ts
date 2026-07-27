@@ -201,11 +201,41 @@ describe('graph runtime', () => {
         visited.push(n.id);
         return n.id;
       },
-      { resumeCompleted: ['planner', 'reviewer', 'writer'] },
+      { resumeCompleted: ['planner', 'planner_tests', 'reviewer', 'writer'] },
     );
 
     expect(visited).toEqual(['test', 'verifier', 'accept']);
     expect(result.state).toBe('completed');
+  });
+
+  it('keeps a completed parallel sibling honest when another sibling fails', async () => {
+    const parallel = graph(
+      [
+        node('planner_code', [], { role: 'planner' }),
+        node('planner_tests', [], { role: 'planner' }),
+        node('writer', ['planner_code', 'planner_tests'], { writer: true }),
+        node('test', ['writer'], { role: 'test', required: true }),
+        node('accept', ['test'], { role: 'accept', kind: 'human_approval' }),
+      ],
+      { maxConcurrency: 2 },
+    );
+
+    const result = await runGraph(parallel, async ({ node: n }) => {
+      if (n.id === 'planner_code') throw new Error('provider invocation failed');
+      if (n.id === 'planner_tests') {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return 'regression plan';
+      }
+      return n.id;
+    });
+
+    expect(result.state).toBe('failed');
+    expect(result.results.find((entry) => entry.nodeId === 'planner_code')?.status).toBe('failed');
+    expect(result.results.find((entry) => entry.nodeId === 'planner_tests')).toMatchObject({
+      status: 'completed',
+      output: 'regression plan',
+    });
+    expect(result.results.find((entry) => entry.nodeId === 'writer')?.status).toBe('skipped');
   });
 
   it('reports node state transitions for the run view', async () => {

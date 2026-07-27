@@ -626,9 +626,11 @@ export class Orchestrator {
 
     const executeNode = async ({
       node,
-    }: NodeContext): Promise<{ role: string; nodeRunId: string }> => {
+      completed,
+    }: NodeContext): Promise<{ role: string; nodeRunId: string; output?: string }> => {
       openRuns.delete(node.id);
       const role = node.role;
+      let nodeOutput: string | undefined;
       if (controller.signal.aborted) throw new Error('Cancelled by operator');
       // Honour a pause before spending anything on the next node.
       await this.waitWhilePaused(task.id, controller.signal);
@@ -678,6 +680,24 @@ export class Orchestrator {
         startedAt: now(),
       });
 
+      const workflowContext = completed.flatMap((result) => {
+        const resultOutput = result.output as { output?: unknown } | undefined;
+        const output =
+          typeof resultOutput?.output === 'string' ? resultOutput.output.trim() : undefined;
+        if (!output) return [];
+        return [
+          {
+            id: `workflow:${result.nodeId}`,
+            content: [
+              `Completed graph node: ${result.nodeId} (${result.role})`,
+              output.slice(0, 12_000),
+            ].join('\n'),
+            source: `workflow:${result.nodeId}`,
+            sensitivity: 'internal' as const,
+            priority: 85,
+          },
+        ];
+      });
       const disclosureEntries = [
         {
           id: `task:${task.id}`,
@@ -700,6 +720,7 @@ export class Orchestrator {
             }
           })(),
         ),
+        ...workflowContext,
         ...(this.documents?.list(task.id) ?? [])
           .filter((doc) => doc.extractedText)
           .slice(0, 5)
@@ -759,7 +780,15 @@ export class Orchestrator {
                 '',
                 compiled.promptBlock,
               ].join('\n')
-            : `PLANNER for RoleFlock task "${task.title}" (read-only).\nDo not modify files.\n\n${compiled.promptBlock}`;
+            : [
+                `PLANNER for RoleFlock task "${task.title}" (read-only).`,
+                'Do not modify files.',
+                node.focus ? `Your independent swarm assignment: ${node.focus}` : '',
+                '',
+                compiled.promptBlock,
+              ]
+                .filter(Boolean)
+                .join('\n');
 
         const invoked = await this.invokeRole({
           role,
@@ -775,9 +804,10 @@ export class Orchestrator {
           onRoute: (next) => this.updateExecution(task, graphRunId, nodeRunId, role, phase, next),
         });
         const output = invoked.output;
+        nodeOutput = output;
         const served = invoked.route;
 
-        const provenance = `${role} via ${served.providerDisplayName} / ${served.modelDisplayName}${
+        const provenance = `${node.id} via ${served.providerDisplayName} / ${served.modelDisplayName}${
           served.effort ? ` (${served.effort})` : ''
         } · ${compiled.disclosure.totalTokens} ctx tokens${
           served.fallbackUsed ? ' · fallback' : ''
@@ -817,7 +847,7 @@ export class Orchestrator {
         });
       } else if (role === 'reviewer') {
         if (route) {
-          await this.invokeRole({
+          const invoked = await this.invokeRole({
             role,
             task,
             graphRunId,
@@ -826,6 +856,16 @@ export class Orchestrator {
             prompt: `Review the proposed source-code change and confirm whether its repository scope is appropriate.\n\n${compiled.promptBlock}`,
             cwd: worktreePath,
             signal: controller.signal,
+          });
+          nodeOutput = invoked.output;
+          this.evidence.addFinding({
+            id: randomUUID(),
+            taskId: task.id,
+            nodeRunId,
+            severity: 'info',
+            summary: `reviewer via ${invoked.route.providerDisplayName} / ${invoked.route.modelDisplayName}`,
+            details: nodeOutput || 'The reviewer found no additional concerns.',
+            createdAt: now(),
           });
         }
         const confirmation = createConfirmationRequest({
@@ -928,6 +968,8 @@ export class Orchestrator {
               `Brief: ${task.brief}`,
               `Expected: ${task.expectedBehaviour ?? 'n/a'}`,
               `Actual: ${task.actualBehaviour ?? 'n/a'}`,
+              '',
+              compiled.promptBlock,
               'Stay inside this workspace. Prefer editing existing source over adding docs.',
               'Do not invent secrets or reach outside the worktree.',
             ].join('\n');
@@ -1068,7 +1110,7 @@ export class Orchestrator {
         .run('completed', now(), 'success', nodeRunId);
       this.bus.publish('execution.updated', this.executions.getByTask(task.id));
       openRuns.delete(node.id);
-      return { role, nodeRunId };
+      return { role, nodeRunId, output: nodeOutput };
     };
 
     const { results } = await runGraph(

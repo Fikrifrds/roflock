@@ -37,12 +37,21 @@ describe('workflow graphs', () => {
     expect(validateGraph(bugFixGraph)).toEqual([]);
     expect(bugFixGraph.nodes.map((n) => n.id)).toEqual([
       'planner',
+      'planner_tests',
       'reviewer',
       'writer',
       'test',
       'verifier',
       'accept',
     ]);
+    expect(bugFixGraph.maxConcurrency).toBe(2);
+    expect(bugFixGraph.nodes.find((n) => n.id === 'reviewer')?.dependsOn).toEqual([
+      'planner',
+      'planner_tests',
+    ]);
+    expect(bugFixGraph.nodes.find((n) => n.id === 'planner')?.focus).not.toBe(
+      bugFixGraph.nodes.find((n) => n.id === 'planner_tests')?.focus,
+    );
   });
 
   it('exposes direct/fast/standard/critical modes', () => {
@@ -56,7 +65,13 @@ describe('workflow graphs', () => {
   });
 
   it('pins a graph to an immutable version', () => {
-    expect(getWorkflowGraph(`bug_fix@${GRAPH_SCHEMA_VERSION}`).id).toBe('bug_fix');
+    const current = getWorkflowGraph(`bug_fix@${GRAPH_SCHEMA_VERSION}`);
+    const legacy = getWorkflowGraph('bug_fix@1');
+    expect(current.id).toBe('bug_fix');
+    expect(current.nodes.some((node) => node.id === 'planner_tests')).toBe(true);
+    expect(legacy.nodes.some((node) => node.id === 'planner_tests')).toBe(false);
+    expect(legacy.maxConcurrency).toBe(1);
+    expect(validateGraph(legacy)).toEqual([]);
     expect(() => getWorkflowGraph('bug_fix@0')).toThrow(/no longer available/);
     expect(() => getWorkflowGraph('nonsense')).toThrow(/Unknown workflow mode/);
     // Every template carries its own version so a run can be replayed exactly.

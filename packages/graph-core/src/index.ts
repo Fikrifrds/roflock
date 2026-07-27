@@ -47,6 +47,8 @@ export interface GraphNode {
   writer?: boolean;
   /** Bounded local retries. Absent means a single attempt. */
   maxAttempts?: number;
+  /** Distinct read-only assignment for parallel agents sharing the same role/model. */
+  focus?: string;
 }
 
 export interface GraphEdge {
@@ -76,7 +78,7 @@ export interface WorkflowRecommendation {
 }
 
 /** Bumped when the shape of a built-in template changes. */
-export const GRAPH_SCHEMA_VERSION = 1;
+export const GRAPH_SCHEMA_VERSION = 2;
 
 export function graphVersionId(mode: GraphMode): string {
   return `${mode}@${GRAPH_SCHEMA_VERSION}`;
@@ -105,8 +107,15 @@ function sequential(nodes: GraphNode[]): GraphEdge[] {
 }
 
 const bugFixNodes: GraphNode[] = [
-  node('planner', 'planner', 'agent', []),
-  node('reviewer', 'reviewer', 'human_approval', ['planner']),
+  node('planner', 'planner', 'agent', [], {
+    focus:
+      'Trace the implementation path, identify the root cause, and propose the smallest safe code change.',
+  }),
+  node('planner_tests', 'planner', 'agent', [], {
+    focus:
+      'Independently inspect tests and failure modes. Propose regression coverage and verification risks.',
+  }),
+  node('reviewer', 'reviewer', 'human_approval', ['planner', 'planner_tests']),
   node('writer', 'writer', 'agent', ['reviewer'], { writer: true, maxAttempts: 2 }),
   node('test', 'test', 'test', ['writer'], { required: true }),
   node('verifier', 'verifier', 'agent', ['test']),
@@ -119,7 +128,9 @@ const bugFixNodes: GraphNode[] = [
  * graph's `maxLoopIterations`.
  */
 const bugFixEdges: GraphEdge[] = [
-  ...sequential(bugFixNodes),
+  ...bugFixNodes.flatMap((current) =>
+    current.dependsOn.map((from) => ({ from, to: current.id, when: 'always' as const })),
+  ),
   { from: 'test', to: 'writer', when: 'on_fail' },
   { from: 'verifier', to: 'writer', when: 'on_needs_changes' },
 ];
@@ -128,10 +139,10 @@ export const bugFixGraph: WorkflowGraph = {
   id: 'bug_fix',
   version: graphVersionId('bug_fix'),
   label: 'Verified Bug Fix',
-  description: 'Planner → reviewer → writer → test → verifier → human accept',
+  description: 'Parallel code + test analysis → reviewer → writer → test → verifier → human accept',
   nodes: bugFixNodes,
   edges: bugFixEdges,
-  maxConcurrency: 1,
+  maxConcurrency: 2,
   maxLoopIterations: 3,
 };
 
@@ -178,7 +189,7 @@ export const standardGraph: WorkflowGraph = {
   id: 'standard',
   version: graphVersionId('standard'),
   label: 'Standard',
-  description: 'Planner → reviewer → writer → test → verifier → human accept',
+  description: 'Parallel code + test analysis → reviewer → writer → test → verifier → human accept',
 };
 
 /** Critical feature: bug-fix shape with a wider loop budget for higher-risk work. */
@@ -187,7 +198,8 @@ export const criticalGraph: WorkflowGraph = {
   id: 'critical',
   version: graphVersionId('critical'),
   label: 'Critical Feature',
-  description: 'High-risk path: planner → reviewer → writer → test → verifier → human accept',
+  description:
+    'High-risk path: parallel code + test analysis → reviewer → writer → test → verifier → human accept',
   maxLoopIterations: 4,
 };
 
@@ -199,6 +211,59 @@ export const workflowGraphs: Record<GraphMode, WorkflowGraph> = {
   critical: criticalGraph,
 };
 
+const legacyBugFixNodes: GraphNode[] = [
+  node('planner', 'planner', 'agent', []),
+  node('reviewer', 'reviewer', 'human_approval', ['planner']),
+  node('writer', 'writer', 'agent', ['reviewer'], { writer: true, maxAttempts: 2 }),
+  node('test', 'test', 'test', ['writer'], { required: true }),
+  node('verifier', 'verifier', 'agent', ['test']),
+  node('accept', 'accept', 'human_approval', ['verifier']),
+];
+
+const legacyGraphs: Record<GraphMode, WorkflowGraph> = {
+  direct: { ...directGraph, version: 'direct@1' },
+  fast: { ...fastGraph, version: 'fast@1' },
+  bug_fix: {
+    ...bugFixGraph,
+    version: 'bug_fix@1',
+    description: 'Planner → reviewer → writer → test → verifier → human accept',
+    nodes: legacyBugFixNodes,
+    edges: [
+      ...sequential(legacyBugFixNodes),
+      { from: 'test', to: 'writer', when: 'on_fail' },
+      { from: 'verifier', to: 'writer', when: 'on_needs_changes' },
+    ],
+    maxConcurrency: 1,
+  },
+  standard: {
+    ...bugFixGraph,
+    id: 'standard',
+    version: 'standard@1',
+    label: 'Standard',
+    nodes: legacyBugFixNodes,
+    edges: [
+      ...sequential(legacyBugFixNodes),
+      { from: 'test', to: 'writer', when: 'on_fail' },
+      { from: 'verifier', to: 'writer', when: 'on_needs_changes' },
+    ],
+    maxConcurrency: 1,
+  },
+  critical: {
+    ...bugFixGraph,
+    id: 'critical',
+    version: 'critical@1',
+    label: 'Critical Feature',
+    nodes: legacyBugFixNodes,
+    edges: [
+      ...sequential(legacyBugFixNodes),
+      { from: 'test', to: 'writer', when: 'on_fail' },
+      { from: 'verifier', to: 'writer', when: 'on_needs_changes' },
+    ],
+    maxConcurrency: 1,
+    maxLoopIterations: 4,
+  },
+};
+
 /**
  * Resolves a graph by mode or versioned id. A version that does not match the
  * current schema is rejected rather than silently upgraded: a task must keep the
@@ -206,9 +271,9 @@ export const workflowGraphs: Record<GraphMode, WorkflowGraph> = {
  */
 export function getWorkflowGraph(modeOrVersion: string): WorkflowGraph {
   const { mode, version } = parseGraphVersionId(modeOrVersion);
-  const graph = workflowGraphs[mode as GraphMode];
+  const graph = version === 1 ? legacyGraphs[mode as GraphMode] : workflowGraphs[mode as GraphMode];
   if (!graph) throw new Error(`Unknown workflow mode: ${modeOrVersion}`);
-  if (version !== undefined && version !== GRAPH_SCHEMA_VERSION) {
+  if (version !== undefined && version !== 1 && version !== GRAPH_SCHEMA_VERSION) {
     throw new Error(
       `Workflow graph ${mode} version ${version} is no longer available (current: ${GRAPH_SCHEMA_VERSION})`,
     );

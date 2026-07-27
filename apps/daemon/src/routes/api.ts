@@ -419,7 +419,7 @@ export function registerApi(
       ReturnType<typeof orchestrator.router.listRole>[number] | undefined
     >();
     for (const node of graph.nodes) {
-      if ((node.kind === 'agent' || node.kind === 'model_call') && isRoutedRole(node.role)) {
+      if (isRoutedRole(node.role)) {
         primaryByRole.set(node.role, orchestrator.router.listRole(node.role)[0]);
       }
     }
@@ -472,6 +472,7 @@ export function registerApi(
             required: node.required ?? false,
             writer: node.writer ?? false,
             maxAttempts: node.maxAttempts ?? 1,
+            focus: node.focus ?? null,
             primaryProviderId: primary?.providerConnectionId ?? null,
             primaryProviderDisplayName: providerDisplayName,
             primaryModelId: primary?.modelId ?? null,

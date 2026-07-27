@@ -258,11 +258,37 @@ export async function runGraph(
     });
     runFailed = true;
 
-    // Let in-flight siblings settle so nothing is orphaned mid-write.
-    await Promise.allSettled(running.values());
+    // Let in-flight siblings settle so nothing is orphaned mid-write. Preserve
+    // what actually happened: a successful parallel planner remains completed
+    // even when its sibling fails.
+    const siblings = await Promise.all(running.values());
     running.clear();
+    for (const sibling of siblings) {
+      const siblingNode = byId.get(sibling.nodeId)!;
+      const siblingAttempt = attempts.get(sibling.nodeId) ?? 1;
+      if (sibling.error === undefined) {
+        setState(sibling.nodeId, 'completed');
+        recordResult({
+          nodeId: sibling.nodeId,
+          role: siblingNode.role,
+          status: 'completed',
+          output: sibling.output,
+          attempt: siblingAttempt,
+        });
+      } else {
+        setState(sibling.nodeId, 'failed');
+        recordResult({
+          nodeId: sibling.nodeId,
+          role: siblingNode.role,
+          status: 'failed',
+          error: sibling.error,
+          failureClass: classifyFailure(sibling.error),
+          attempt: siblingAttempt,
+        });
+      }
+    }
     for (const [id, value] of state) {
-      if (value === 'pending' || value === 'running') {
+      if (value === 'pending') {
         setState(id, 'skipped');
         recordResult({
           nodeId: id,
