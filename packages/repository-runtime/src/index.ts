@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, realpath, lstat, access } from 'node:fs/promises';
+import { mkdir, realpath, lstat, access, stat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
@@ -10,6 +10,20 @@ export interface Repository {
   root: string;
   gitDir: string;
   deniedPathGlobs: string[];
+}
+
+export type RepositoryRegistrationErrorCode =
+  'PATH_NOT_FOUND' | 'NOT_A_DIRECTORY' | 'NOT_GIT_REPOSITORY' | 'NO_INITIAL_COMMIT';
+
+export class RepositoryRegistrationError extends Error {
+  constructor(
+    readonly code: RepositoryRegistrationErrorCode,
+    message: string,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = 'RepositoryRegistrationError';
+  }
 }
 
 export const DEFAULT_DENIED_GLOBS = [
@@ -28,10 +42,48 @@ export async function registerRepository(
   path: string,
   deniedPathGlobs = DEFAULT_DENIED_GLOBS,
 ): Promise<Repository> {
-  const root = await realpath(path);
-  const { stdout } = await exec('git', ['-C', root, 'rev-parse', '--is-inside-work-tree']);
+  let root: string;
+  try {
+    root = await realpath(path);
+  } catch (error) {
+    throw new RepositoryRegistrationError(
+      'PATH_NOT_FOUND',
+      `Folder does not exist or cannot be accessed: ${path}`,
+      { cause: error },
+    );
+  }
+  if (!(await stat(root)).isDirectory()) {
+    throw new RepositoryRegistrationError(
+      'NOT_A_DIRECTORY',
+      `Project path must be a folder: ${path}`,
+    );
+  }
+
+  let stdout: string;
+  try {
+    ({ stdout } = await exec('git', ['-C', root, 'rev-parse', '--is-inside-work-tree']));
+  } catch (error) {
+    throw new RepositoryRegistrationError(
+      'NOT_GIT_REPOSITORY',
+      'This folder is not a Git repository. Initialize Git and create an initial commit first, then add it again.',
+      { cause: error },
+    );
+  }
   if (stdout.trim() !== 'true') {
-    throw new Error(`Not a Git work tree: ${path}`);
+    throw new RepositoryRegistrationError(
+      'NOT_GIT_REPOSITORY',
+      'This folder is not a Git work tree. Initialize Git and create an initial commit first, then add it again.',
+    );
+  }
+
+  try {
+    await exec('git', ['-C', root, 'rev-parse', '--verify', 'HEAD']);
+  } catch (error) {
+    throw new RepositoryRegistrationError(
+      'NO_INITIAL_COMMIT',
+      'This Git repository has no commits yet. Create an initial commit first, then add it again.',
+      { cause: error },
+    );
   }
   const gitDirRaw = await exec('git', ['-C', root, 'rev-parse', '--git-dir']);
   return {
@@ -108,15 +160,7 @@ export async function createWorktree(
   } catch {
     // branch may already exist after restart
   }
-  await exec('git', [
-    '-C',
-    repo.root,
-    'worktree',
-    'add',
-    '--force',
-    path,
-    branchName,
-  ]);
+  await exec('git', ['-C', repo.root, 'worktree', 'add', '--force', path, branchName]);
   return { path: await realpath(path), branchName, baseCommit: baseCommit.trim() };
 }
 

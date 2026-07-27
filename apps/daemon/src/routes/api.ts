@@ -24,7 +24,7 @@ import { compileContext, ROLE_CONTRACTS, type RoleId } from '@roleflock/context-
 import { getWorkflowGraph, recommendWorkflow, workflowGraphs } from '@roleflock/graph-core';
 import { budgetStatus } from '@roleflock/usage-ledger';
 import { EFFORT_LEVELS, isEffort } from '@roleflock/provider-core';
-import { registerRepository } from '@roleflock/repository-runtime';
+import { registerRepository, RepositoryRegistrationError } from '@roleflock/repository-runtime';
 import type { Session } from '../auth.js';
 import { EventBus } from '../services/event-bus.js';
 import { chooseDirectory, DirectoryPickerCancelled } from '../services/directory-picker.js';
@@ -138,7 +138,16 @@ export function registerApi(
   app.post('/api/projects', async (request, reply) => {
     const body = request.body as { path?: string; name?: string; baseBranch?: string };
     if (!body.path) return reply.code(400).send({ error: 'path is required' });
-    const repository = await registerRepository(body.path);
+    let repository;
+    try {
+      repository = await registerRepository(body.path);
+    } catch (error) {
+      if (error instanceof RepositoryRegistrationError) {
+        const statusCode = error.code === 'PATH_NOT_FOUND' ? 404 : 422;
+        return reply.code(statusCode).send({ code: error.code, error: error.message });
+      }
+      throw error;
+    }
     const time = now();
     const folderName = repository.root.split('/').filter(Boolean).pop() ?? 'Repository';
     const project = {
@@ -170,7 +179,16 @@ export function registerApi(
   app.post('/api/projects/:id/validate', async (request, reply) => {
     const project = projects.get((request.params as { id: string }).id);
     if (!project) return reply.code(404).send({ error: 'Project not found' });
-    const repository = await registerRepository(project.resolvedPath);
+    let repository;
+    try {
+      repository = await registerRepository(project.resolvedPath);
+    } catch (error) {
+      if (error instanceof RepositoryRegistrationError) {
+        const statusCode = error.code === 'PATH_NOT_FOUND' ? 404 : 422;
+        return reply.code(statusCode).send({ code: error.code, error: error.message });
+      }
+      throw error;
+    }
     return { valid: true, root: repository.root };
   });
   app.post('/api/tasks', async (request, reply) => {

@@ -3,12 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  WriterLease,
-  assertSafePath,
-  createWorktree,
-  registerRepository,
-} from './index.js';
+import { WriterLease, assertSafePath, createWorktree, registerRepository } from './index.js';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -33,6 +28,19 @@ function tempRepo() {
 }
 
 describe('repository-runtime', () => {
+  it('classifies a plain folder and an empty Git repository before registration', async () => {
+    const plain = mkdtempSync(join(tmpdir(), 'rf-plain-'));
+    dirs.push(plain);
+    await expect(registerRepository(plain)).rejects.toMatchObject({
+      code: 'NOT_GIT_REPOSITORY',
+    });
+
+    execFileSync('git', ['init'], { cwd: plain });
+    await expect(registerRepository(plain)).rejects.toMatchObject({
+      code: 'NO_INITIAL_COMMIT',
+    });
+  });
+
   it('denies .env and symlink escapes', async () => {
     const root = tempRepo();
     const repo = await registerRepository(root);

@@ -82,6 +82,25 @@ describe('daemon boundary', () => {
     });
     expect(res.statusCode).toBe(200);
   });
+  it('returns an actionable validation error for a folder that is not a Git repository', async () => {
+    const { app } = await server();
+    const folder = await mkdtemp(join(tmpdir(), 'roleflock-plain-project-'));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers: {
+        'x-roleflock-token': 'test-token',
+        'x-roleflock-csrf': 'test-csrf',
+        'content-type': 'application/json',
+      },
+      payload: { path: folder },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json()).toMatchObject({
+      code: 'NOT_GIT_REPOSITORY',
+      error: expect.stringMatching(/initial commit/i),
+    });
+  });
   it('rejects mutations from non-local origins', async () => {
     const { app } = await server();
     const res = await app.inject({
