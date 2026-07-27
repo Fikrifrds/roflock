@@ -12,12 +12,15 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # Build first. Workspace packages resolve each other through their
+      # published `dist/*.d.ts`, so on a clean checkout typecheck and test
+      # cannot see a sibling that has not been built yet. Locally this passed
+      # only because dist/ was left over from a previous run.
+      - run: pnpm build
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm build
-      # Build first: the daemon tests import built workspace packages, and
-      # provider discovery shells out to CLIs that are absent on a runner, so
-      # roles fall through to the deterministic stand-in.
+      # A runner has no provider CLIs to discover, so roles are pointed at the
+      # deterministic stand-in rather than left to fail on a missing binary.
       - run: pnpm test
         env:
           ROLEFLOCK_FORCE_FAKE: '1'
