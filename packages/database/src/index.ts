@@ -51,3 +51,12 @@ export type { AuditEvent } from './repositories/audit-repository.js';
 export { ControlCommandRepository } from './repositories/control-command-repository.js';
 export { ProcessHandleRepository } from './repositories/process-handle-repository.js';
 export { LeaseRepository } from './repositories/lease-repository.js';
+export {
+  RoleAssignmentRepository,
+  ProviderCooldownRepository,
+} from './repositories/role-assignment-repository.js';
+export type {
+  RoleCandidate,
+  RoleCandidateInput,
+  ProviderCooldown,
+} from './repositories/role-assignment-repository.js';

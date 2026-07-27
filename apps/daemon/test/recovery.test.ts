@@ -93,18 +93,35 @@ describe('daemon recovery', () => {
       '/api/approvals',
       (body) => Array.isArray(body) && body.length > 0,
     )) as Array<{ id: string; taskId: string }>;
-    expect((await waitFor(first.app, `/api/tasks/${taskId}`, (body) =>
-      (body as { state: string }).state === 'awaiting_confirmation',
-    ))).toMatchObject({ id: taskId });
+    expect(
+      await waitFor(
+        first.app,
+        `/api/tasks/${taskId}`,
+        (body) => (body as { state: string }).state === 'awaiting_confirmation',
+      ),
+    ).toMatchObject({ id: taskId });
 
     await first.app.close();
     firstClosed = true;
 
     const restarted = await createServer({ dataDir, session });
     cleanup.push(async () => restarted.app.close());
-    expect((await restarted.app.inject({ method: 'GET', url: '/api/runtime/info' })).statusCode).toBe(
-      200,
-    );
+    expect(
+      (await restarted.app.inject({ method: 'GET', url: '/api/runtime/info', headers })).statusCode,
+    ).toBe(200);
+
+    // The scheduler state survives: the interrupted run keeps the nodes that
+    // finished, so a restart resumes instead of redoing paid work.
+    const runView = (
+      await restarted.app.inject({ method: 'GET', url: `/api/tasks/${taskId}/graph`, headers })
+    ).json() as {
+      runState: string;
+      graph: { version: string; nodes: Array<{ id: string; state: string }> };
+    };
+    expect(runView.runState).toBe('interrupted');
+    expect(runView.graph.version).toMatch(/^bug_fix@\d+$/);
+    expect(runView.graph.nodes.find((n) => n.id === 'planner')?.state).toBe('completed');
+    expect(runView.graph.nodes.find((n) => n.id === 'writer')?.state).toBe('pending');
 
     const recoveredApprovals = (await restarted.app.inject({
       method: 'GET',

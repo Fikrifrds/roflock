@@ -67,7 +67,7 @@ export function usageLinksFor(providerId: string): ProviderUsageLink[] {
       return [
         {
           id: 'cursor-spending',
-          label: 'Cursor spending',
+          label: 'Cursor usage',
           url: 'https://cursor.com/dashboard/spending',
           hint: 'Cursor plan usage and spending dashboard.',
         },
@@ -78,16 +78,36 @@ export function usageLinksFor(providerId: string): ProviderUsageLink[] {
 }
 
 /** Read Claude / Codex / Cursor account state without leaking secrets. */
-export async function getProviderAccount(providerId: string): Promise<ProviderAccount> {
+const accountCache = new Map<string, { at: number; value: ProviderAccount }>();
+const ACCOUNT_CACHE_TTL_MS = 15_000;
+
+export function invalidateProviderAccountCache(providerId?: string): void {
+  if (providerId) accountCache.delete(providerId);
+  else accountCache.clear();
+}
+
+export async function getProviderAccount(
+  providerId: string,
+  options: { fresh?: boolean } = {},
+): Promise<ProviderAccount> {
+  if (!options.fresh) {
+    const hit = accountCache.get(providerId);
+    if (hit && Date.now() - hit.at < ACCOUNT_CACHE_TTL_MS) return hit.value;
+  }
+
+  let value: ProviderAccount;
   switch (providerId) {
     case 'claude':
-      return getClaudeAccount();
+      value = await getClaudeAccount();
+      break;
     case 'codex':
-      return getCodexAccount();
+      value = await getCodexAccount();
+      break;
     case 'cursor':
-      return getCursorAccount();
+      value = await getCursorAccount();
+      break;
     default:
-      return {
+      value = {
         providerId,
         loggedIn: true,
         label: 'Custom endpoint',
@@ -97,13 +117,43 @@ export async function getProviderAccount(providerId: string): Promise<ProviderAc
         usageLinks: usageLinksFor(providerId),
       };
   }
+  accountCache.set(providerId, { at: Date.now(), value });
+  return value;
+}
+
+/** Parse `agent status --format json` without requiring email to be present. */
+export function parseCursorAgentStatus(raw: unknown): {
+  loggedIn: boolean;
+  email?: string;
+  message?: string;
+} {
+  if (!raw || typeof raw !== 'object') return { loggedIn: false };
+  const parsed = raw as {
+    status?: string;
+    isAuthenticated?: boolean;
+    hasAccessToken?: boolean;
+    loggedIn?: boolean;
+    email?: string;
+    user?: { email?: string };
+    message?: string;
+  };
+  const email = parsed.email ?? parsed.user?.email;
+  const loggedIn = Boolean(
+    parsed.isAuthenticated ||
+    parsed.loggedIn ||
+    parsed.hasAccessToken ||
+    parsed.status === 'authenticated' ||
+    email,
+  );
+  return { loggedIn, email, message: parsed.message };
 }
 
 export async function runProviderAuthAction(
   providerId: string,
   action: 'login' | 'logout' | 'switch',
 ): Promise<AuthActionResult> {
-  const account = await getProviderAccount(providerId);
+  invalidateProviderAccountCache(providerId);
+  const account = await getProviderAccount(providerId, { fresh: true });
   if (!account.supportsLogin && action !== 'logout') {
     return {
       ok: false,
@@ -117,6 +167,7 @@ export async function runProviderAuthAction(
 
   if (action === 'logout' || action === 'switch') {
     const logout = await runLogout(providerId);
+    invalidateProviderAccountCache(providerId);
     if (action === 'logout') {
       return {
         ok: logout.ok,
@@ -130,16 +181,14 @@ export async function runProviderAuthAction(
   }
 
   const login = await launchLogin(providerId);
+  invalidateProviderAccountCache(providerId);
   return {
     ok: login.launched || Boolean(login.command),
     action,
     providerId,
     command: login.command,
     launched: login.launched,
-    detail:
-      action === 'switch'
-        ? `Logged out previous session. ${login.detail}`
-        : login.detail,
+    detail: action === 'switch' ? `Logged out previous session. ${login.detail}` : login.detail,
   };
 }
 
@@ -295,17 +344,19 @@ async function getCursorAccount(): Promise<ProviderAccount> {
 
   let loggedIn = false;
   let email: string | undefined;
-  let detail = `CLI binary ready (${discovery.binary}).`;
+  let detail: string;
   try {
     const { stdout } = await execFileAsync(discovery.binary, ['status', '--format', 'json'], {
       timeout: 8_000,
       env: process.env,
     });
-    const parsed = JSON.parse(stdout) as { loggedIn?: boolean; email?: string; user?: { email?: string } };
-    loggedIn = Boolean(parsed.loggedIn ?? parsed.email ?? parsed.user?.email);
-    email = parsed.email ?? parsed.user?.email;
+    const parsed = parseCursorAgentStatus(JSON.parse(stdout));
+    loggedIn = parsed.loggedIn;
+    email = parsed.email;
     detail = loggedIn
-      ? `Signed in via Cursor Agent CLI (${discovery.binary}).`
+      ? parsed.message
+        ? parsed.message
+        : 'Signed in via Cursor Agent CLI'
       : `Cursor Agent CLI found but not signed in. Run: agent login`;
   } catch {
     // Soft fallback: app presence only.
@@ -332,7 +383,9 @@ async function getCursorAccount(): Promise<ProviderAccount> {
   };
 }
 
-async function runLogout(providerId: string): Promise<{ ok: boolean; command: string; detail: string }> {
+async function runLogout(
+  providerId: string,
+): Promise<{ ok: boolean; command: string; detail: string }> {
   if (providerId === 'claude') {
     const binary = (await whichBinary(process.env.CLAUDE_PATH ?? 'claude')) ?? 'claude';
     const command = `${binary} auth logout`;

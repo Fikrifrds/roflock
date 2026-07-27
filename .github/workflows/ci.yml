@@ -5,12 +5,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # No `version` here on purpose: declaring it alongside `packageManager`
+      # in package.json is an ERR_PNPM_BAD_PM_VERSION error, which failed the
+      # job during setup — so the suite had never actually run in CI.
       - uses: pnpm/action-setup@v4
-        with: { version: 11 }
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      # Build first. Workspace packages resolve each other through their
+      # published `dist/*.d.ts`, so on a clean checkout typecheck and test
+      # cannot see a sibling that has not been built yet. Locally this passed
+      # only because dist/ was left over from a previous run.
+      - run: pnpm build
       - run: pnpm lint
       - run: pnpm typecheck
+      # A runner has no provider CLIs to discover, so roles are pointed at the
+      # deterministic stand-in rather than left to fail on a missing binary.
       - run: pnpm test
-      - run: pnpm build
+        env:
+          ROLEFLOCK_FORCE_FAKE: '1'

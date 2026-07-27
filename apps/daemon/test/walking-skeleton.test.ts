@@ -160,7 +160,9 @@ describe('verified bug fix walking skeleton', () => {
     expect(usageBody.scope).toBe('local-daemon');
     expect(usageBody.summary.entryCount).toBe(usageBody.entries.length);
     expect(usageBody.summary.actualCostUsd).toBe(0);
-    expect(usageBody.summary.shadowCostUsd).toBeGreaterThan(0);
+    // The deterministic stand-in reports no tokens, so there is nothing to
+    // price. Showing a shadow cost here would be a number RoleFlock invented.
+    expect(usageBody.summary.shadowCostUsd).toBe(0);
   }, 30_000);
 
   it('rejects non-local mutation origins', async () => {

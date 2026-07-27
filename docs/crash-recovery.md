@@ -4,10 +4,18 @@ RoleFlock is local-first. Recoverability depends on the daemon process and `~/.r
 
 ## After an unexpected quit
 
-1. Restart the daemon: `pnpm start` or `pnpm dev`.
-2. On boot, RoleFlock reconciles orphaned process handles and marks unknown invocations.
+1. Restart the daemon: `pnpm start` or `pnpm dev`. The launch URL is unchanged — the session
+   token persists in `~/.roleflock/session.json`. Run `pnpm url` if you need it reprinted.
+2. On boot, RoleFlock reconciles orphaned process handles, marks unknown invocations, and
+   moves any graph run still marked `running` to `interrupted`.
 3. Open the UI and check Approvals — pending confirmations survive restart in SQLite.
-4. Re-open the task Evidence page to inspect the last disclosure and findings.
+4. Open the task's **Run graph** panel. Nodes that finished before the crash stay `completed`;
+   everything after them is `pending`.
+5. Press **Start** again. The scheduler resumes from the completed set and reuses the existing
+   worktree, so finished planner/reviewer/writer work is not paid for twice.
+
+Resume only applies when the task still has an active worktree and the stored graph version
+matches the current one. If either has changed, the run starts clean rather than mixing shapes.
 
 ## Forced stop / Force restart
 

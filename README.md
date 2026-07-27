@@ -13,14 +13,17 @@ See [`docs/test-plans/mvp-readiness.md`](docs/test-plans/mvp-readiness.md) for t
 Implemented and covered by automated tests:
 
 - Verified bug-fix flow (planner → approval → writer → verification → verifier → accept)
+- Per-role provider and model choice with automatic failover when a quota runs out
 - Optional verification command (`npm test`, custom argv, or artefact check)
-- Direct / Fast / Standard / Bug Fix workflow modes
+- Direct / Fast / Standard / Bug Fix / Critical workflow modes, pinned to an immutable graph version
+- Graph runtime: typed failure edges, bounded retry loops, concurrency limits, one writer per worktree
+- Read-only run graph on Task detail, showing live node state and failure routes
 - Folder picker + custom project names
 - Approval inbox, grant reuse, knowledge base UI
 - Providers page with real CLI discovery + account/login/switch + local usage
 - Evidence, context inspector, export/privacy/backup/delete
-- Daemon restart recovery — [`docs/crash-recovery.md`](docs/crash-recovery.md)
-- Localhost-only bind, session token, CSRF, no shell endpoint
+- Daemon restart recovery that resumes completed nodes — [`docs/crash-recovery.md`](docs/crash-recovery.md)
+- Localhost-only bind, file-delivered session token, CSRF, origin allow-list, no shell endpoint
 - Version/update check without repository data
 
 Manual checklist: [`docs/test-plans/manual-test-checklist.md`](docs/test-plans/manual-test-checklist.md)  
@@ -34,6 +37,8 @@ Requires Node 24+ and pnpm 11+.
 ```bash
 pnpm install
 pnpm build
+pnpm lint       # ESLint 9 flat config
+pnpm typecheck
 pnpm test
 ```
 
@@ -47,11 +52,26 @@ pnpm dev
 pnpm dev:web
 ```
 
-Open http://127.0.0.1:5173
+**Open the URL the daemon prints**, not a bare `localhost`:
+
+```
+Open the UI:    http://127.0.0.1:4178/?rft=<token>
+Vite dev UI:    http://127.0.0.1:5173/?rft=<token>
+```
+
+That `rft` parameter is the one-time handoff of the session token. The UI stores it
+and strips it from the address bar; after the first visit a plain
+`http://127.0.0.1:5173` works. Lost the link? Run `pnpm url`.
+
+The token lives in `~/.roleflock/session.json` (mode `0600`) and is stable across
+restarts, so the link keeps working. `ROLEFLOCK_ROTATE_TOKEN=1 pnpm dev` mints a new
+one and invalidates the old. The daemon never serves the token over HTTP — loopback is
+shared with every other OS account on the machine, so the file mode is what keeps a
+second local user out.
 
 State: `~/.roleflock/roleflock.db` (override with `ROLEFLOCK_DATA_DIR`).
 
-**Important:** restart both daemon and web after pulling new code. If Start fails, the UI now shows the error text.
+**Important:** restart both daemon and web after pulling new code. If Start fails, the UI shows the error text.
 
 ## Suggested first test path
 
@@ -64,29 +84,77 @@ State: `~/.roleflock/roleflock.db` (override with `ROLEFLOCK_DATA_DIR`).
 
 Use `ROLEFLOCK_FORCE_FAKE=1 pnpm dev` for a deterministic first pass without live CLIs.
 
+## Roles and models
+
+Open **Roles** to set which provider and model runs each role. Each role is an
+ordered list: RoleFlock uses the first candidate that is healthy and not out of
+quota, and falls through to the next when one refuses.
+
+Shipping defaults:
+
+| Role | Preference | Falls back to |
+|------|-----------|---------------|
+| Planner / lead | Cursor · `claude-opus-5-high` | `gpt-5.6-sol-high`, then Codex `gpt-5.6-sol`, then Claude CLI `opus` |
+| Executor | Cursor · `cursor-grok-4.5-high` | `claude-opus-5-high`, then `composer-2.5` |
+| Reviewer | Cursor · `gpt-5.6-terra-medium` | `claude-opus-5-low`, then Codex `gpt-5.6-terra` |
+| Verifier | Cursor · `gpt-5.6-terra-high` | `claude-opus-5-medium`, then Codex `gpt-5.6-terra` |
+
+There is no fake provider. It is not in any list and it is not even registered
+unless `ROLEFLOCK_FORCE_FAKE=1` or `ROLEFLOCK_INCLUDE_FAKE=1` asks for it, so it
+cannot be picked by accident. If every candidate for a role refuses, the run
+**stops** and shows what each provider said.
+
+Where a model is reachable through two providers it appears twice on purpose —
+Cursor and Codex meter separately, so an exhausted plan costs the run a
+provider rather than the model.
+
+When a provider reports exhausted quota, an unknown model, or a dead session,
+that provider+model is parked on a cooldown (quota 1 h, unknown model 3 h) and
+the next candidate runs. The substitution is written to the task's evidence and
+the audit log — it is never silent. Lift a cooldown early from the Roles page.
+
+### When everything refuses
+
+The task stops and shows each provider's own error text, with a link straight to
+the role that needs changing. The steps that already finished are kept: the run
+is left resumable, so after you pick a model that answers, **Resume the run**
+picks up where it stopped instead of repeating work you already paid for.
+
+Effort is expressed differently per CLI: Cursor encodes it in the model id
+(`claude-opus-5-high` vs `-low`), while Claude Code and Codex take it as a
+separate setting. Both spellings are supported, and a level above what a CLI
+documents is clamped rather than forwarded.
+
 ## Notes
 
 - **Fake provider** is omitted from the Providers UI unless `ROLEFLOCK_INCLUDE_FAKE=1`; use `ROLEFLOCK_FORCE_FAKE=1` for deterministic orchestration.
 - Claude / Codex / Cursor appear on Providers with `ready` or `missing` based on PATH; login via provider auth actions.
 - **Cursor writer:** sandboxed filesystem writes under a permission envelope + writer lease — full Cursor Agent CLI loop still deferred.
 - Planner/verifier may invoke Claude/Codex when discovered and not forced fake.
+- Provider discovery spawns the real CLIs and caches the result for 15s, so the Providers page does not respawn subprocesses on every poll.
+- `pnpm url` reprints the launch URL; `ROLEFLOCK_ROTATE_TOKEN=1` rotates the session token.
 - Public site copy (draft): [`docs/public/README.md`](docs/public/README.md), [`docs/public/privacy.md`](docs/public/privacy.md)
 - Baseline benchmark: `pnpm benchmark` → [`docs/benchmarks/baseline.md`](docs/benchmarks/baseline.md)
 
 ## Safety invariants
 
 - Browser never executes shell commands
-- Daemon binds to localhost by default
+- Daemon binds to localhost by default, and no API route hands out the session token
 - No raw shell or arbitrary filesystem-read HTTP endpoints
-- One writer lease per task worktree
+- One writer lease per task worktree; the scheduler never runs two writers at once
+- No validated graph can loop forever, or reach `accept` without its required checks
+- A running task keeps the graph version it started with
 - Secret/symlink escape paths denied
 - Unknown billable outcomes are not auto-retried
+- Token counts and costs come from the CLI or are marked unknown — never invented
+- Actual and shadow cost are never presented as one bill
+- Stopping a task kills its provider process and settles the task on a terminal state
 - Update checks never send repository paths or contents
 
 ## Workspace
 
 ```text
-apps/web          Local React control UI
+apps/web          Local React control UI (routes/, components/, lib/, test/)
 apps/daemon       Fastify local daemon + orchestrator
 packages/*        Contracts, database, runtime, providers, approvals
 docs/product      PRD + implementation plan

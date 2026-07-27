@@ -44,7 +44,7 @@ export interface CustomProviderInput {
 }
 
 const providerNames: Record<string, string> = {
-  fake: 'Phase 0 Fake Provider',
+  fake: 'Deterministic stand-in (test mode)',
   claude: 'Claude CLI',
   codex: 'Codex CLI',
   cursor: 'Cursor Agent CLI',
@@ -57,8 +57,17 @@ const connectionTypes: Record<string, RegisteredProvider['connectionType']> = {
   cursor: 'cli',
 };
 
-function includeFakeProvider(): boolean {
-  return process.env.ROLEFLOCK_INCLUDE_FAKE === '1';
+/**
+ * The deterministic stand-in exists for tests and for an offline first run. It
+ * is not a provider in the ordinary sense — its output is fabricated — so it is
+ * only registered when explicitly asked for. Leaving it registered made it
+ * pickable on the Roles page, where choosing it would quietly turn a real run
+ * into a scripted one.
+ */
+function fakeProviderEnabled(): boolean {
+  return (
+    process.env.ROLEFLOCK_FORCE_FAKE === '1' || process.env.ROLEFLOCK_INCLUDE_FAKE === '1'
+  );
 }
 
 function mergeAccountIntoHealth(
@@ -83,6 +92,14 @@ function mergeAccountIntoHealth(
 }
 
 /**
+ * Probing a CLI-backed provider spawns `--help` / `--version` subprocesses that
+ * can take seconds. The Providers page polls, and one `list()` touches health,
+ * capabilities, and account for every adapter, so uncached probing meant dozens
+ * of subprocesses per refresh.
+ */
+const DISCOVERY_CACHE_TTL_MS = 15_000;
+
+/**
  * The daemon's provider inventory. CLI-backed providers are listed even when
  * missing so callers can show their real installation state. Fake stays
  * registered for offline fallback but is hidden from the Providers UI unless
@@ -91,9 +108,10 @@ function mergeAccountIntoHealth(
 export class ProviderRegistry {
   private readonly adapters = new AdapterRegistry();
   private readonly customNames = new Map<string, string>();
+  private readonly discovery = new Map<string, { at: number; value: Promise<unknown> }>();
 
   constructor() {
-    this.adapters.register(new FakeProvider());
+    if (fakeProviderEnabled()) this.adapters.register(new FakeProvider());
     this.adapters.register(new ClaudeAdapter());
     this.adapters.register(new CodexAdapter());
     this.adapters.register(new CursorWriterAdapter(createFsCursorWriter()));
@@ -101,6 +119,30 @@ export class ProviderRegistry {
     void Promise.all(this.adapters.list().map((adapter) => this.healthCheck(adapter.id))).catch(
       () => undefined,
     );
+  }
+
+  /**
+   * Memoises a probe by key. The in-flight promise is cached, not just the
+   * result, so concurrent callers share a single subprocess instead of racing.
+   */
+  private probe<T>(key: string, fresh: boolean, factory: () => Promise<T>): Promise<T> {
+    const hit = this.discovery.get(key);
+    if (!fresh && hit && Date.now() - hit.at < DISCOVERY_CACHE_TTL_MS) {
+      return hit.value as Promise<T>;
+    }
+    const value = factory().catch((error: unknown) => {
+      this.discovery.delete(key);
+      throw error;
+    });
+    this.discovery.set(key, { at: Date.now(), value });
+    return value;
+  }
+
+  /** Drop cached probes for a provider — used after a login/logout changes state. */
+  invalidate(id: string): void {
+    for (const key of [...this.discovery.keys()]) {
+      if (key.endsWith(`:${id}`)) this.discovery.delete(key);
+    }
   }
 
   get(id: string): ProviderAdapter {
@@ -119,10 +161,7 @@ export class ProviderRegistry {
   registerCustom(input: CustomProviderInput): RegisteredProvider {
     const id =
       input.id?.trim() ||
-      `custom_${input.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`.replace(
-        /^_|_$/g,
-        '',
-      );
+      `custom_${input.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`.replace(/^_|_$/g, '');
     if (this.has(id)) {
       throw new Error(`Provider already registered: ${id}`);
     }
@@ -144,26 +183,27 @@ export class ProviderRegistry {
     };
   }
 
-  async list(options: { includeFake?: boolean } = {}): Promise<RegisteredProvider[]> {
-    const showFake = options.includeFake ?? includeFakeProvider();
-    const adapters = this.adapters
-      .list()
-      .filter((adapter) => showFake || adapter.id !== 'fake');
+  /**
+   * Everything registered. There is no hidden set: a provider that can be
+   * routed to must be visible, or the Providers page would disagree with what
+   * actually runs. The stand-in is kept out by not registering it at all.
+   */
+  async list(options: { fresh?: boolean } = {}): Promise<RegisteredProvider[]> {
+    const fresh = options.fresh ?? false;
+    const adapters = this.adapters.list();
     return Promise.all(
       adapters.map(async (adapter) => {
-        const base = (await adapter.healthCheck?.()) ?? { status: 'ready' as const };
-        const account =
-          adapter.id === 'fake'
-            ? undefined
-            : await getProviderAccount(adapter.id).catch(() => undefined);
-        const health = mergeAccountIntoHealth(base, account);
+        const [health, capabilities, account] = await Promise.all([
+          this.healthCheck(adapter.id, { fresh }),
+          this.capabilities(adapter.id, { fresh }),
+          this.account(adapter.id, { fresh }),
+        ]);
         return {
           id: adapter.id,
-          displayName:
-            this.customNames.get(adapter.id) ?? providerNames[adapter.id] ?? adapter.id,
+          displayName: this.customNames.get(adapter.id) ?? providerNames[adapter.id] ?? adapter.id,
           status: health.status,
           health,
-          capabilities: await this.capabilities(adapter.id),
+          capabilities,
           connectionType: connectionTypes[adapter.id] ?? 'cli',
           account,
         };
@@ -171,33 +211,45 @@ export class ProviderRegistry {
     );
   }
 
-  async healthCheck(id: string): Promise<ProviderHealth> {
-    const adapter = this.get(id);
-    const base = (await adapter.healthCheck?.()) ?? { status: 'ready' as const };
-    if (id === 'fake' || base.status === 'missing' || base.status === 'error') {
-      return base;
-    }
-    if (connectionTypes[id] === 'cli' || ['claude', 'codex', 'cursor'].includes(id)) {
-      const account = await getProviderAccount(id);
-      return mergeAccountIntoHealth(base, account);
-    }
-    return base;
+  async account(
+    id: string,
+    options: { fresh?: boolean } = {},
+  ): Promise<ProviderAccount | undefined> {
+    if (id === 'fake') return undefined;
+    return this.probe(`account:${id}`, options.fresh ?? false, () =>
+      getProviderAccount(id, { fresh: options.fresh }).catch(() => undefined),
+    );
   }
 
-  async capabilities(id: string): Promise<ProviderCapabilities> {
-    const adapter = this.get(id);
-    return adapter.detectCapabilities?.() ?? adapter.capabilities;
+  async healthCheck(id: string, options: { fresh?: boolean } = {}): Promise<ProviderHealth> {
+    return this.probe(`health:${id}`, options.fresh ?? false, async () => {
+      const adapter = this.get(id);
+      const base = (await adapter.healthCheck?.()) ?? { status: 'ready' as const };
+      if (id === 'fake' || base.status === 'missing' || base.status === 'error') {
+        return base;
+      }
+      if (connectionTypes[id] === 'cli' || ['claude', 'codex', 'cursor'].includes(id)) {
+        return mergeAccountIntoHealth(base, await this.account(id, options));
+      }
+      return base;
+    });
+  }
+
+  async capabilities(id: string, options: { fresh?: boolean } = {}): Promise<ProviderCapabilities> {
+    return this.probe(`caps:${id}`, options.fresh ?? false, async () => {
+      const adapter = this.get(id);
+      return adapter.detectCapabilities?.() ?? adapter.capabilities;
+    });
   }
 
   async models(id: string): Promise<ProviderModel[]> {
     return (await this.get(id).listModels?.()) ?? [];
   }
 
-  async authAction(
-    id: string,
-    action: 'login' | 'logout' | 'switch',
-  ): Promise<AuthActionResult> {
+  async authAction(id: string, action: 'login' | 'logout' | 'switch'): Promise<AuthActionResult> {
     if (!this.has(id)) throw new Error(`Provider not found: ${id}`);
-    return runProviderAuthAction(id, action);
+    const result = await runProviderAuthAction(id, action);
+    this.invalidate(id);
+    return result;
   }
 }

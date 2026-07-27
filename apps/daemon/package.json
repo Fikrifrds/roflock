@@ -9,8 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "tsc --noEmit -p tsconfig.json",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",

@@ -1,17 +1,31 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { Task } from '@roleflock/contracts';
-import { AuditRepository, ApprovalGrantRepository, ConfirmationRepository, DisclosureGrantRepository, EvidenceRepository, LocalKnowledgeRepository, PriceCardRepository, ProjectRepository, QuotaSnapshotRepository, TaskRepository, UsageRepository, type KnowledgeState, type KnowledgeType, type SqliteDb } from '@roleflock/database';
+import {
+  AuditRepository,
+  ApprovalGrantRepository,
+  ConfirmationRepository,
+  DisclosureGrantRepository,
+  EvidenceRepository,
+  LocalKnowledgeRepository,
+  PriceCardRepository,
+  ProjectRepository,
+  QuotaSnapshotRepository,
+  TaskRepository,
+  UsageRepository,
+  type KnowledgeState,
+  type KnowledgeType,
+  type RoleCandidateInput,
+  type SqliteDb,
+} from '@roleflock/database';
 import { compileContext, ROLE_CONTRACTS, type RoleId } from '@roleflock/context-compiler';
 import { getWorkflowGraph, recommendWorkflow, workflowGraphs } from '@roleflock/graph-core';
 import { budgetStatus } from '@roleflock/usage-ledger';
+import { EFFORT_LEVELS, isEffort } from '@roleflock/provider-core';
 import { registerRepository } from '@roleflock/repository-runtime';
 import type { Session } from '../auth.js';
 import { EventBus } from '../services/event-bus.js';
-import {
-  chooseDirectory,
-  DirectoryPickerCancelled,
-} from '../services/directory-picker.js';
+import { chooseDirectory, DirectoryPickerCancelled } from '../services/directory-picker.js';
 import {
   backupLocalData,
   buildDiagnosticsExport,
@@ -20,13 +34,15 @@ import {
   deleteLocalData,
 } from '../services/export-service.js';
 import { getProviderAccount } from '../services/cli-account.js';
-import { Orchestrator } from '../services/orchestrator.js';
-import { ProviderRegistry } from '../services/provider-registry.js';
+import { Orchestrator, resolveTaskGraph } from '../services/orchestrator.js';
 import {
-  DocumentService,
-  isDocumentAuthority,
-  isDocumentKind,
-} from '../services/documents.js';
+  ROLE_DESCRIPTIONS,
+  ROLE_LABELS,
+  ROUTED_ROLES,
+  isRoutedRole,
+} from '../services/role-defaults.js';
+import { ProviderRegistry } from '../services/provider-registry.js';
+import { DocumentService, isDocumentAuthority, isDocumentKind } from '../services/documents.js';
 import { checkForUpdates, getLocalVersion } from '../services/version-check.js';
 
 export function registerApi(
@@ -39,7 +55,14 @@ export function registerApi(
   documents: DocumentService,
   dataDir: string,
 ): void {
-  const projects = new ProjectRepository(db), tasks = new TaskRepository(db), approvals = new ConfirmationRepository(db), approvalGrants = new ApprovalGrantRepository(db), disclosureGrants = new DisclosureGrantRepository(db), evidence = new EvidenceRepository(db), usage = new UsageRepository(db), audit = new AuditRepository(db);
+  const projects = new ProjectRepository(db),
+    tasks = new TaskRepository(db),
+    approvals = new ConfirmationRepository(db),
+    approvalGrants = new ApprovalGrantRepository(db),
+    disclosureGrants = new DisclosureGrantRepository(db),
+    evidence = new EvidenceRepository(db),
+    usage = new UsageRepository(db),
+    audit = new AuditRepository(db);
   app.get('/api/health', async () => ({
     ok: true,
     status: 'ok',
@@ -49,11 +72,38 @@ export function registerApi(
     port: 4178,
     service: 'roleflock-daemon',
   }));
-  app.get('/api/runtime/info', async (_request, reply) => { reply.setCookie('roleflock_token', session.token, { httpOnly: true, sameSite: 'strict', path: '/' }); return { host: '127.0.0.1', port: 4178, token: session.token, csrf: session.csrf, provider: 'fake' }; });
+  /**
+   * Authenticated: the caller already holds the token. This exchanges it for the
+   * httpOnly cookie (so EventSource works without putting the token in a URL) and
+   * the CSRF value. It must never hand out the token itself.
+   */
+  app.get('/api/runtime/info', async (_request, reply) => {
+    reply.setCookie('roleflock_token', session.token, {
+      httpOnly: true,
+      sameSite: 'strict',
+      path: '/',
+    });
+    return {
+      host: '127.0.0.1',
+      port: 4178,
+      csrf: session.csrf,
+      version: getLocalVersion(),
+      forcedProvider: process.env.ROLEFLOCK_FORCE_FAKE === '1' ? 'fake' : null,
+    };
+  });
   app.get('/api/events/stream', async (request, reply) => {
-    reply.hijack(); reply.raw.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
-    reply.raw.write(`event: connected\ndata: ${JSON.stringify({ at: new Date().toISOString() })}\n\n`);
-    const unsubscribe = bus.subscribe((event) => reply.raw.write(`id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`));
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-cache',
+      connection: 'keep-alive',
+    });
+    reply.raw.write(
+      `event: connected\ndata: ${JSON.stringify({ at: new Date().toISOString() })}\n\n`,
+    );
+    const unsubscribe = bus.subscribe((event) =>
+      reply.raw.write(`id: ${event.id}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`),
+    );
     request.raw.on('close', unsubscribe);
   });
   app.post('/api/dialogs/choose-directory', async (_request, reply) => {
@@ -101,19 +151,27 @@ export function registerApi(
     bus.publish('project.updated', updated);
     return updated;
   });
-  app.post('/api/projects/:id/validate', async (request, reply) => { const project = projects.get((request.params as { id: string }).id); if (!project) return reply.code(404).send({ error: 'Project not found' }); const repository = await registerRepository(project.resolvedPath); return { valid: true, root: repository.root }; });
+  app.post('/api/projects/:id/validate', async (request, reply) => {
+    const project = projects.get((request.params as { id: string }).id);
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+    const repository = await registerRepository(project.resolvedPath);
+    return { valid: true, root: repository.root };
+  });
   app.post('/api/tasks', async (request, reply) => {
     const body = request.body as Partial<Task> & { mode?: string };
     if (!body.projectId || !body.title || !body.brief) {
       return reply.code(400).send({ error: 'projectId, title, and brief are required' });
     }
-    const mode = body.mode ?? recommendWorkflow({
-      type: (body.type ?? 'bug_fix') as Parameters<typeof recommendWorkflow>[0]['type'],
-      risk: body.risk,
-    }).mode;
-    let workflowGraphVersionId = 'bug_fix';
+    const mode =
+      body.mode ??
+      recommendWorkflow({
+        type: (body.type ?? 'bug_fix') as Parameters<typeof recommendWorkflow>[0]['type'],
+        risk: body.risk,
+      }).mode;
+    let workflowGraphVersionId: string;
     try {
-      workflowGraphVersionId = getWorkflowGraph(mode).id;
+      // Pin the task to a versioned graph so its shape cannot change mid-run.
+      workflowGraphVersionId = getWorkflowGraph(mode).version;
     } catch {
       return reply.code(400).send({ error: `Unknown workflow mode: ${mode}` });
     }
@@ -139,14 +197,213 @@ export function registerApi(
     bus.publish('task.created', task);
     return reply.code(201).send(task);
   });
+  /**
+   * The role roster: every role, its ordered candidate list, and the model
+   * catalogue each provider actually offers. One call so the picker never has
+   * to guess what a provider supports.
+   */
+  app.get('/api/roles', async () => {
+    const assignments = orchestrator.router.listAll();
+    const cooldowns = orchestrator.router.activeCooldowns();
+    const listed = await providers.list();
+
+    const catalogue = await Promise.all(
+      listed.map(async (provider) => ({
+        providerId: provider.id,
+        displayName: provider.displayName,
+        status: provider.status,
+        models: await providers.models(provider.id).catch(() => []),
+      })),
+    );
+
+    return {
+      roles: ROUTED_ROLES.map((role) => ({
+        id: role,
+        label: ROLE_LABELS[role],
+        description: ROLE_DESCRIPTIONS[role],
+        candidates: assignments[role].map((candidate) => ({
+          providerId: candidate.providerConnectionId,
+          modelId: candidate.modelId,
+          effort: candidate.effort,
+          enabled: candidate.enabled,
+          coolingDownUntil: cooldowns.find(
+            (item) =>
+              item.providerConnectionId === candidate.providerConnectionId &&
+              item.modelId === candidate.modelId,
+          )?.until,
+        })),
+      })),
+      providers: catalogue,
+      efforts: EFFORT_LEVELS,
+      cooldowns,
+    };
+  });
+
+  app.put('/api/roles/:role', async (request, reply) => {
+    const role = (request.params as { role: string }).role;
+    if (!isRoutedRole(role)) return reply.code(400).send({ error: `Unknown role: ${role}` });
+
+    const body = request.body as { candidates?: unknown };
+    if (!Array.isArray(body.candidates)) {
+      return reply.code(400).send({ error: 'candidates must be an array' });
+    }
+
+    const candidates: RoleCandidateInput[] = [];
+    for (const entry of body.candidates) {
+      const item = entry as Record<string, unknown>;
+      const providerId = typeof item.providerId === 'string' ? item.providerId.trim() : '';
+      const modelId = typeof item.modelId === 'string' ? item.modelId.trim() : '';
+      if (!providerId || !modelId) {
+        return reply.code(400).send({ error: 'each candidate needs providerId and modelId' });
+      }
+      if (!providers.has(providerId)) {
+        return reply.code(400).send({ error: `Unknown provider: ${providerId}` });
+      }
+      if (item.effort !== undefined && item.effort !== null && !isEffort(item.effort)) {
+        return reply
+          .code(400)
+          .send({ error: `effort must be one of ${EFFORT_LEVELS.join(', ')}` });
+      }
+      candidates.push({
+        providerConnectionId: providerId,
+        modelId,
+        effort: isEffort(item.effort) ? item.effort : undefined,
+        enabled: item.enabled !== false,
+      });
+    }
+
+    // An empty list would leave the role with nothing to route to, and the
+    // router would silently drop to the fake provider on the next run.
+    if (candidates.length === 0) {
+      return reply.code(400).send({ error: 'a role needs at least one candidate' });
+    }
+
+    return { role, candidates: orchestrator.router.replaceRole(role, candidates) };
+  });
+
+  app.post('/api/roles/:role/reset', async (request, reply) => {
+    const role = (request.params as { role: string }).role;
+    if (!isRoutedRole(role)) return reply.code(400).send({ error: `Unknown role: ${role}` });
+    return { role, candidates: orchestrator.router.resetRole(role) };
+  });
+
+  app.post('/api/cooldowns/clear', async (request, reply) => {
+    const body = request.body as { providerId?: string; modelId?: string };
+    if (!body.providerId || !body.modelId) {
+      return reply.code(400).send({ error: 'providerId and modelId are required' });
+    }
+    orchestrator.router.clearCooldown(body.providerId, body.modelId);
+    return { cleared: true, cooldowns: orchestrator.router.activeCooldowns() };
+  });
+
   app.get('/api/workflows', async () =>
     Object.values(workflowGraphs).map((graph) => ({
       id: graph.id,
+      version: graph.version,
       label: graph.label,
       description: graph.description,
       roles: graph.nodes.map((node) => node.id),
+      maxConcurrency: graph.maxConcurrency,
+      maxLoopIterations: graph.maxLoopIterations,
     })),
   );
+
+  /**
+   * Read-only run view: the immutable graph the task was pinned to, joined with
+   * the recorded state of each node. Purely observational — it schedules nothing.
+   */
+  app.get('/api/tasks/:id/graph', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    const task = tasks.get(taskId);
+    if (!task) return reply.code(404).send({ error: 'Task not found' });
+
+    let graph;
+    try {
+      graph = resolveTaskGraph(task);
+    } catch (error) {
+      return reply
+        .code(409)
+        .send({ error: error instanceof Error ? error.message : 'Unknown workflow graph' });
+    }
+
+    const run = db
+      .prepare('SELECT * FROM graph_runs WHERE task_id = ? ORDER BY created_at DESC LIMIT 1')
+      .get(taskId) as
+      | {
+          id: string;
+          state: string;
+          graph_version_id: string;
+          blocked_role: string | null;
+          blocked_reason: string | null;
+          blocked_detail: string | null;
+        }
+      | undefined;
+    const nodeRuns = run
+      ? (db
+          .prepare(
+            'SELECT node_key, state, outcome, started_at, completed_at FROM node_runs WHERE graph_run_id = ? ORDER BY created_at ASC',
+          )
+          .all(run.id) as Array<{
+          node_key: string;
+          state: string;
+          outcome: string | null;
+          started_at: string | null;
+          completed_at: string | null;
+        }>)
+      : [];
+
+    // Latest attempt wins: a node re-entered through a failure edge has several rows.
+    const latest = new Map<string, (typeof nodeRuns)[number]>();
+    for (const nodeRun of nodeRuns) latest.set(nodeRun.node_key, nodeRun);
+
+    // Present only when the run stopped because no configured provider would
+    // answer. The remedy is the operator's, so the UI needs enough to say what
+    // refused and point at where to change it.
+    const blocked = run?.blocked_role
+      ? {
+          role: run.blocked_role,
+          reason: run.blocked_reason ?? 'unavailable',
+          refusals: ((): unknown[] => {
+            try {
+              return JSON.parse(run.blocked_detail ?? '[]') as unknown[];
+            } catch {
+              return [];
+            }
+          })(),
+          resumable: run.state === 'interrupted',
+        }
+      : null;
+
+    return {
+      taskId,
+      graphRunId: run?.id ?? null,
+      runState: run?.state ?? 'not_started',
+      blocked,
+      graph: {
+        id: graph.id,
+        version: graph.version,
+        label: graph.label,
+        description: graph.description,
+        maxConcurrency: graph.maxConcurrency,
+        maxLoopIterations: graph.maxLoopIterations,
+        edges: graph.edges,
+        nodes: graph.nodes.map((node) => ({
+          id: node.id,
+          role: node.role,
+          kind: node.kind,
+          dependsOn: node.dependsOn,
+          required: node.required ?? false,
+          writer: node.writer ?? false,
+          maxAttempts: node.maxAttempts ?? 1,
+          state: latest.get(node.id)?.state ?? 'pending',
+          outcome: latest.get(node.id)?.outcome ?? null,
+          startedAt: latest.get(node.id)?.started_at ?? null,
+          completedAt: latest.get(node.id)?.completed_at ?? null,
+          attempts: nodeRuns.filter((entry) => entry.node_key === node.id).length,
+        })),
+      },
+    };
+  });
   app.get('/api/workflows/recommend', async (request) => {
     const query = request.query as { type?: string; risk?: string };
     const type = (query.type ?? 'feature') as Parameters<typeof recommendWorkflow>[0]['type'];
@@ -155,6 +412,7 @@ export function registerApi(
     const graph = getWorkflowGraph(recommendation.mode);
     return {
       ...recommendation,
+      version: graph.version,
       label: graph.label,
       description: graph.description,
       roles: graph.nodes.map((node) => node.id),
@@ -164,18 +422,39 @@ export function registerApi(
     { id: 'new_product', label: 'Build a New Product', description: 'Greenfield product work' },
     { id: 'feature', label: 'Add a Feature', description: 'Extend an existing codebase' },
     { id: 'bug_fix', label: 'Fix a Bug', description: 'Verified fix with regression checks' },
-    { id: 'refactor', label: 'Refactor Code', description: 'Improve structure without behaviour change' },
-    { id: 'investigation', label: 'Investigate an Issue', description: 'Diagnose before changing code' },
-    { id: 'review_changes', label: 'Review Existing Changes', description: 'Inspect a local diff or branch' },
+    {
+      id: 'refactor',
+      label: 'Refactor Code',
+      description: 'Improve structure without behaviour change',
+    },
+    {
+      id: 'investigation',
+      label: 'Investigate an Issue',
+      description: 'Diagnose before changing code',
+    },
+    {
+      id: 'review_changes',
+      label: 'Review Existing Changes',
+      description: 'Inspect a local diff or branch',
+    },
     { id: 'documentation', label: 'Documentation', description: 'Docs-only updates' },
     { id: 'security_fix', label: 'Security Fix', description: 'High-assurance remediation' },
     { id: 'migration', label: 'Migration', description: 'Schema or platform migration' },
     { id: 'test_improvement', label: 'Improve Tests', description: 'Coverage and harness work' },
     { id: 'performance', label: 'Performance', description: 'Speed or resource improvements' },
-    { id: 'dependency_update', label: 'Dependency Update', description: 'Library bumps and lockfile work' },
+    {
+      id: 'dependency_update',
+      label: 'Dependency Update',
+      description: 'Library bumps and lockfile work',
+    },
   ]);
-  app.get('/api/tasks', async (request) => tasks.list((request.query as { projectId?: string }).projectId));
-  app.get('/api/tasks/:id', async (request, reply) => { const task = tasks.get((request.params as { id: string }).id); return task ?? reply.code(404).send({ error: 'Task not found' }); });
+  app.get('/api/tasks', async (request) =>
+    tasks.list((request.query as { projectId?: string }).projectId),
+  );
+  app.get('/api/tasks/:id', async (request, reply) => {
+    const task = tasks.get((request.params as { id: string }).id);
+    return task ?? reply.code(404).send({ error: 'Task not found' });
+  });
   app.get('/api/tasks/:id/approvals', async (request) =>
     approvals.listPendingByTask((request.params as { id: string }).id),
   );
@@ -283,7 +562,9 @@ export function registerApi(
   app.post('/api/tasks/:id/start', async (request, reply) => {
     const task = tasks.get((request.params as { id: string }).id);
     if (!task) return reply.code(404).send({ error: 'Task not found' });
-    if (task.state !== 'ready' && task.state !== 'failed') {
+    // `paused` belongs here: the UI's Resume button posts to this route, and
+    // rejecting it left Pause as a one-way door with no way back.
+    if (task.state !== 'ready' && task.state !== 'failed' && task.state !== 'paused') {
       return reply.code(409).send({ error: `Cannot start task in state ${task.state}` });
     }
     const project = projects.get(task.projectId);
@@ -305,7 +586,11 @@ export function registerApi(
       });
     }
   });
-  for (const action of ['pause', 'resume', 'cancel'] as const) app.post(`/api/tasks/:id/${action}`, async (request) => { orchestrator.control((request.params as { id: string }).id, action); return { accepted: true }; });
+  for (const action of ['pause', 'resume', 'cancel'] as const)
+    app.post(`/api/tasks/:id/${action}`, async (request) => {
+      orchestrator.control((request.params as { id: string }).id, action);
+      return { accepted: true };
+    });
   app.post('/api/tasks/:id/stop', async (request) => {
     orchestrator.control((request.params as { id: string }).id, 'stop');
     return { accepted: true };
@@ -332,10 +617,35 @@ export function registerApi(
     if (!row?.projection_json) return null;
     return JSON.parse(row.projection_json);
   });
-  app.get('/api/runs/:id', async (request) => db.prepare('SELECT * FROM graph_runs WHERE id = ?').get((request.params as { id: string }).id) ?? null);
-  app.get('/api/runs/:id/events', async (request) => db.prepare('SELECT * FROM events WHERE aggregate_id = ? ORDER BY sequence').all((request.params as { id: string }).id));
-  app.get('/api/runs/:id/active-execution', async (request) => db.prepare('SELECT projection_json FROM active_executions WHERE graph_run_id = ? ORDER BY updated_at DESC LIMIT 1').get((request.params as { id: string }).id) ?? null);
-  for (const action of ['stop', 'force-terminate', 'retry'] as const) app.post(`/api/nodes/:id/${action}`, async (request) => { const row = db.prepare('SELECT task_id FROM active_executions WHERE node_run_id = ?').get((request.params as { id: string }).id) as { task_id?: string } | undefined; if (row?.task_id) orchestrator.control(row.task_id, action); return { accepted: true }; });
+  app.get(
+    '/api/runs/:id',
+    async (request) =>
+      db
+        .prepare('SELECT * FROM graph_runs WHERE id = ?')
+        .get((request.params as { id: string }).id) ?? null,
+  );
+  app.get('/api/runs/:id/events', async (request) =>
+    db
+      .prepare('SELECT * FROM events WHERE aggregate_id = ? ORDER BY sequence')
+      .all((request.params as { id: string }).id),
+  );
+  app.get(
+    '/api/runs/:id/active-execution',
+    async (request) =>
+      db
+        .prepare(
+          'SELECT projection_json FROM active_executions WHERE graph_run_id = ? ORDER BY updated_at DESC LIMIT 1',
+        )
+        .get((request.params as { id: string }).id) ?? null,
+  );
+  for (const action of ['stop', 'force-terminate', 'retry'] as const)
+    app.post(`/api/nodes/:id/${action}`, async (request) => {
+      const row = db
+        .prepare('SELECT task_id FROM active_executions WHERE node_run_id = ?')
+        .get((request.params as { id: string }).id) as { task_id?: string } | undefined;
+      if (row?.task_id) orchestrator.control(row.task_id, action);
+      return { accepted: true };
+    });
   app.get('/api/approvals', async () => approvals.listPending());
   for (const decision of ['approve', 'reject'] as const) {
     app.post(`/api/approvals/:id/${decision}`, async (request) => {
@@ -350,7 +660,9 @@ export function registerApi(
     const source = approvals.get(id);
     const fingerprint = body.fingerprint ?? source?.fingerprint;
     if (!fingerprint) {
-      return reply.code(400).send({ error: 'fingerprint is required when confirmation id is unknown' });
+      return reply
+        .code(400)
+        .send({ error: 'fingerprint is required when confirmation id is unknown' });
     }
     const approved = orchestrator.approveAllByFingerprint(fingerprint);
     audit.append({
@@ -507,9 +819,7 @@ export function registerApi(
       id?: string;
     };
     if (!body.displayName || !body.endpoint || !body.model) {
-      return reply
-        .code(400)
-        .send({ error: 'displayName, endpoint, and model are required' });
+      return reply.code(400).send({ error: 'displayName, endpoint, and model are required' });
     }
     try {
       const registered = providers.registerCustom({
@@ -586,10 +896,7 @@ export function registerApi(
       return reply.code(400).send({ error: 'action must be login, logout, or switch' });
     }
     try {
-      const result = await providers.authAction(
-        id,
-        action as 'login' | 'logout' | 'switch',
-      );
+      const result = await providers.authAction(id, action as 'login' | 'logout' | 'switch');
       bus.publish('provider.auth', result);
       return result;
     } catch (error) {
@@ -598,7 +905,9 @@ export function registerApi(
       });
     }
   });
-  app.get('/api/evidence/tasks/:taskId', async (request) => evidence.getBundle((request.params as { taskId: string }).taskId));
+  app.get('/api/evidence/tasks/:taskId', async (request) =>
+    evidence.getBundle((request.params as { taskId: string }).taskId),
+  );
   app.get('/api/usage/tasks/:taskId', async (request) => {
     const taskId = (request.params as { taskId: string }).taskId;
     const task = tasks.get(taskId);
@@ -617,17 +926,23 @@ export function registerApi(
     };
   });
   app.get('/api/usage/summary', async () => {
-    const summary = db.prepare(
-      `SELECT COUNT(DISTINCT task_id) AS taskCount,
+    const summary = db
+      .prepare(
+        `SELECT COUNT(DISTINCT task_id) AS taskCount,
               COUNT(*) AS entryCount,
               COALESCE(SUM(input_tokens), 0) AS inputTokens,
               COALESCE(SUM(output_tokens), 0) AS outputTokens,
               COALESCE(SUM(actual_cost_usd), 0) AS actualCostUsd,
               COALESCE(SUM(shadow_cost_usd), 0) AS shadowCostUsd
        FROM usage_ledger_entries`,
-    ).get() as {
-      taskCount: number; entryCount: number; inputTokens: number; outputTokens: number;
-      actualCostUsd: number; shadowCostUsd: number;
+      )
+      .get() as {
+      taskCount: number;
+      entryCount: number;
+      inputTokens: number;
+      outputTokens: number;
+      actualCostUsd: number;
+      shadowCostUsd: number;
     };
     return {
       scope: 'local-daemon',

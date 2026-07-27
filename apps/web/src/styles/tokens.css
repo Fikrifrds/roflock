@@ -1,0 +1,118 @@
+/* ---------------------------------------------------------------------------
+   RoleFlock design tokens
+   ---------------------------------------------------------------------------
+   One source of truth for colour, space, type, and motion. Components below
+   read these and never hard-code a hex value, so a palette change is one edit
+   rather than a search across the stylesheet.
+
+   The palette is a warm dark theme: cool near-black surfaces, warm paper text,
+   amber as the single accent. Amber is reserved for "this is where you act" —
+   primary buttons, the current step, section headings. Spending it on anything
+   else is what makes a UI feel noisy.
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* Surfaces, darkest to lightest. `sunken` is for code and inputs — things
+     that recede; `raised` is for cards that sit above the page. */
+  --surface-sunken: #0b1113;
+  --surface-page: #101619;
+  --surface: #151e21;
+  --surface-raised: #1a2427;
+  --surface-hover: #1f2a2e;
+
+  /* Hairlines. Borders are alpha-based so they hold up over any surface. */
+  --border: #ffffff1c;
+  --border-strong: #ffffff2e;
+  --border-subtle: #ffffff12;
+
+  /* Text, strongest to faintest. `muted` is the floor for body-size text at
+     AA on --surface; anything fainter is for uppercase micro-labels only. */
+  --text: #f2ece2;
+  --text-body: #cdc6ba;
+  --text-muted: #a2aca9;
+  --text-faint: #7f8b89;
+
+  /* Accent */
+  --accent: #edae49;
+  --accent-strong: #f5c072;
+  --accent-ink: #14191b;
+  --accent-wash: #edae4914;
+  --accent-line: #edae4959;
+
+  /* Semantic. Each has a text colour, a translucent wash, and a line. */
+  --ok: #a8cf85;
+  --ok-wash: #a8cf8514;
+  --ok-line: #a8cf8559;
+
+  --warn: #edae49;
+  --warn-wash: #edae4914;
+  --warn-line: #edae4959;
+
+  --danger: #ea8672;
+  --danger-wash: #ea867214;
+  --danger-line: #ea867259;
+  --danger-solid: #8b2e2e;
+
+  --info: #8ec5c0;
+  --info-wash: #8ec5c014;
+  --info-line: #8ec5c059;
+
+  /* Space — a 4px base. Using the scale keeps vertical rhythm consistent
+     across pages written at different times. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+
+  /* Type */
+  --font-body: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: Fraunces, ui-serif, Georgia, serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 34px;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.55;
+  --tracking-label: 0.09em;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Elevation. Dark themes read depth from a light rim plus a deep shadow;
+     shadow alone just muddies. */
+  --shadow-popover:
+    0 1px 0 #ffffff14 inset,
+    0 16px 40px -12px #000000c0;
+
+  /* Controls — one height everywhere so rows line up without per-case fixes. */
+  --control-height: 44px;
+  --control-padding-x: var(--space-3);
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --duration-fast: 110ms;
+  --duration: 180ms;
+
+  --focus-ring: 0 0 0 2px var(--surface-page), 0 0 0 4px var(--accent);
+
+  /* Layout */
+  --measure: 68ch;
+  --page-width: 1240px;
+}

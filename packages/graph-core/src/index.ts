@@ -2,24 +2,71 @@ import type { RiskClass, TaskType } from '@roleflock/contracts';
 
 export type GraphMode = 'direct' | 'fast' | 'standard' | 'bug_fix' | 'critical';
 
-export type WorkflowRole =
-  | 'planner'
-  | 'reviewer'
-  | 'writer'
+/**
+ * The dispatch key the orchestrator uses to decide what a node actually does.
+ * Node ids stay distinct from roles so a graph may run the same role twice —
+ * for example a second writer pass after a failed verification.
+ */
+export type WorkflowRole = 'planner' | 'reviewer' | 'writer' | 'test' | 'verifier' | 'accept';
+
+export type NodeKind =
+  | 'agent'
+  | 'model_call'
+  | 'command'
   | 'test'
-  | 'verifier'
-  | 'accept';
+  | 'router'
+  | 'join'
+  | 'human_approval'
+  | 'context_compile'
+  | 'evidence_aggregate';
+
+/**
+ * Typed conditional edges. `always` edges form the happy path; the rest are
+ * failure routes selected by the runtime's failure classification.
+ */
+export type EdgeCondition =
+  | 'always'
+  | 'on_pass'
+  | 'on_fail'
+  | 'on_needs_changes'
+  | 'on_timeout'
+  | 'on_provider_error'
+  | 'on_budget_exhausted';
 
 export interface GraphNode {
-  id: WorkflowRole;
-  dependsOn: WorkflowRole[];
+  id: string;
+  role: WorkflowRole;
+  kind: NodeKind;
+  dependsOn: string[];
+  /**
+   * A deterministic gate. Acceptance may not be reached on a path that skips a
+   * required node, and a required node's failure can never route to accept.
+   */
+  required?: boolean;
+  /** Mutates the worktree. At most one per graph, never scheduled in parallel. */
+  writer?: boolean;
+  /** Bounded local retries. Absent means a single attempt. */
+  maxAttempts?: number;
+}
+
+export interface GraphEdge {
+  from: string;
+  to: string;
+  when: EdgeCondition;
 }
 
 export interface WorkflowGraph {
   id: GraphMode;
+  /** Immutable identity of this graph's shape; a running task keeps its version. */
+  version: string;
   label: string;
   description: string;
   nodes: GraphNode[];
+  edges: GraphEdge[];
+  /** Upper bound on nodes running at once. Writers are additionally serialised. */
+  maxConcurrency: number;
+  /** Total re-entries into any loop, across the whole run. */
+  maxLoopIterations: number;
 }
 
 export interface WorkflowRecommendation {
@@ -28,60 +75,120 @@ export interface WorkflowRecommendation {
   overridable: true;
 }
 
+/** Bumped when the shape of a built-in template changes. */
+export const GRAPH_SCHEMA_VERSION = 1;
+
+export function graphVersionId(mode: GraphMode): string {
+  return `${mode}@${GRAPH_SCHEMA_VERSION}`;
+}
+
+/** Accepts both a bare mode (`bug_fix`) and a versioned id (`bug_fix@1`). */
+export function parseGraphVersionId(value: string): { mode: string; version?: number } {
+  const [mode, version] = value.split('@');
+  return { mode: mode ?? value, version: version ? Number(version) : undefined };
+}
+
+function node(
+  id: string,
+  role: WorkflowRole,
+  kind: NodeKind,
+  dependsOn: string[],
+  extra: Omit<GraphNode, 'id' | 'role' | 'kind' | 'dependsOn'> = {},
+): GraphNode {
+  return { id, role, kind, dependsOn, ...extra };
+}
+
+function sequential(nodes: GraphNode[]): GraphEdge[] {
+  return nodes
+    .slice(1)
+    .map((current, index) => ({ from: nodes[index]!.id, to: current.id, when: 'always' as const }));
+}
+
+const bugFixNodes: GraphNode[] = [
+  node('planner', 'planner', 'agent', []),
+  node('reviewer', 'reviewer', 'human_approval', ['planner']),
+  node('writer', 'writer', 'agent', ['reviewer'], { writer: true, maxAttempts: 2 }),
+  node('test', 'test', 'test', ['writer'], { required: true }),
+  node('verifier', 'verifier', 'agent', ['test']),
+  node('accept', 'accept', 'human_approval', ['verifier']),
+];
+
+/**
+ * A failed deterministic check routes back to the writer rather than failing the
+ * run outright. The loop is bounded by the writer's `maxAttempts` and the
+ * graph's `maxLoopIterations`.
+ */
+const bugFixEdges: GraphEdge[] = [
+  ...sequential(bugFixNodes),
+  { from: 'test', to: 'writer', when: 'on_fail' },
+  { from: 'verifier', to: 'writer', when: 'on_needs_changes' },
+];
+
 export const bugFixGraph: WorkflowGraph = {
   id: 'bug_fix',
+  version: graphVersionId('bug_fix'),
   label: 'Verified Bug Fix',
   description: 'Planner → reviewer → writer → test → verifier → human accept',
-  nodes: [
-    { id: 'planner', dependsOn: [] },
-    { id: 'reviewer', dependsOn: ['planner'] },
-    { id: 'writer', dependsOn: ['reviewer'] },
-    { id: 'test', dependsOn: ['writer'] },
-    { id: 'verifier', dependsOn: ['test'] },
-    { id: 'accept', dependsOn: ['verifier'] },
-  ],
+  nodes: bugFixNodes,
+  edges: bugFixEdges,
+  maxConcurrency: 1,
+  maxLoopIterations: 3,
 };
 
-/** Smallest path: write + deterministic test + human accept */
+const directNodes: GraphNode[] = [
+  node('writer', 'writer', 'agent', [], { writer: true, maxAttempts: 2 }),
+  node('test', 'test', 'test', ['writer'], { required: true }),
+  node('accept', 'accept', 'human_approval', ['test']),
+];
+
+/** Smallest path: write + deterministic test + human accept. No reviewer. */
 export const directGraph: WorkflowGraph = {
   id: 'direct',
+  version: graphVersionId('direct'),
   label: 'Direct',
   description: 'Writer → test → human accept',
-  nodes: [
-    { id: 'writer', dependsOn: [] },
-    { id: 'test', dependsOn: ['writer'] },
-    { id: 'accept', dependsOn: ['test'] },
-  ],
+  nodes: directNodes,
+  edges: [...sequential(directNodes), { from: 'test', to: 'writer', when: 'on_fail' }],
+  maxConcurrency: 1,
+  maxLoopIterations: 2,
 };
 
-/** Fast path: plan lightly, write, test, accept */
+const fastNodes: GraphNode[] = [
+  node('planner', 'planner', 'agent', []),
+  node('writer', 'writer', 'agent', ['planner'], { writer: true, maxAttempts: 2 }),
+  node('test', 'test', 'test', ['writer'], { required: true }),
+  node('accept', 'accept', 'human_approval', ['test']),
+];
+
+/** Fast path: plan lightly, write, test, accept. */
 export const fastGraph: WorkflowGraph = {
   id: 'fast',
+  version: graphVersionId('fast'),
   label: 'Fast',
   description: 'Planner → writer → test → human accept',
-  nodes: [
-    { id: 'planner', dependsOn: [] },
-    { id: 'writer', dependsOn: ['planner'] },
-    { id: 'test', dependsOn: ['writer'] },
-    { id: 'accept', dependsOn: ['test'] },
-  ],
+  nodes: fastNodes,
+  edges: [...sequential(fastNodes), { from: 'test', to: 'writer', when: 'on_fail' }],
+  maxConcurrency: 1,
+  maxLoopIterations: 2,
 };
 
-/** Standard path: plan, review, write, test, verify, accept */
+/** Standard path: plan, review, write, test, verify, accept. */
 export const standardGraph: WorkflowGraph = {
+  ...bugFixGraph,
   id: 'standard',
+  version: graphVersionId('standard'),
   label: 'Standard',
   description: 'Planner → reviewer → writer → test → verifier → human accept',
-  nodes: bugFixGraph.nodes,
 };
 
-/** Critical feature: same as bug fix but labeled for higher-risk work */
+/** Critical feature: bug-fix shape with a wider loop budget for higher-risk work. */
 export const criticalGraph: WorkflowGraph = {
+  ...bugFixGraph,
   id: 'critical',
+  version: graphVersionId('critical'),
   label: 'Critical Feature',
-  description:
-    'High-risk path: planner → reviewer → writer → test → verifier → human accept',
-  nodes: bugFixGraph.nodes,
+  description: 'High-risk path: planner → reviewer → writer → test → verifier → human accept',
+  maxLoopIterations: 4,
 };
 
 export const workflowGraphs: Record<GraphMode, WorkflowGraph> = {
@@ -92,9 +199,20 @@ export const workflowGraphs: Record<GraphMode, WorkflowGraph> = {
   critical: criticalGraph,
 };
 
-export function getWorkflowGraph(mode: string): WorkflowGraph {
+/**
+ * Resolves a graph by mode or versioned id. A version that does not match the
+ * current schema is rejected rather than silently upgraded: a task must keep the
+ * graph it started with, and a stale run should surface instead of drifting.
+ */
+export function getWorkflowGraph(modeOrVersion: string): WorkflowGraph {
+  const { mode, version } = parseGraphVersionId(modeOrVersion);
   const graph = workflowGraphs[mode as GraphMode];
-  if (!graph) throw new Error(`Unknown workflow mode: ${mode}`);
+  if (!graph) throw new Error(`Unknown workflow mode: ${modeOrVersion}`);
+  if (version !== undefined && version !== GRAPH_SCHEMA_VERSION) {
+    throw new Error(
+      `Workflow graph ${mode} version ${version} is no longer available (current: ${GRAPH_SCHEMA_VERSION})`,
+    );
+  }
   return graph;
 }
 
@@ -169,53 +287,173 @@ export function recommendWorkflow(input: {
   };
 }
 
+const FAILURE_CONDITIONS: readonly EdgeCondition[] = [
+  'on_fail',
+  'on_needs_changes',
+  'on_timeout',
+  'on_provider_error',
+  'on_budget_exhausted',
+];
+
+export function isFailureCondition(condition: EdgeCondition): boolean {
+  return FAILURE_CONDITIONS.includes(condition);
+}
+
+/** Nodes reachable from `start` by following `dependsOn` forwards. */
+function descendants(graph: WorkflowGraph, start: string): Set<string> {
+  const seen = new Set<string>();
+  const walk = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    for (const candidate of graph.nodes) {
+      if (candidate.dependsOn.includes(id)) walk(candidate.id);
+    }
+  };
+  walk(start);
+  return seen;
+}
+
+/** Nodes that must complete before `start`, transitively. */
+function ancestors(graph: WorkflowGraph, start: string): Set<string> {
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  const seen = new Set<string>();
+  const walk = (id: string) => {
+    for (const dependency of byId.get(id)?.dependsOn ?? []) {
+      if (seen.has(dependency)) continue;
+      seen.add(dependency);
+      walk(dependency);
+    }
+  };
+  walk(start);
+  return seen;
+}
+
+/** Cycles across the combined dependency + edge graph, as node id lists. */
+function findCycles(graph: WorkflowGraph): string[][] {
+  const successors = new Map<string, string[]>();
+  for (const n of graph.nodes) successors.set(n.id, []);
+  for (const n of graph.nodes) {
+    for (const dependency of n.dependsOn) successors.get(dependency)?.push(n.id);
+  }
+  for (const edge of graph.edges) successors.get(edge.from)?.push(edge.to);
+
+  const cycles: string[][] = [];
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  const visited = new Set<string>();
+
+  const walk = (id: string) => {
+    if (onStack.has(id)) {
+      cycles.push(stack.slice(stack.indexOf(id)));
+      return;
+    }
+    if (visited.has(id)) return;
+    visited.add(id);
+    onStack.add(id);
+    stack.push(id);
+    for (const next of successors.get(id) ?? []) walk(next);
+    stack.pop();
+    onStack.delete(id);
+  };
+
+  for (const n of graph.nodes) walk(n.id);
+  return cycles;
+}
+
+/**
+ * Structural safety gate. Every rule here corresponds to a way a graph could run
+ * forever, corrupt a worktree, or reach acceptance without the evidence the user
+ * was promised.
+ */
 export function validateGraph(graph: WorkflowGraph): string[] {
-  const ids = new Set(graph.nodes.map((node) => node.id));
   const errors: string[] = [];
+  const ids = new Set(graph.nodes.map((n) => n.id));
+
   if (graph.nodes.length === 0) errors.push('graph has no nodes');
   if (ids.size !== graph.nodes.length) errors.push('duplicate node id');
+  if (!Number.isFinite(graph.maxConcurrency) || graph.maxConcurrency < 1) {
+    errors.push('maxConcurrency must be a finite integer >= 1');
+  }
+  if (!Number.isFinite(graph.maxLoopIterations) || graph.maxLoopIterations < 0) {
+    errors.push('maxLoopIterations must be a finite integer >= 0');
+  }
 
-  const writers = graph.nodes.filter((node) => node.id === 'writer');
+  const writers = graph.nodes.filter((n) => n.writer);
   if (writers.length > 1) errors.push('parallel writers are not allowed');
   if (writers.length === 0) errors.push('graph requires a writer node');
-  if (!ids.has('accept')) errors.push('graph requires a terminal accept node');
 
-  for (const node of graph.nodes) {
-    for (const dependency of node.dependsOn) {
-      if (!ids.has(dependency)) errors.push(`${node.id} depends on missing ${dependency}`);
-      if (dependency === node.id) errors.push(`${node.id} depends on itself`);
+  const acceptNodes = graph.nodes.filter((n) => n.role === 'accept');
+  if (acceptNodes.length === 0) errors.push('graph requires a terminal accept node');
+  for (const accept of acceptNodes) {
+    if (graph.nodes.some((n) => n.dependsOn.includes(accept.id))) {
+      errors.push(`${accept.id} must be terminal`);
     }
   }
 
-  const visit = (
-    id: string,
-    visiting = new Set<string>(),
-    visited = new Set<string>(),
-  ): boolean => {
-    if (visiting.has(id)) return true;
-    if (visited.has(id)) return false;
-    visiting.add(id);
-    const node = graph.nodes.find((n) => n.id === id);
-    const cycle = node?.dependsOn.some((dep) => visit(dep, visiting, visited)) ?? false;
-    visiting.delete(id);
-    visited.add(id);
-    return cycle;
-  };
-  if (graph.nodes.some((node) => visit(node.id))) errors.push('cycle detected');
+  for (const n of graph.nodes) {
+    if (n.maxAttempts !== undefined && (!Number.isFinite(n.maxAttempts) || n.maxAttempts < 1)) {
+      errors.push(`${n.id} has a non-finite retry budget`);
+    }
+    for (const dependency of n.dependsOn) {
+      if (!ids.has(dependency)) errors.push(`${n.id} depends on missing ${dependency}`);
+      if (dependency === n.id) errors.push(`${n.id} depends on itself`);
+    }
+  }
 
-  // Accept must be reachable from every writer (and generally a sink).
-  if (ids.has('accept') && ids.has('writer')) {
-    const reachable = new Set<string>();
-    const walk = (id: string) => {
-      if (reachable.has(id)) return;
-      reachable.add(id);
-      for (const node of graph.nodes) {
-        if (node.dependsOn.includes(id as WorkflowRole)) walk(node.id);
+  // Invalid state references.
+  for (const edge of graph.edges) {
+    if (!ids.has(edge.from)) errors.push(`edge from unknown node ${edge.from}`);
+    if (!ids.has(edge.to)) errors.push(`edge to unknown node ${edge.to}`);
+  }
+
+  // Unbounded cycles: a loop is only legal if the runtime can exhaust it.
+  const byId = new Map(graph.nodes.map((n) => [n.id, n]));
+  for (const cycle of findCycles(graph)) {
+    const conditional = cycle.some((id, index) => {
+      const next = cycle[(index + 1) % cycle.length]!;
+      return graph.edges.some((e) => e.from === id && e.to === next && isFailureCondition(e.when));
+    });
+    if (!conditional) {
+      errors.push(`unconditional cycle: ${cycle.join(' → ')}`);
+      continue;
+    }
+    if (!cycle.some((id) => (byId.get(id)?.maxAttempts ?? 1) > 1)) {
+      errors.push(`unbounded cycle without a retry budget: ${cycle.join(' → ')}`);
+    }
+  }
+
+  // A pass path may not bypass a required deterministic check.
+  const required = graph.nodes.filter((n) => n.required);
+  for (const accept of acceptNodes) {
+    const before = ancestors(graph, accept.id);
+    for (const check of required) {
+      if (!before.has(check.id)) {
+        errors.push(`${accept.id} can be reached without required check ${check.id}`);
       }
-    };
-    walk('writer');
-    if (!reachable.has('accept')) {
-      errors.push('accept is unreachable from writer');
+    }
+  }
+
+  // Incompatible fallback: failure must not shortcut to acceptance, and a
+  // "needs changes" route only makes sense towards something that can write.
+  for (const edge of graph.edges) {
+    if (!isFailureCondition(edge.when)) continue;
+    const target = byId.get(edge.to);
+    if (!target) continue;
+    if (target.role === 'accept') {
+      errors.push(`incompatible fallback: ${edge.from} routes ${edge.when} straight to accept`);
+    }
+    if (edge.when === 'on_needs_changes' && !target.writer) {
+      errors.push(
+        `incompatible fallback: ${edge.from} routes on_needs_changes to non-writer ${edge.to}`,
+      );
+    }
+  }
+
+  // Acceptance must actually be reachable from the writer.
+  for (const writer of writers) {
+    const reachable = descendants(graph, writer.id);
+    if (acceptNodes.length && !acceptNodes.some((a) => reachable.has(a.id))) {
+      errors.push(`accept is unreachable from ${writer.id}`);
     }
   }
 

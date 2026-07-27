@@ -13,6 +13,9 @@ Use **Verified Fix** (bug-fix workflow) when you want a governed path: plan → 
    pnpm dev:web    # terminal 2 — UI on 127.0.0.1:5173
    ```
 
+   Open the **URL the daemon prints** (`http://127.0.0.1:5173/?rft=…`). It carries the session
+   token once; the UI stores it and removes it from the address bar. `pnpm url` reprints it.
+
 3. For a deterministic first pass (no live CLIs required):
 
    ```bash

@@ -1,63 +1,311 @@
-import type { WorkflowGraph } from '@roleflock/graph-core';
-import { validateGraph } from '@roleflock/graph-core';
+import {
+  isFailureCondition,
+  validateGraph,
+  type EdgeCondition,
+  type GraphNode,
+  type WorkflowGraph,
+} from '@roleflock/graph-core';
+
+export type NodeState = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+
+/**
+ * Why a node failed, which decides where the run goes next. Classification is
+ * explicit when the caller throws a {@link NodeFailure} and heuristic otherwise,
+ * so an unrecognised error never silently looks like a clean verification fail.
+ */
+export type FailureClass =
+  | 'verification_failed'
+  | 'needs_changes'
+  | 'timeout'
+  | 'provider_error'
+  | 'budget_exhausted'
+  | 'cancelled'
+  | 'unknown';
+
+export class NodeFailure extends Error {
+  constructor(
+    message: string,
+    readonly failureClass: FailureClass,
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = 'NodeFailure';
+  }
+}
 
 export interface NodeResult {
   nodeId: string;
-  status: 'completed' | 'failed' | 'skipped';
+  role: string;
+  status: Exclude<NodeState, 'pending' | 'running'>;
   output?: unknown;
   error?: unknown;
-  attempt?: number;
+  failureClass?: FailureClass;
+  attempt: number;
+}
+
+export interface NodeContext {
+  node: GraphNode;
+  attempt: number;
+  loopIteration: number;
+  completed: readonly NodeResult[];
+}
+
+export interface GraphRunResult {
+  results: NodeResult[];
+  state: 'completed' | 'failed';
+  loopIterations: number;
+}
+
+export interface RunGraphOptions {
+  /** Node ids already completed before this run — used to resume after a restart. */
+  resumeCompleted?: readonly string[];
+  /** Observability hook; fires on every node state transition. */
+  onNodeState?: (nodeId: string, state: NodeState, attempt: number) => void;
+  signal?: AbortSignal;
+}
+
+export function classifyFailure(error: unknown): FailureClass {
+  if (error instanceof NodeFailure) return error.failureClass;
+  if (!(error instanceof Error)) return 'unknown';
+  if (error.name === 'AbortError') return 'cancelled';
+  const text = `${error.name}: ${error.message}`.toLowerCase();
+  if (/cancelled|aborted/.test(text)) return 'cancelled';
+  if (/timed out|timeout/.test(text)) return 'timeout';
+  if (/budget|quota/.test(text)) return 'budget_exhausted';
+  if (/verification failed/.test(text)) return 'verification_failed';
+  if (/provider|invocation failed|cli/.test(text)) return 'provider_error';
+  return 'unknown';
 }
 
 /**
- * Execute a dependency-ordered graph. When `maxNodeAttempts` > 1, a failed
- * node may retry before the graph marks it failed (bounded fix/verify loops).
+ * Preference order per failure class. `on_fail` is the catch-all, so a graph
+ * that only declares `on_fail` still routes a timeout or a provider error.
+ */
+const ROUTES: Record<FailureClass, EdgeCondition[]> = {
+  verification_failed: ['on_fail'],
+  needs_changes: ['on_needs_changes', 'on_fail'],
+  timeout: ['on_timeout', 'on_fail'],
+  provider_error: ['on_provider_error', 'on_fail'],
+  budget_exhausted: ['on_budget_exhausted'],
+  cancelled: [],
+  unknown: ['on_fail'],
+};
+
+function descendantsOf(graph: WorkflowGraph, start: string): Set<string> {
+  const seen = new Set<string>();
+  const walk = (id: string) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    for (const candidate of graph.nodes) {
+      if (candidate.dependsOn.includes(id)) walk(candidate.id);
+    }
+  };
+  walk(start);
+  return seen;
+}
+
+/**
+ * Executes a validated graph.
+ *
+ * Scheduling is dependency-ordered with a concurrency cap, and writers are
+ * serialised on top of that cap so two nodes can never mutate one worktree at
+ * the same time. A failed node first spends its local retry budget, then follows
+ * a typed failure edge if one matches; taking that edge resets the target and
+ * everything downstream, so a re-run is honest rather than partially stale. The
+ * number of such re-entries is capped by `graph.maxLoopIterations`.
+ */
+export async function runGraph(
+  graph: WorkflowGraph,
+  execute: (context: NodeContext) => Promise<unknown>,
+  options: RunGraphOptions = {},
+): Promise<GraphRunResult> {
+  const errors = validateGraph(graph);
+  if (errors.length) throw new Error(`Invalid graph: ${errors.join(', ')}`);
+
+  const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+  const state = new Map<string, NodeState>(graph.nodes.map((node) => [node.id, 'pending']));
+  const attempts = new Map<string, number>(graph.nodes.map((node) => [node.id, 0]));
+  const results: NodeResult[] = [];
+  let loopIterations = 0;
+  let runFailed = false;
+
+  const setState = (id: string, next: NodeState) => {
+    state.set(id, next);
+    options.onNodeState?.(id, next, attempts.get(id) ?? 0);
+  };
+
+  const recordResult = (result: NodeResult) => {
+    const existing = results.findIndex((candidate) => candidate.nodeId === result.nodeId);
+    if (existing >= 0) results.splice(existing, 1);
+    results.push(result);
+  };
+
+  for (const id of options.resumeCompleted ?? []) {
+    const node = byId.get(id);
+    if (!node) continue;
+    state.set(id, 'completed');
+    recordResult({ nodeId: id, role: node.role, status: 'completed', attempt: 0 });
+  }
+
+  const isReady = (node: GraphNode) =>
+    state.get(node.id) === 'pending' &&
+    node.dependsOn.every((dependency) => state.get(dependency) === 'completed');
+
+  const running = new Map<string, Promise<{ nodeId: string; error?: unknown; output?: unknown }>>();
+
+  while (!runFailed) {
+    if (options.signal?.aborted) {
+      for (const [id, value] of state) if (value === 'pending') setState(id, 'skipped');
+      runFailed = true;
+      break;
+    }
+
+    for (const node of graph.nodes) {
+      if (running.size >= graph.maxConcurrency) break;
+      if (!isReady(node)) continue;
+      // One writer per worktree, independent of the concurrency budget.
+      if (node.writer && [...running.keys()].some((id) => byId.get(id)?.writer)) continue;
+
+      const attempt = (attempts.get(node.id) ?? 0) + 1;
+      attempts.set(node.id, attempt);
+      setState(node.id, 'running');
+      const iteration = loopIterations;
+      running.set(
+        node.id,
+        execute({ node, attempt, loopIteration: iteration, completed: results }).then(
+          (output) => ({ nodeId: node.id, output }),
+          (error: unknown) => ({ nodeId: node.id, error: error ?? new Error('unknown failure') }),
+        ),
+      );
+    }
+
+    if (running.size === 0) {
+      // Nothing runnable left; anything still pending is unreachable.
+      const stranded = [...state.entries()].filter(([, value]) => value === 'pending');
+      for (const [id] of stranded) {
+        setState(id, 'skipped');
+        recordResult({
+          nodeId: id,
+          role: byId.get(id)!.role,
+          status: 'skipped',
+          error: 'dependency did not complete',
+          attempt: attempts.get(id) ?? 0,
+        });
+      }
+      if (stranded.length) runFailed = true;
+      break;
+    }
+
+    const settled = await Promise.race(running.values());
+    running.delete(settled.nodeId);
+    const node = byId.get(settled.nodeId)!;
+    const attempt = attempts.get(node.id) ?? 1;
+
+    if (settled.error === undefined) {
+      setState(node.id, 'completed');
+      recordResult({
+        nodeId: node.id,
+        role: node.role,
+        status: 'completed',
+        output: settled.output,
+        attempt,
+      });
+      continue;
+    }
+
+    const failureClass = classifyFailure(settled.error);
+
+    // 1. Local retry budget.
+    if (failureClass !== 'cancelled' && attempt < (node.maxAttempts ?? 1)) {
+      setState(node.id, 'pending');
+      continue;
+    }
+
+    // 2. Typed failure edge.
+    const edge = ROUTES[failureClass]
+      .map((condition) =>
+        graph.edges.find(
+          (candidate) =>
+            candidate.from === node.id &&
+            candidate.when === condition &&
+            isFailureCondition(candidate.when),
+        ),
+      )
+      .find(Boolean);
+
+    if (edge && loopIterations < graph.maxLoopIterations) {
+      loopIterations += 1;
+      // Re-running the target invalidates everything downstream of it, including
+      // the node that just failed.
+      for (const id of descendantsOf(graph, edge.to)) {
+        attempts.set(id, 0);
+        setState(id, 'pending');
+        const index = results.findIndex((candidate) => candidate.nodeId === id);
+        if (index >= 0) results.splice(index, 1);
+      }
+      continue;
+    }
+
+    // 3. Out of routes.
+    setState(node.id, 'failed');
+    recordResult({
+      nodeId: node.id,
+      role: node.role,
+      status: 'failed',
+      error: settled.error,
+      failureClass,
+      attempt,
+    });
+    runFailed = true;
+
+    // Let in-flight siblings settle so nothing is orphaned mid-write.
+    await Promise.allSettled(running.values());
+    running.clear();
+    for (const [id, value] of state) {
+      if (value === 'pending' || value === 'running') {
+        setState(id, 'skipped');
+        recordResult({
+          nodeId: id,
+          role: byId.get(id)!.role,
+          status: 'skipped',
+          error: `blocked by ${node.id}`,
+          attempt: attempts.get(id) ?? 0,
+        });
+      }
+    }
+  }
+
+  const order = new Map(graph.nodes.map((node, index) => [node.id, index]));
+  results.sort((a, b) => (order.get(a.nodeId) ?? 0) - (order.get(b.nodeId) ?? 0));
+
+  return {
+    results,
+    state:
+      runFailed || results.some((result) => result.status !== 'completed') ? 'failed' : 'completed',
+    loopIterations,
+  };
+}
+
+/**
+ * @deprecated Use {@link runGraph}. Retained for callers that only need
+ * dependency-ordered execution with bounded retries.
  */
 export async function runSequentialGraph(
   graph: WorkflowGraph,
   execute: (nodeId: string, completed: readonly NodeResult[], attempt: number) => Promise<unknown>,
   options: { maxNodeAttempts?: number } = {},
 ): Promise<NodeResult[]> {
-  const errors = validateGraph(graph);
-  if (errors.length) throw new Error(`Invalid graph: ${errors.join(', ')}`);
-  const maxNodeAttempts = Math.max(1, options.maxNodeAttempts ?? 1);
-  const pending = new Map(graph.nodes.map((node) => [node.id, node]));
-  const results: NodeResult[] = [];
-
-  while (pending.size) {
-    const ready = [...pending.values()].find((node) =>
-      node.dependsOn.every((id) =>
-        results.some((r) => r.nodeId === id && r.status === 'completed'),
-      ),
-    );
-    if (!ready) {
-      for (const node of pending.values()) {
-        results.push({ nodeId: node.id, status: 'skipped', error: 'dependency failed' });
+  const bounded: WorkflowGraph = options.maxNodeAttempts
+    ? {
+        ...graph,
+        nodes: graph.nodes.map((node) => ({
+          ...node,
+          maxAttempts: node.maxAttempts ?? options.maxNodeAttempts,
+        })),
       }
-      break;
-    }
-    pending.delete(ready.id);
-
-    let lastError: unknown;
-    let completed = false;
-    for (let attempt = 1; attempt <= maxNodeAttempts; attempt += 1) {
-      try {
-        const output = await execute(ready.id, results, attempt);
-        results.push({ nodeId: ready.id, status: 'completed', output, attempt });
-        completed = true;
-        break;
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    if (!completed) {
-      results.push({
-        nodeId: ready.id,
-        status: 'failed',
-        error: lastError,
-        attempt: maxNodeAttempts,
-      });
-    }
-  }
+    : graph;
+  const { results } = await runGraph(bounded, ({ node, attempt, completed }) =>
+    execute(node.id, completed, attempt),
+  );
   return results;
 }
