@@ -5,12 +5,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # No `version` here on purpose: declaring it alongside `packageManager`
+      # in package.json is an ERR_PNPM_BAD_PM_VERSION error, which failed the
+      # job during setup — so the suite had never actually run in CI.
       - uses: pnpm/action-setup@v4
-        with: { version: 11 }
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
       - run: pnpm build
+      # Build first: the daemon tests import built workspace packages, and
+      # provider discovery shells out to CLIs that are absent on a runner, so
+      # roles fall through to the deterministic stand-in.
+      - run: pnpm test
+        env:
+          ROLEFLOCK_FORCE_FAKE: '1'
