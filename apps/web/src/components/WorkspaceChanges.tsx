@@ -1,7 +1,20 @@
 import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, useData } from '../lib/client.js';
-import type { Task, TaskWorkspace } from '../types.js';
+import type { Task, TaskFileDiff, TaskWorkspace } from '../types.js';
+
+type WorkspaceFile = {
+  path: string;
+  indexStatus: string;
+  worktreeStatus: string;
+  added: number;
+  removed: number;
+};
+
+type FileSelection = {
+  scope: 'staged' | 'unstaged';
+  file: WorkspaceFile;
+};
 
 function statusLabel(index: string, worktree: string) {
   if (index === '?' || worktree === '?') return 'Untracked';
@@ -17,16 +30,36 @@ export function WorkspaceChanges({ task }: { task: Task }) {
     ['task-workspace', task.id],
     `/api/tasks/${task.id}/workspace`,
   );
-  const [selectedPath, setSelectedPath] = useState('');
+  const [selectedKey, setSelectedKey] = useState('');
   const [message, setMessage] = useState(`RoleFlock: ${task.title}`);
   const [busy, setBusy] = useState('');
   const [feedback, setFeedback] = useState('');
-  const selected = useMemo(
+  const selections = useMemo<FileSelection[]>(
     () =>
       workspace?.available
-        ? (workspace.files.find((file) => file.path === selectedPath) ?? workspace.files[0])
-        : undefined,
-    [selectedPath, workspace],
+        ? [
+            ...workspace.files
+              .filter((file) => file.indexStatus && file.indexStatus !== '?')
+              .map((file) => ({ scope: 'staged' as const, file })),
+            ...workspace.files
+              .filter((file) => file.worktreeStatus || file.indexStatus === '?')
+              .map((file) => ({ scope: 'unstaged' as const, file })),
+          ]
+        : [],
+    [workspace],
+  );
+  const selected =
+    selections.find(({ scope, file }) => `${scope}:${file.path}` === selectedKey) ?? selections[0];
+  const selectedPath = selected?.file.path ?? '';
+  const selectedStaged = selected?.scope === 'staged';
+  const {
+    data: fileDiff,
+    isLoading: diffLoading,
+    error: diffError,
+  } = useData<TaskFileDiff>(
+    ['task-workspace-diff', task.id, selected?.scope ?? '', selectedPath],
+    `/api/tasks/${task.id}/workspace/diff?path=${encodeURIComponent(selectedPath)}&staged=${selectedStaged}`,
+    Boolean(workspace?.available && selected),
   );
 
   const mutate = async (name: string, body: Record<string, unknown>) => {
@@ -39,6 +72,7 @@ export function WorkspaceChanges({ task }: { task: Task }) {
       });
       setFeedback(name === 'push' ? 'Branch pushed successfully.' : 'Workspace updated.');
       await qc.invalidateQueries({ queryKey: ['task-workspace', task.id] });
+      await qc.invalidateQueries({ queryKey: ['task-workspace-diff', task.id] });
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : 'Action failed');
     } finally {
@@ -96,8 +130,17 @@ export function WorkspaceChanges({ task }: { task: Task }) {
                 <button
                   type="button"
                   key={`${label}-${file.path}`}
-                  className={`changed-file${selected?.path === file.path ? ' active' : ''}`}
-                  onClick={() => setSelectedPath(file.path)}
+                  className={`changed-file${
+                    selected?.scope === (label === 'Staged changes' ? 'staged' : 'unstaged') &&
+                    selected.file.path === file.path
+                      ? ' active'
+                      : ''
+                  }`}
+                  onClick={() =>
+                    setSelectedKey(
+                      `${label === 'Staged changes' ? 'staged' : 'unstaged'}:${file.path}`,
+                    )
+                  }
                 >
                   <span className="file-status">
                     {statusLabel(file.indexStatus, file.worktreeStatus)[0]}
@@ -130,19 +173,43 @@ export function WorkspaceChanges({ task }: { task: Task }) {
       <section className="diff-workspace">
         <div className="diff-toolbar">
           <div>
-            <strong>{selected?.path ?? 'No file selected'}</strong>
-            <small>{workspace.files.length} changed files</small>
+            <strong>{selected?.file.path ?? 'No file selected'}</strong>
+            <small>
+              {selected
+                ? `${selected.scope === 'staged' ? 'Staged change' : 'Working tree change'} · ${
+                    workspace.files.length
+                  } changed files`
+                : `${workspace.files.length} changed files`}
+            </small>
           </div>
-          <div className="diff-stats">
-            <span>+{workspace.files.reduce((sum, file) => sum + file.added, 0)}</span>
-            <b>−{workspace.files.reduce((sum, file) => sum + file.removed, 0)}</b>
+          <div className="diff-stats" aria-label="Selected file diff statistics">
+            <span>+{fileDiff?.added ?? selected?.file.added ?? 0}</span>
+            <b>−{fileDiff?.removed ?? selected?.file.removed ?? 0}</b>
           </div>
         </div>
-        {workspace.patch || workspace.stagedPatch ? (
+        {diffLoading && selected ? (
+          <div className="workspace-empty compact">
+            <p>Loading file diff…</p>
+          </div>
+        ) : diffError ? (
+          <div className="workspace-empty compact">
+            <h3>Unable to load this diff</h3>
+            <p>{diffError instanceof Error ? diffError.message : 'The file preview failed.'}</p>
+          </div>
+        ) : fileDiff?.binary ? (
+          <div className="workspace-empty compact">
+            <h3>Binary file changed</h3>
+            <p>A text diff is not available for this file.</p>
+          </div>
+        ) : fileDiff?.patch ? (
           <pre className="ide-diff" tabIndex={0}>
-            {workspace.stagedPatch}
-            {workspace.patch}
+            {fileDiff.patch}
           </pre>
+        ) : selected ? (
+          <div className="workspace-empty compact">
+            <h3>No textual diff</h3>
+            <p>This may be an empty file or a metadata-only change.</p>
+          </div>
         ) : (
           <div className="workspace-empty compact">
             <h3>No uncommitted changes</h3>

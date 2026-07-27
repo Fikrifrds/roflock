@@ -191,6 +191,10 @@ export type GraphRunView = {
       required: boolean;
       writer: boolean;
       maxAttempts: number;
+      primaryProviderId: string | null;
+      primaryProviderDisplayName: string | null;
+      primaryModelId: string | null;
+      primaryModelDisplayName: string | null;
       state: string;
       outcome: string | null;
       startedAt: string | null;
@@ -223,6 +227,15 @@ export type TaskWorkspace =
       patch: string;
       stagedPatch: string;
     };
+
+export type TaskFileDiff = {
+  path: string;
+  staged: boolean;
+  patch: string;
+  added: number;
+  removed: number;
+  binary: boolean;
+};
 
 export type RoleCandidateView = {
   providerId: string;

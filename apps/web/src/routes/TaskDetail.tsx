@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Field, FileDrop } from '../components/Field.js';
 import { BlockedBanner } from '../components/BlockedBanner.js';
 import { GraphRunView } from '../components/GraphRunView.js';
 import { LiveTurn } from '../components/LiveTurn.js';
 import { TaskJourney } from '../components/TaskJourney.js';
+import { TaskWorkspaceHeader } from '../components/TaskWorkspaceHeader.js';
 import { WorkspaceChanges } from '../components/WorkspaceChanges.js';
 import { Select } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
-import { Empty, Section, StatusPill } from '../components/primitives.js';
+import { Empty, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { DOCUMENT_AUTHORITIES, DOCUMENT_KINDS } from '../lib/choices.js';
-import { formatPhase, formatTaskState, isTerminalState, taskStateTone } from '../lib/format.js';
+import { formatPhase, isTerminalState } from '../lib/format.js';
 import type {
   ActiveExecution,
   Approval,
@@ -29,7 +30,8 @@ export function TaskDetail() {
   const [verificationDraft, setVerificationDraft] = useState('');
   const [savingVerification, setSavingVerification] = useState(false);
   const [docDraft, setDocDraft] = useState({ kind: 'prd', authority: 'reference' });
-  const [workspaceView, setWorkspaceView] = useState<'workflow' | 'changes'>('workflow');
+  const [searchParams] = useSearchParams();
+  const workspaceView = searchParams.get('view') === 'changes' ? 'changes' : 'workflow';
 
   const { data: task } = useData<Task>(['task', id], `/api/tasks/${id}`, Boolean(id));
   const { data: execution } = useData<ActiveExecution | null>(
@@ -152,42 +154,7 @@ export function TaskDetail() {
 
   return (
     <Shell>
-      <div className="task-workspace-head">
-        <div>
-          <div className="task-workspace-kicker">
-            <p className="eyebrow">Governed task</p>
-            <StatusPill tone={taskStateTone(task.state)}>{formatTaskState(task.state)}</StatusPill>
-            <span>
-              {task.type.replaceAll('_', ' ')} · {task.risk} risk
-            </span>
-          </div>
-          <h1>{task.title}</h1>
-          <p className="task-workspace-brief">{task.brief}</p>
-        </div>
-        <div className="workspace-tabs" role="tablist" aria-label="Task workspace">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={workspaceView === 'workflow'}
-            className={workspaceView === 'workflow' ? 'active' : ''}
-            onClick={() => setWorkspaceView('workflow')}
-          >
-            Workflow
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={workspaceView === 'changes'}
-            className={workspaceView === 'changes' ? 'active' : ''}
-            onClick={() => setWorkspaceView('changes')}
-          >
-            Changes &amp; Git
-          </button>
-          <Link className="workspace-tab-link" to={`/tasks/${id}/evidence`}>
-            Evidence
-          </Link>
-        </div>
-      </div>
+      <TaskWorkspaceHeader task={task} activeView={workspaceView} />
       <TaskJourney task={task} runView={runView} />
       {workspaceView === 'changes' ? (
         <WorkspaceChanges task={task} />

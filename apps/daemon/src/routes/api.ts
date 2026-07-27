@@ -50,6 +50,7 @@ import { checkForUpdates, getLocalVersion } from '../services/version-check.js';
 import { discoverVerificationCommand } from '../services/verification-command.js';
 import {
   commitTaskWorkspace,
+  inspectTaskFileDiff,
   inspectTaskWorkspace,
   pushTaskWorkspace,
   stageTaskFiles,
@@ -413,6 +414,32 @@ export function registerApi(
         }
       : null;
 
+    const primaryByRole = new Map<
+      string,
+      ReturnType<typeof orchestrator.router.listRole>[number] | undefined
+    >();
+    for (const node of graph.nodes) {
+      if ((node.kind === 'agent' || node.kind === 'model_call') && isRoutedRole(node.role)) {
+        primaryByRole.set(node.role, orchestrator.router.listRole(node.role)[0]);
+      }
+    }
+    const primaryProviderIds = [
+      ...new Set(
+        [...primaryByRole.values()]
+          .filter((candidate) => Boolean(candidate))
+          .map((candidate) => candidate!.providerConnectionId),
+      ),
+    ];
+    const providerCatalogue = await providers.list();
+    const modelsByProvider = new Map(
+      await Promise.all(
+        primaryProviderIds.map(
+          async (providerId) =>
+            [providerId, await providers.models(providerId).catch(() => [])] as const,
+        ),
+      ),
+    );
+
     return {
       taskId,
       graphRunId: run?.id ?? null,
@@ -426,20 +453,36 @@ export function registerApi(
         maxConcurrency: graph.maxConcurrency,
         maxLoopIterations: graph.maxLoopIterations,
         edges: graph.edges,
-        nodes: graph.nodes.map((node) => ({
-          id: node.id,
-          role: node.role,
-          kind: node.kind,
-          dependsOn: node.dependsOn,
-          required: node.required ?? false,
-          writer: node.writer ?? false,
-          maxAttempts: node.maxAttempts ?? 1,
-          state: latest.get(node.id)?.state ?? unreachedState,
-          outcome: latest.get(node.id)?.outcome ?? null,
-          startedAt: latest.get(node.id)?.started_at ?? null,
-          completedAt: latest.get(node.id)?.completed_at ?? null,
-          attempts: nodeRuns.filter((entry) => entry.node_key === node.id).length,
-        })),
+        nodes: graph.nodes.map((node) => {
+          const primary = primaryByRole.get(node.role);
+          const providerDisplayName = primary
+            ? (providerCatalogue.find((provider) => provider.id === primary.providerConnectionId)
+                ?.displayName ?? primary.providerConnectionId)
+            : null;
+          const modelDisplayName = primary
+            ? (modelsByProvider
+                .get(primary.providerConnectionId)
+                ?.find((model) => model.id === primary.modelId)?.displayName ?? primary.modelId)
+            : null;
+          return {
+            id: node.id,
+            role: node.role,
+            kind: node.kind,
+            dependsOn: node.dependsOn,
+            required: node.required ?? false,
+            writer: node.writer ?? false,
+            maxAttempts: node.maxAttempts ?? 1,
+            primaryProviderId: primary?.providerConnectionId ?? null,
+            primaryProviderDisplayName: providerDisplayName,
+            primaryModelId: primary?.modelId ?? null,
+            primaryModelDisplayName: modelDisplayName,
+            state: latest.get(node.id)?.state ?? unreachedState,
+            outcome: latest.get(node.id)?.outcome ?? null,
+            startedAt: latest.get(node.id)?.started_at ?? null,
+            completedAt: latest.get(node.id)?.completed_at ?? null,
+            attempts: nodeRuns.filter((entry) => entry.node_key === node.id).length,
+          };
+        }),
       },
     };
   });
@@ -504,6 +547,22 @@ export function registerApi(
     } catch (error) {
       return reply.code(500).send({
         error: error instanceof Error ? error.message : 'Unable to inspect task workspace',
+      });
+    }
+  });
+  app.get('/api/tasks/:id/workspace/diff', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    if (!tasks.get(taskId)) return reply.code(404).send({ error: 'Task not found' });
+    const worktree = worktrees.getByTask(taskId);
+    if (!worktree) return reply.code(404).send({ error: 'Task workspace not found' });
+    const query = request.query as { path?: string; staged?: string };
+    const path = query.path?.trim();
+    if (!path) return reply.code(400).send({ error: 'path is required' });
+    try {
+      return await inspectTaskFileDiff(worktree, path, query.staged === 'true');
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : 'Unable to inspect file diff',
       });
     }
   });

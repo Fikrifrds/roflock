@@ -1462,7 +1462,8 @@ main.app-main {
 
 .workspace-tabs button:hover,
 .workspace-tab-link:hover,
-.workspace-tabs button.active {
+.workspace-tabs button.active,
+.workspace-tab-link.active {
   background: #202a2d;
   color: #e3ebe9;
 }
@@ -3475,8 +3476,8 @@ pre {
 
 .graph-node {
   position: absolute;
-  width: 196px;
-  height: 128px;
+  width: 210px;
+  min-height: 148px;
   padding: var(--space-3);
   border: 1px solid var(--border);
   border-top: 3px solid var(--border-strong);
@@ -3542,6 +3543,38 @@ pre {
   font: 600 var(--text-2xs) / 1 var(--font-mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.graph-node-model {
+  min-width: 0;
+  margin-top: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+  display: grid;
+  gap: 2px;
+}
+
+.graph-node-model small {
+  color: var(--text-faint);
+  font: 700 var(--text-2xs) / 1.2 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.graph-node-model b,
+.graph-node-model span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.graph-node-model b {
+  color: var(--text);
+  font-size: var(--text-xs);
+}
+
+.graph-node-model span {
+  color: var(--text-muted);
+  font: 500 var(--text-2xs) / 1.35 var(--font-mono);
 }
 
 .graph-node.completed {

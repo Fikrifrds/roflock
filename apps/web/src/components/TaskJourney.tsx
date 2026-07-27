@@ -27,7 +27,7 @@ function stageState(
 }
 
 export function TaskJourney({ task, runView }: { task: Task; runView?: GraphRunView }) {
-  const nodes = runView?.graph.nodes ?? [];
+  const nodes = runView?.graph?.nodes ?? [];
   return (
     <section className="task-journey" aria-label="Task lifecycle">
       <div className="journey-intro">

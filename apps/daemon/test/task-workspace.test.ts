@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   commitTaskWorkspace,
+  inspectTaskFileDiff,
   inspectTaskWorkspace,
   pushTaskWorkspace,
   stageTaskFiles,
@@ -73,5 +74,30 @@ describe('task workspace Git service', () => {
         encoding: 'utf8',
       }),
     ).toContain('refs/heads/roleflock/task-1');
+  });
+
+  it('returns only the selected staged or unstaged file diff', async () => {
+    const { root, worktree } = fixture();
+    writeFileSync(join(root, 'README.md'), '# RoleFlock\n\nGoverned changes.\n');
+    writeFileSync(join(root, 'NEW.txt'), 'A new file\n');
+
+    const tracked = await inspectTaskFileDiff(worktree, 'README.md', false);
+    expect(tracked.patch).toContain('+Governed changes.');
+    expect(tracked.patch).not.toContain('NEW.txt');
+    expect(tracked.added).toBe(2);
+
+    const untracked = await inspectTaskFileDiff(worktree, 'NEW.txt', false);
+    expect(untracked.patch).toContain('A new file');
+    expect(untracked.patch).not.toContain('README.md');
+
+    await stageTaskFiles(worktree, ['README.md']);
+    const staged = await inspectTaskFileDiff(worktree, 'README.md', true);
+    expect(staged.patch).toContain('+Governed changes.');
+    await expect(inspectTaskFileDiff(worktree, 'README.md', false)).rejects.toThrow(
+      'No unstaged changes',
+    );
+    await expect(inspectTaskFileDiff(worktree, '../outside.txt', false)).rejects.toThrow(
+      'not part of this task workspace',
+    );
   });
 });

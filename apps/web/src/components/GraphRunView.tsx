@@ -46,8 +46,8 @@ const KIND_MARKS: Record<string, string> = {
   evidence_aggregate: 'EV',
 };
 
-const NODE_WIDTH = 196;
-const NODE_HEIGHT = 128;
+const NODE_WIDTH = 210;
+const NODE_MIN_HEIGHT = 148;
 const COLUMN_GAP = 76;
 const ROW_GAP = 48;
 const CANVAS_PADDING_X = 36;
@@ -55,7 +55,36 @@ const CANVAS_PADDING_Y = 40;
 
 type GraphNode = GraphRunViewData['graph']['nodes'][number];
 type GraphEdge = GraphRunViewData['graph']['edges'][number];
-type NodePosition = { x: number; y: number; depth: number };
+type NodePosition = { x: number; y: number; depth: number; height: number };
+
+function nodeDescriptor(node: GraphNode) {
+  return [
+    KIND_LABELS[node.kind] ?? node.kind,
+    node.writer ? 'writer' : '',
+    node.required ? 'required gate' : '',
+    node.maxAttempts > 1 ? `up to ${node.maxAttempts} attempts` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+function wrappedLineCount(value: string, charactersPerLine = 27) {
+  return Math.max(1, Math.ceil(value.length / charactersPerLine));
+}
+
+function nodeHeight(node: GraphNode) {
+  let height = NODE_MIN_HEIGHT;
+  height += Math.max(0, wrappedLineCount(nodeDescriptor(node)) - 1) * 17;
+  if (node.primaryProviderDisplayName && node.primaryModelDisplayName) {
+    height += 24 + Math.max(0, wrappedLineCount(node.primaryModelDisplayName, 24) - 1) * 15;
+  }
+  if (node.role !== node.id) height += 20;
+  if (node.attempts > 1) height += 18;
+  if (node.dependsOn.length) {
+    height += wrappedLineCount(`after ${node.dependsOn.join(', ')}`) * 17;
+  }
+  return height;
+}
 
 function layoutGraph(nodes: GraphNode[], failureEdgeCount: number) {
   const byId = new Map(nodes.map((node) => [node.id, node]));
@@ -88,19 +117,29 @@ function layoutGraph(nodes: GraphNode[], failureEdgeCount: number) {
     columns.set(depth, [...(columns.get(depth) ?? []), node]);
   }
 
-  const maxRows = Math.max(1, ...[...columns.values()].map((column) => column.length));
-  const nodeAreaHeight = maxRows * NODE_HEIGHT + Math.max(0, maxRows - 1) * ROW_GAP;
+  const columnHeights = new Map(
+    [...columns].map(([depth, column]) => [
+      depth,
+      column.reduce((total, node) => total + nodeHeight(node), 0) +
+        Math.max(0, column.length - 1) * ROW_GAP,
+    ]),
+  );
+  const nodeAreaHeight = Math.max(NODE_MIN_HEIGHT, ...columnHeights.values());
   const positions = new Map<string, NodePosition>();
 
   for (const [depth, column] of columns) {
-    const columnHeight = column.length * NODE_HEIGHT + Math.max(0, column.length - 1) * ROW_GAP;
+    const columnHeight = columnHeights.get(depth) ?? NODE_MIN_HEIGHT;
     const offsetY = CANVAS_PADDING_Y + (nodeAreaHeight - columnHeight) / 2;
-    column.forEach((node, row) => {
+    let nextY = offsetY;
+    column.forEach((node) => {
+      const height = nodeHeight(node);
       positions.set(node.id, {
         x: CANVAS_PADDING_X + depth * (NODE_WIDTH + COLUMN_GAP),
-        y: offsetY + row * (NODE_HEIGHT + ROW_GAP),
+        y: nextY,
         depth,
+        height,
       });
+      nextY += height + ROW_GAP;
     });
   }
 
@@ -116,18 +155,18 @@ function layoutGraph(nodes: GraphNode[], failureEdgeCount: number) {
 
 function forwardPath(from: NodePosition, to: NodePosition) {
   const startX = from.x + NODE_WIDTH;
-  const startY = from.y + NODE_HEIGHT / 2;
+  const startY = from.y + from.height / 2;
   const endX = to.x;
-  const endY = to.y + NODE_HEIGHT / 2;
+  const endY = to.y + to.height / 2;
   const bend = Math.max(34, (endX - startX) * 0.46);
   return `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}`;
 }
 
 function returnPath(from: NodePosition, to: NodePosition, laneY: number) {
   const startX = from.x + NODE_WIDTH / 2;
-  const startY = from.y + NODE_HEIGHT;
+  const startY = from.y + from.height;
   const endX = to.x + NODE_WIDTH / 2;
-  const endY = to.y + NODE_HEIGHT;
+  const endY = to.y + to.height;
   return `M ${startX} ${startY} C ${startX} ${laneY}, ${endX} ${laneY}, ${endX} ${endY}`;
 }
 
@@ -314,6 +353,7 @@ export function GraphRunView({
                 style={{
                   left: graphLayout.positions.get(node.id)?.x ?? 0,
                   top: graphLayout.positions.get(node.id)?.y ?? 0,
+                  height: graphLayout.positions.get(node.id)?.height ?? NODE_MIN_HEIGHT,
                 }}
               >
                 <div className="graph-node-order" aria-hidden="true">
@@ -325,12 +365,14 @@ export function GraphRunView({
                     {node.state.replaceAll('_', ' ')}
                   </StatusPill>
                 </div>
-                <small>
-                  {KIND_LABELS[node.kind] ?? node.kind}
-                  {node.writer ? ' · writer' : ''}
-                  {node.required ? ' · required gate' : ''}
-                  {node.maxAttempts > 1 ? ` · up to ${node.maxAttempts} attempts` : ''}
-                </small>
+                <small>{nodeDescriptor(node)}</small>
+                {node.primaryProviderDisplayName && node.primaryModelDisplayName ? (
+                  <span className="graph-node-model">
+                    <small>Primary AI</small>
+                    <b>{node.primaryProviderDisplayName}</b>
+                    <span>{node.primaryModelDisplayName}</span>
+                  </span>
+                ) : null}
                 {node.role !== node.id ? (
                   <span className="graph-node-role">{node.role.replaceAll('_', ' ')}</span>
                 ) : null}

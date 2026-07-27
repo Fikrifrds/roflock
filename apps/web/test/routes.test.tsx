@@ -203,6 +203,8 @@ describe('Evidence', () => {
       expect(summary).toHaveTextContent('1 passed · 1 failed');
       expect(summary).toHaveTextContent('$0.0200');
     });
+    expect(screen.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Workflow' })).toHaveAttribute('href', '/tasks/t1');
   });
 });
 
@@ -235,6 +237,10 @@ describe('GraphRunView', () => {
               required: false,
               writer: true,
               maxAttempts: 2,
+              primaryProviderId: 'codex',
+              primaryProviderDisplayName: 'Codex CLI',
+              primaryModelId: 'gpt-5.6-sol',
+              primaryModelDisplayName: 'GPT-5.6 Codex',
               state: 'completed',
               outcome: 'success',
               startedAt: null,
@@ -249,6 +255,10 @@ describe('GraphRunView', () => {
               required: true,
               writer: false,
               maxAttempts: 1,
+              primaryProviderId: null,
+              primaryProviderDisplayName: null,
+              primaryModelId: null,
+              primaryModelDisplayName: null,
               state: 'running',
               outcome: null,
               startedAt: null,
@@ -265,7 +275,14 @@ describe('GraphRunView', () => {
     const nodes = await screen.findByRole('list', { name: 'Workflow graph nodes' });
     expect(within(nodes).getByText('writer')).toBeInTheDocument();
     expect(within(nodes).getByText(/Agent · writer · up to 2 attempts/)).toBeInTheDocument();
+    expect(within(nodes).getByText('Primary AI')).toBeInTheDocument();
+    expect(within(nodes).getByText('Codex CLI')).toBeInTheDocument();
+    expect(within(nodes).getByText('GPT-5.6 Codex')).toBeInTheDocument();
     expect(within(nodes).getByText(/Deterministic check · required gate/)).toBeInTheDocument();
+    const writerNode = within(nodes).getByText('writer').closest('li');
+    const testNode = within(nodes).getByText('test').closest('li');
+    expect(Number.parseFloat(writerNode?.style.height ?? '0')).toBeGreaterThan(148);
+    expect(Number.parseFloat(testNode?.style.height ?? '0')).toBeGreaterThan(148);
     expect(screen.getByLabelText('Visual workflow map')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Running the test step');
     const graphMap = screen.getByLabelText('Visual workflow map');
@@ -318,6 +335,14 @@ describe('WorkspaceChanges', () => {
         patch: '',
         stagedPatch: 'diff --git a/src/login.ts b/src/login.ts',
       },
+      '/api/tasks/t1/workspace/diff?path=src%2Flogin.ts&staged=true': {
+        path: 'src/login.ts',
+        staged: true,
+        patch: 'diff --git a/src/login.ts b/src/login.ts',
+        added: 4,
+        removed: 1,
+        binary: false,
+      },
     });
 
     renderApp(<WorkspaceChanges task={acceptedTask} />);
@@ -355,6 +380,14 @@ describe('WorkspaceChanges', () => {
         patch: '',
         stagedPatch: 'diff',
       },
+      '/api/tasks/t1/workspace/diff?path=src%2Flogin.ts&staged=true': {
+        path: 'src/login.ts',
+        staged: true,
+        patch: 'diff',
+        added: 4,
+        removed: 1,
+        binary: false,
+      },
     });
 
     renderApp(<WorkspaceChanges task={acceptedTask} />);
@@ -362,5 +395,69 @@ describe('WorkspaceChanges', () => {
     expect(await screen.findByText(/Agent holds the writer lease/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Commit staged changes' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Push roleflock/t1' })).toBeDisabled();
+  });
+
+  it('loads the diff for the file and stage selected in the changes list', async () => {
+    authenticated();
+    stubApi({
+      ...RUNTIME,
+      '/api/tasks/t1/workspace': {
+        available: true,
+        branchName: 'roleflock/t1',
+        baseCommit: 'base',
+        headCommit: 'abc123',
+        headSubject: 'Initial',
+        writerLeaseActive: false,
+        worktreeStatus: 'active',
+        remote: null,
+        ahead: 0,
+        behind: 0,
+        files: [
+          {
+            path: 'src/a.ts',
+            indexStatus: '',
+            worktreeStatus: 'M',
+            added: 1,
+            removed: 0,
+          },
+          {
+            path: 'src/b.ts',
+            indexStatus: '',
+            worktreeStatus: 'M',
+            added: 2,
+            removed: 1,
+          },
+        ],
+        patch: 'aggregate patch should never render',
+        stagedPatch: '',
+      },
+      '/api/tasks/t1/workspace/diff?path=src%2Fa.ts&staged=false': {
+        path: 'src/a.ts',
+        staged: false,
+        patch: 'diff --git a/src/a.ts b/src/a.ts\n+const a = true;',
+        added: 1,
+        removed: 0,
+        binary: false,
+      },
+      '/api/tasks/t1/workspace/diff?path=src%2Fb.ts&staged=false': {
+        path: 'src/b.ts',
+        staged: false,
+        patch: 'diff --git a/src/b.ts b/src/b.ts\n-const b = false;\n+const b = true;',
+        added: 2,
+        removed: 1,
+        binary: false,
+      },
+    });
+
+    renderApp(<WorkspaceChanges task={acceptedTask} />);
+    expect(await screen.findByText('+const a = true;', { exact: false })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /src\/b\.ts/ }));
+
+    expect(await screen.findByText('+const b = true;', { exact: false })).toBeInTheDocument();
+    expect(screen.queryByText('+const a = true;', { exact: false })).not.toBeInTheDocument();
+    const statistics = screen.getByLabelText('Selected file diff statistics');
+    expect(within(statistics).getByText('+2')).toBeInTheDocument();
+    expect(within(statistics).getByText('−1')).toBeInTheDocument();
   });
 });

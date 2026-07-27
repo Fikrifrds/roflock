@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { EvidenceSection } from '../components/EvidenceSection.js';
 import { Shell } from '../components/Shell.js';
-import { Empty, PageHeader, Section } from '../components/primitives.js';
+import { TaskJourney } from '../components/TaskJourney.js';
+import { TaskWorkspaceHeader } from '../components/TaskWorkspaceHeader.js';
+import { Empty, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { downloadJson, formatValue, parseJsonField } from '../lib/format.js';
-import type { EvidenceBundle, Task, Usage } from '../types.js';
+import type { EvidenceBundle, GraphRunView, Task, Usage } from '../types.js';
 
 export function Evidence() {
   const { id = '' } = useParams();
@@ -16,6 +18,11 @@ export function Evidence() {
   );
   const { data: usage } = useData<Usage>(['usage', id], `/api/usage/tasks/${id}`, Boolean(id));
   const { data: task } = useData<Task>(['task', id], `/api/tasks/${id}`, Boolean(id));
+  const { data: runView } = useData<GraphRunView>(
+    ['task-graph', id],
+    `/api/tasks/${id}/graph`,
+    Boolean(id),
+  );
   const [exportNote, setExportNote] = useState('');
 
   const exportJson = async (path: string, filename: string) => {
@@ -55,14 +62,23 @@ export function Evidence() {
   const added = typeof latestMetaObject.added === 'number' ? latestMetaObject.added : 0;
   const removed = typeof latestMetaObject.removed === 'number' ? latestMetaObject.removed : 0;
 
+  if (!task) {
+    return (
+      <Shell>
+        <Empty message="Loading task evidence…" />
+      </Shell>
+    );
+  }
+
   return (
     <Shell>
-      <PageHeader
-        eyebrow="Independent record"
+      <TaskWorkspaceHeader task={task} activeView="evidence" />
+      <TaskJourney task={task} runView={runView} />
+      <Section
         title="Evidence ledger"
         description="Tests, findings, repository changes, disclosures, and cost—kept separate from what the agent claims."
-      />
-      <Section title="Verification summary">
+        className="task-control-section"
+      >
         <div className="status-strip" aria-label="Verification summary">
           <div>
             <span>Task outcome</span>

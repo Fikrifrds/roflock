@@ -34,12 +34,31 @@ export type TaskWorkspaceSummary = {
   stagedPatch: string;
 };
 
+export type TaskFileDiff = {
+  path: string;
+  staged: boolean;
+  patch: string;
+  added: number;
+  removed: number;
+  binary: boolean;
+};
+
 async function git(worktree: string, args: string[]): Promise<string> {
   const result = await exec('git', ['-C', worktree, ...args], {
     encoding: 'utf8',
     maxBuffer: 8 * 1024 * 1024,
   });
   return result.stdout.trimEnd();
+}
+
+async function gitDiffAllowChanges(worktree: string, args: string[]): Promise<string> {
+  try {
+    return await git(worktree, args);
+  } catch (error) {
+    const result = error as { code?: number; stdout?: string | Buffer };
+    if (result.code === 1 && result.stdout !== undefined) return String(result.stdout).trimEnd();
+    throw error;
+  }
 }
 
 async function optionalGit(worktree: string, args: string[]): Promise<string | null> {
@@ -112,6 +131,46 @@ export async function inspectTaskWorkspace(
     files,
     patch,
     stagedPatch,
+  };
+}
+
+export async function inspectTaskFileDiff(
+  worktree: WorktreeRecord,
+  path: string,
+  staged: boolean,
+): Promise<TaskFileDiff> {
+  const summary = await inspectTaskWorkspace(worktree);
+  const file = summary.files.find((entry) => entry.path === path);
+  if (!file) throw new Error('File is not part of this task workspace change set.');
+
+  const hasRequestedChange = staged
+    ? Boolean(file.indexStatus && file.indexStatus !== '?')
+    : Boolean(file.worktreeStatus || file.indexStatus === '?');
+  if (!hasRequestedChange) {
+    throw new Error(`No ${staged ? 'staged' : 'unstaged'} changes for ${path}.`);
+  }
+
+  const untracked = !staged && file.indexStatus === '?';
+  const diffArgs = untracked
+    ? ['diff', '--no-index', '--no-ext-diff', '--', '/dev/null', path]
+    : ['diff', '--no-ext-diff', ...(staged ? ['--cached'] : []), '--', path];
+  const numstatArgs = untracked
+    ? ['diff', '--no-index', '--numstat', '--', '/dev/null', path]
+    : ['diff', ...(staged ? ['--cached'] : []), '--numstat', '--', path];
+  const [patch, numstat] = await Promise.all([
+    untracked ? gitDiffAllowChanges(worktree.path, diffArgs) : git(worktree.path, diffArgs),
+    untracked ? gitDiffAllowChanges(worktree.path, numstatArgs) : git(worktree.path, numstatArgs),
+  ]);
+  const [addedValue = '0', removedValue = '0'] = numstat.split('\t');
+  const binary = addedValue === '-' || removedValue === '-';
+
+  return {
+    path,
+    staged,
+    patch,
+    added: binary ? 0 : Number(addedValue) || 0,
+    removed: binary ? 0 : Number(removedValue) || 0,
+    binary,
   };
 }
 
