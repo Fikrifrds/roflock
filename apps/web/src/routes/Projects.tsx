@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Field } from '../components/Field.js';
 import { Shell } from '../components/Shell.js';
-import { Empty, Section } from '../components/primitives.js';
+import { Empty, PageHeader, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import type { Project } from '../types.js';
 
@@ -26,12 +26,18 @@ export function Projects() {
 
   return (
     <Shell>
-      <Section title="Projects">
-        <p className="lede">
-          Register a local Git repository. Tasks run inside an isolated worktree of that repo.
-        </p>
+      <PageHeader
+        eyebrow="Repositories"
+        title="Projects"
+        description="Register local Git repositories. Every task runs on its own isolated branch and worktree."
+      />
+      <Section
+        title="Add repository"
+        description="RoleFlock resolves and validates the path before creating any task workspace."
+        className="surface-section"
+      >
         <form
-          className="stack"
+          className="stack compact-form"
           onSubmit={async (event: FormEvent) => {
             event.preventDefault();
             setError('');
@@ -124,7 +130,12 @@ export function Projects() {
             </p>
           ) : null}
         </form>
+      </Section>
 
+      <Section
+        title="Registered projects"
+        description={`${projects.length} local repositor${projects.length === 1 ? 'y' : 'ies'} available to the flock`}
+      >
         {isLoading ? <Empty message="Loading projects…" /> : null}
         {!isLoading && projects.length === 0 ? (
           <Empty message="No projects yet. Add a repository above to create tasks." />

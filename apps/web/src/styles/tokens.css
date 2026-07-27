@@ -19,11 +19,14 @@
   --surface: #151e21;
   --surface-raised: #1a2427;
   --surface-hover: #1f2a2e;
+  --surface-overlay: #202b2e;
+  --surface-workbench: #0d1315;
 
   /* Hairlines. Borders are alpha-based so they hold up over any surface. */
   --border: #ffffff1c;
   --border-strong: #ffffff2e;
   --border-subtle: #ffffff12;
+  --border-interactive: #ffffff38;
 
   /* Text, strongest to faintest. `muted` is the floor for body-size text at
      AA on --surface; anything fainter is for uppercase micro-labels only. */
@@ -97,12 +100,13 @@
 
   /* Elevation. Dark themes read depth from a light rim plus a deep shadow;
      shadow alone just muddies. */
-  --shadow-popover:
-    0 1px 0 #ffffff14 inset,
-    0 16px 40px -12px #000000c0;
+  --shadow-popover: 0 1px 0 #ffffff14 inset, 0 16px 40px -12px #000000c0;
+  --shadow-card: 0 1px 0 #ffffff0d inset, 0 12px 32px -24px #000000cc;
+  --shadow-focus: 0 0 0 3px var(--accent-wash);
 
   /* Controls — one height everywhere so rows line up without per-case fixes. */
   --control-height: 44px;
+  --control-height-lg: 48px;
   --control-padding-x: var(--space-3);
 
   /* Motion */
@@ -115,4 +119,6 @@
   /* Layout */
   --measure: 68ch;
   --page-width: 1240px;
+  --page-gutter: clamp(22px, 3.4vw, 52px);
+  --panel-padding: clamp(20px, 2.2vw, 28px);
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { EvidenceSection } from '../components/EvidenceSection.js';
 import { Shell } from '../components/Shell.js';
-import { Empty, Section } from '../components/primitives.js';
+import { Empty, PageHeader, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { downloadJson, formatValue, parseJsonField } from '../lib/format.js';
 import type { EvidenceBundle, Task, Usage } from '../types.js';
@@ -57,7 +57,12 @@ export function Evidence() {
 
   return (
     <Shell>
-      <Section title="Evidence ledger">
+      <PageHeader
+        eyebrow="Independent record"
+        title="Evidence ledger"
+        description="Tests, findings, repository changes, disclosures, and cost—kept separate from what the agent claims."
+      />
+      <Section title="Verification summary">
         <div className="status-strip" aria-label="Verification summary">
           <div>
             <span>Task outcome</span>

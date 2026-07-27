@@ -7,6 +7,8 @@ import { Approvals } from '../src/routes/Approvals.js';
 import { Home } from '../src/routes/Home.js';
 import { NewTask } from '../src/routes/NewTask.js';
 import { Evidence } from '../src/routes/Evidence.js';
+import { WorkspaceChanges } from '../src/components/WorkspaceChanges.js';
+import type { Task } from '../src/types.js';
 import { renderApp, stubApi } from './render.js';
 
 const RUNTIME = { '/api/runtime/info': { csrf: 'csrf' } };
@@ -41,9 +43,11 @@ describe('Home', () => {
 
     renderApp(<Home />);
 
-    expect(await screen.findByText(/Daemon healthy on 127.0.0.1:4178/)).toBeInTheDocument();
-    expect(await screen.findByRole('link', { name: /1 approval waiting/ })).toBeInTheDocument();
-    expect(await screen.findByText('Fix login')).toBeInTheDocument();
+    expect(await screen.findByText(/Local daemon ready · 127.0.0.1:4178/)).toBeInTheDocument();
+    expect(
+      (await screen.findAllByRole('link', { name: /1 approval waiting/ })).length,
+    ).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Fix login')).length).toBeGreaterThan(0);
     // Actual and shadow are never summed into one number.
     expect(await screen.findByText('$0.1200 actual · $0.4000 shadow')).toBeInTheDocument();
   });
@@ -262,10 +266,101 @@ describe('GraphRunView', () => {
     expect(within(nodes).getByText('writer')).toBeInTheDocument();
     expect(within(nodes).getByText(/Agent · writer · up to 2 attempts/)).toBeInTheDocument();
     expect(within(nodes).getByText(/Deterministic check · required gate/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Visual workflow map')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Running the test step');
+    const graphMap = screen.getByLabelText('Visual workflow map');
+    expect(graphMap.querySelectorAll('path.graph-edge-path')).toHaveLength(2);
+    expect(graphMap.querySelector('.graph-return-edge text')).toHaveTextContent('on failure');
 
     // Only the failure edge is surfaced; the happy path is already the node order.
     const routes = screen.getByRole('list', { name: 'Failure routes' });
-    expect(within(routes).getByText(/test → writer/)).toBeInTheDocument();
-    expect(within(routes).queryByText(/writer → test/)).not.toBeInTheDocument();
+    expect(routes).toHaveTextContent(/test.*writer.*on failure/);
+    expect(routes).not.toHaveTextContent(/writer.*test/);
+  });
+});
+
+describe('WorkspaceChanges', () => {
+  const acceptedTask = {
+    id: 't1',
+    title: 'Fix login',
+    type: 'bug_fix',
+    state: 'accepted',
+    risk: 'medium',
+    brief: '',
+    maxAttempts: 3,
+    workflowGraphVersionId: 'bug_fix@1',
+  } satisfies Task;
+
+  it('keeps commit and push visibly tied to acceptance and branch state', async () => {
+    authenticated();
+    stubApi({
+      ...RUNTIME,
+      '/api/tasks/t1/workspace': {
+        available: true,
+        branchName: 'roleflock/t1',
+        baseCommit: 'base',
+        headCommit: 'abc123',
+        headSubject: 'Initial',
+        writerLeaseActive: false,
+        worktreeStatus: 'active',
+        remote: 'git@example.test:repo.git',
+        ahead: 1,
+        behind: 0,
+        files: [
+          {
+            path: 'src/login.ts',
+            indexStatus: 'M',
+            worktreeStatus: '',
+            added: 4,
+            removed: 1,
+          },
+        ],
+        patch: '',
+        stagedPatch: 'diff --git a/src/login.ts b/src/login.ts',
+      },
+    });
+
+    renderApp(<WorkspaceChanges task={acceptedTask} />);
+
+    expect(await screen.findByText('roleflock/t1')).toBeInTheDocument();
+    expect(screen.getByText('Result accepted')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Commit staged changes' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Push roleflock/t1' })).toBeEnabled();
+  });
+
+  it('blocks delivery while the agent owns the writer lease', async () => {
+    authenticated();
+    stubApi({
+      ...RUNTIME,
+      '/api/tasks/t1/workspace': {
+        available: true,
+        branchName: 'roleflock/t1',
+        baseCommit: 'base',
+        headCommit: 'abc123',
+        headSubject: 'Initial',
+        writerLeaseActive: true,
+        worktreeStatus: 'active',
+        remote: null,
+        ahead: 1,
+        behind: 0,
+        files: [
+          {
+            path: 'src/login.ts',
+            indexStatus: 'M',
+            worktreeStatus: '',
+            added: 4,
+            removed: 1,
+          },
+        ],
+        patch: '',
+        stagedPatch: 'diff',
+      },
+    });
+
+    renderApp(<WorkspaceChanges task={acceptedTask} />);
+
+    expect(await screen.findByText(/Agent holds the writer lease/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Commit staged changes' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Push roleflock/t1' })).toBeDisabled();
   });
 });

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Field } from '../components/Field.js';
 import { Select, type SelectOption } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
-import { Empty, Section, StatusPill } from '../components/primitives.js';
+import { Empty, PageHeader, Section, StatusPill } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import type { ProviderCatalogue, RoleCandidateView, RolesResponse } from '../types.js';
 
@@ -155,12 +155,15 @@ export function Roles() {
 
   return (
     <Shell>
-      <Section title="Roles">
-        <p className="lede">
-          Each role runs down its list in order. RoleFlock uses the first candidate that is
-          healthy and not out of quota, so put your preference on top and a fallback under it.
-        </p>
-
+      <PageHeader
+        eyebrow="Flock configuration"
+        title="Agent roles"
+        description="Order the provider and model candidates for each responsibility. RoleFlock uses the first healthy candidate and preserves explicit fallbacks."
+      />
+      <Section
+        title="Routing roster"
+        description="Planner, reviewer, writer, verifier, and supporting roles remain independently configurable."
+      >
         {error ? (
           <p className="error" role="alert">
             {error}

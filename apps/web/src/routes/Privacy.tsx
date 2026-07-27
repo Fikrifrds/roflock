@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Shell } from '../components/Shell.js';
-import { Section } from '../components/primitives.js';
+import { PageHeader, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { downloadJson } from '../lib/format.js';
 
@@ -26,11 +26,15 @@ export function Privacy() {
 
   return (
     <Shell>
-      <Section title="Privacy & local data">
-        <p className="lede">
-          Everything stays on this machine. Use backup/export when you need a copy; delete wipes
-          RoleFlock data only (not your git repos).
-        </p>
+      <PageHeader
+        eyebrow="Local-first control"
+        title="Privacy & local data"
+        description="RoleFlock operational data stays on this machine. Backups and exports are explicit; deleting RoleFlock data never deletes your Git repositories."
+      />
+      <Section
+        title="Data controls"
+        description="Review the local guarantees before exporting, backing up, or deleting data."
+      >
         <ul className="claim-list">
           {(privacy?.claims ?? []).map((claim) => (
             <li key={claim}>{claim}</li>

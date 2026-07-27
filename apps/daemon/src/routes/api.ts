@@ -14,6 +14,7 @@ import {
   QuotaSnapshotRepository,
   TaskRepository,
   UsageRepository,
+  WorktreeRepository,
   type KnowledgeState,
   type KnowledgeType,
   type RoleCandidateInput,
@@ -47,6 +48,13 @@ import { DocumentService, isDocumentAuthority, isDocumentKind } from '../service
 import { LocalSecretStore } from '../services/local-secret-store.js';
 import { checkForUpdates, getLocalVersion } from '../services/version-check.js';
 import { discoverVerificationCommand } from '../services/verification-command.js';
+import {
+  commitTaskWorkspace,
+  inspectTaskWorkspace,
+  pushTaskWorkspace,
+  stageTaskFiles,
+  unstageTaskFiles,
+} from '../services/task-workspace.js';
 
 export function registerApi(
   app: FastifyInstance,
@@ -68,6 +76,7 @@ export function registerApi(
     evidence = new EvidenceRepository(db),
     usage = new UsageRepository(db),
     providerConnections = new ProviderConnectionRepository(db),
+    worktrees = new WorktreeRepository(db),
     audit = new AuditRepository(db);
   app.get('/api/health', async () => ({
     ok: true,
@@ -484,6 +493,116 @@ export function registerApi(
   app.get('/api/tasks/:id', async (request, reply) => {
     const task = tasks.get((request.params as { id: string }).id);
     return task ?? reply.code(404).send({ error: 'Task not found' });
+  });
+  app.get('/api/tasks/:id/workspace', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    if (!tasks.get(taskId)) return reply.code(404).send({ error: 'Task not found' });
+    const worktree = worktrees.getByTask(taskId);
+    if (!worktree) return { available: false };
+    try {
+      return await inspectTaskWorkspace(worktree);
+    } catch (error) {
+      return reply.code(500).send({
+        error: error instanceof Error ? error.message : 'Unable to inspect task workspace',
+      });
+    }
+  });
+  app.post('/api/tasks/:id/workspace/stage', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    const worktree = worktrees.getByTask(taskId);
+    if (!worktree) return reply.code(404).send({ error: 'Task workspace not found' });
+    if (worktree.writerLeaseId)
+      return reply.code(409).send({ error: 'The agent is currently writing to this workspace.' });
+    const body = request.body as { paths?: string[]; staged?: boolean };
+    try {
+      if (body.staged === false) await unstageTaskFiles(worktree, body.paths ?? []);
+      else await stageTaskFiles(worktree, body.paths ?? []);
+      bus.publish('workspace.changed', { taskId });
+      return inspectTaskWorkspace(worktree);
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : 'Unable to update staging',
+      });
+    }
+  });
+  app.post('/api/tasks/:id/workspace/commit', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    const task = tasks.get(taskId);
+    if (!task) return reply.code(404).send({ error: 'Task not found' });
+    if (task.state !== 'accepted')
+      return reply.code(409).send({ error: 'Accept the verified result before committing.' });
+    const worktree = worktrees.getByTask(taskId);
+    if (!worktree) return reply.code(404).send({ error: 'Task workspace not found' });
+    if (worktree.writerLeaseId)
+      return reply.code(409).send({ error: 'The agent is currently writing to this workspace.' });
+    const message = (request.body as { message?: string }).message?.trim();
+    if (!message) return reply.code(400).send({ error: 'Commit message is required' });
+    try {
+      const summary = await inspectTaskWorkspace(worktree);
+      if (
+        !summary.files.length ||
+        summary.files.some((file) => file.worktreeStatus || file.indexStatus === '?')
+      ) {
+        return reply
+          .code(409)
+          .send({ error: 'Stage every accepted change before creating the verified commit.' });
+      }
+      const result = await commitTaskWorkspace(worktree, message);
+      audit.append({
+        id: randomUUID(),
+        actor: 'local-user',
+        action: 'workspace.committed',
+        targetType: 'task',
+        targetId: taskId,
+        details: { commit: result.commit, branchName: worktree.branchName },
+        createdAt: now(),
+      });
+      bus.publish('workspace.committed', { taskId, ...result });
+      return reply.code(201).send(result);
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : 'Unable to commit workspace',
+      });
+    }
+  });
+  app.post('/api/tasks/:id/workspace/push', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    const task = tasks.get(taskId);
+    if (!task) return reply.code(404).send({ error: 'Task not found' });
+    if (task.state !== 'accepted')
+      return reply.code(409).send({ error: 'Accept the verified result before pushing.' });
+    const worktree = worktrees.getByTask(taskId);
+    if (!worktree) return reply.code(404).send({ error: 'Task workspace not found' });
+    if (worktree.writerLeaseId)
+      return reply.code(409).send({ error: 'The agent is currently writing to this workspace.' });
+    const confirmation = (request.body as { confirmBranch?: string }).confirmBranch;
+    if (confirmation !== worktree.branchName)
+      return reply.code(400).send({ error: 'Confirm the exact task branch before pushing.' });
+    try {
+      const summary = await inspectTaskWorkspace(worktree);
+      if (summary.files.length)
+        return reply.code(409).send({
+          error: 'Commit the complete accepted change before pushing this task branch.',
+        });
+      if (summary.ahead < 1)
+        return reply.code(409).send({ error: 'There is no new task commit to push.' });
+      const result = await pushTaskWorkspace(worktree);
+      audit.append({
+        id: randomUUID(),
+        actor: 'local-user',
+        action: 'workspace.pushed',
+        targetType: 'task',
+        targetId: taskId,
+        details: result,
+        createdAt: now(),
+      });
+      bus.publish('workspace.pushed', { taskId, ...result });
+      return result;
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : 'Unable to push workspace',
+      });
+    }
   });
   app.get('/api/tasks/:id/approvals', async (request) =>
     approvals.listPendingByTask((request.params as { id: string }).id),

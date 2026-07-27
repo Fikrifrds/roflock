@@ -39,7 +39,9 @@ export function isTerminalState(state: string): boolean {
  * truth — otherwise an accepted task keeps claiming it is waiting for approval.
  */
 export function formatPhase(phase: string | undefined, state: string): string {
-  if (!phase || isTerminalState(state)) return formatTaskState(state);
+  if (!phase || isTerminalState(state) || state === 'paused' || state === 'stopping') {
+    return formatTaskState(state);
+  }
   const labels: Record<string, string> = {
     reasoning: 'Thinking',
     writing: 'Writing changes',

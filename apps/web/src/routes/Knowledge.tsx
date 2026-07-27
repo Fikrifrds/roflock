@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Field } from '../components/Field.js';
 import { Select, type SelectOption } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
-import { Empty, Section } from '../components/primitives.js';
+import { Empty, PageHeader, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { KNOWLEDGE_STATES, KNOWLEDGE_TYPES, withAnyOption } from '../lib/choices.js';
 import type { KnowledgeItem, Project } from '../types.js';
@@ -44,13 +44,18 @@ export function Knowledge() {
 
   return (
     <Shell>
-      <Section title="Knowledge">
-        <p className="lede">
-          Notes that can be included in agent context when marked published. Drafts stay as
-          candidates until you promote them.
-        </p>
+      <PageHeader
+        eyebrow="Curated context"
+        title="Knowledge"
+        description="Manage the conventions and decisions RoleFlock may include in agent context. Candidate notes remain private until published."
+      />
+      <Section
+        title="Add knowledge"
+        description="Published entries can inform future planning and review."
+        className="surface-section"
+      >
         <form
-          className="stack"
+          className="stack compact-form"
           onSubmit={async (event: FormEvent) => {
             event.preventDefault();
             setError('');

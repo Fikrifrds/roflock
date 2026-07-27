@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Shell } from '../components/Shell.js';
 import { TaskCard } from '../components/TaskCard.js';
-import { Empty, Section } from '../components/primitives.js';
+import { Empty, Metric, PageHeader, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { formatTaskState, formatUsage } from '../lib/format.js';
 import type { Approval, Task } from '../types.js';
@@ -26,81 +26,157 @@ export function Home() {
     refetchInterval: 2000,
   });
 
-  const stateCounts = tasks.reduce<Record<string, number>>((counts, task) => {
-    counts[task.state] = (counts[task.state] ?? 0) + 1;
-    return counts;
-  }, {});
   const approvalLabel = `${approvals.length} approval${approvals.length === 1 ? '' : 's'}`;
+  const activeTasks = tasks.filter((task) =>
+    ['running', 'stopping', 'paused'].includes(task.state),
+  );
+  const needsYou = tasks.filter(
+    (task) =>
+      ['awaiting_confirmation', 'awaiting_acceptance', 'failed'].includes(task.state) ||
+      approvals.some((approval) => approval.taskId === task.id),
+  );
+  const verifiedTasks = tasks.filter((task) => task.state === 'accepted');
+  const decisionCount = Math.max(needsYou.length, approvals.length);
 
   return (
     <Shell>
-      <section className="hero">
-        <p>LOCAL-FIRST AGENT CONTROL</p>
-        <h1>
-          Build with a flock,
-          <br />
-          keep the steering wheel.
-        </h1>
-        <div className="health" role="status" aria-live="polite">
-          {health?.ok
-            ? `Daemon healthy on ${health.host ?? '127.0.0.1'}:${health.port ?? 4178}`
-            : 'Checking local daemon…'}
-        </div>
-        <div className="hero-actions">
-          <Link className="buttonish" to="/tasks/new">
-            New task
-          </Link>
-          <Link className="quiet buttonish" to="/projects">
-            Projects
-          </Link>
-          {approvals.length ? (
-            <Link className="quiet buttonish" to="/approvals">
-              {approvalLabel} waiting
+      <PageHeader
+        eyebrow="Command center"
+        title="Your flock, under control."
+        description="Direct concurrent coding work, resolve decisions, and ship only what has been independently verified."
+        actions={
+          <>
+            {approvals.length ? (
+              <Link className="quiet buttonish" to="/approvals">
+                {approvalLabel} waiting
+              </Link>
+            ) : null}
+            <Link className="buttonish" to="/tasks/new">
+              <span aria-hidden="true">＋</span> New task
             </Link>
-          ) : null}
+          </>
+        }
+      >
+        <div className="system-line" role="status" aria-live="polite">
+          <span className={health?.ok ? 'system-dot online' : 'system-dot'} />
+          {health?.ok
+            ? `Local daemon ready · ${health.host ?? '127.0.0.1'}:${health.port ?? 4178}`
+            : 'Connecting to local daemon…'}
         </div>
-      </section>
+      </PageHeader>
 
-      <div className="status-strip" aria-label="Flock status">
-        <div>
-          <span>Daemon</span>
-          <b>{health?.ok ? 'Healthy' : 'Checking'}</b>
-        </div>
-        <div>
-          <span>Needs you</span>
-          <b>{approvals.length ? approvalLabel : 'Nothing pending'}</b>
-        </div>
-        <div>
-          <span>Tasks</span>
-          <b>
-            {tasks.length
-              ? `${tasks.length} total · ${Object.entries(stateCounts)
-                  .map(([state, count]) => `${count} ${formatTaskState(state).toLowerCase()}`)
-                  .slice(0, 3)
-                  .join(', ')}`
-              : 'None yet'}
-          </b>
-        </div>
-        {usage ? (
-          <div>
-            <span>Local usage</span>
-            <b>{formatUsage(usage)}</b>
-          </div>
-        ) : null}
+      <div className="metric-grid" aria-label="Workspace overview">
+        <Metric
+          label="Needs you"
+          value={decisionCount}
+          detail={approvals.length ? approvalLabel : 'No decisions waiting'}
+          tone={decisionCount ? 'warn' : 'ok'}
+        />
+        <Metric
+          label="Active work"
+          value={activeTasks.length}
+          detail={activeTasks.length ? 'Agents executing now' : 'Flock is idle'}
+          tone={activeTasks.length ? 'info' : 'neutral'}
+        />
+        <Metric
+          label="Accepted"
+          value={verifiedTasks.length}
+          detail="Verified results accepted"
+          tone="ok"
+        />
+        <Metric
+          label="Local usage"
+          value={usage ? formatUsage(usage) : '—'}
+          detail="Actual and shadow cost stay separate"
+        />
       </div>
 
-      <Section title="Recent tasks">
+      <section className="control-grid">
+        <article className="attention-panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Priority queue</p>
+              <h2>{decisionCount ? 'Your decisions unblock the flock' : 'Nothing needs you'}</h2>
+            </div>
+            {decisionCount ? <span className="attention-count">{decisionCount}</span> : null}
+          </div>
+          {decisionCount ? (
+            <div className="attention-list">
+              {needsYou.slice(0, 4).map((task) => (
+                <Link key={task.id} to={`/tasks/${task.id}`} className="attention-item">
+                  <span className="attention-icon" aria-hidden="true">
+                    !
+                  </span>
+                  <span>
+                    <strong>{task.title}</strong>
+                    <small>{formatTaskState(task.state)}</small>
+                  </span>
+                  <span aria-hidden="true">→</span>
+                </Link>
+              ))}
+              {!needsYou.length && approvals.length ? (
+                <Link to="/approvals" className="attention-item">
+                  <span className="attention-icon" aria-hidden="true">
+                    !
+                  </span>
+                  <span>
+                    <strong>{approvalLabel} waiting for review</strong>
+                    <small>Open the approval inbox</small>
+                  </span>
+                  <span aria-hidden="true">→</span>
+                </Link>
+              ) : null}
+            </div>
+          ) : (
+            <div className="calm-state">
+              <span aria-hidden="true">✓</span>
+              <p>Approvals, acceptance reviews, and failed verification will appear here.</p>
+            </div>
+          )}
+        </article>
+
+        <article className="delivery-panel">
+          <p className="eyebrow">RoleFlock assurance</p>
+          <h2>Every change follows a visible path</h2>
+          <ol className="delivery-path">
+            {['Plan', 'Approve', 'Implement', 'Test', 'Verify', 'Accept'].map((step, index) => (
+              <li key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
+              </li>
+            ))}
+          </ol>
+          <p className="panel-note">
+            Agent output is never treated as verified evidence. Tests, verifier findings, and your
+            acceptance remain distinct.
+          </p>
+        </article>
+      </section>
+
+      <Section
+        title="Recent work"
+        description={`${tasks.length} task${tasks.length === 1 ? '' : 's'} across your registered projects`}
+        actions={
+          <Link className="text-link" to="/projects">
+            Manage projects
+          </Link>
+        }
+      >
         {tasks.length ? (
-          tasks.map((task) => <TaskCard key={task.id} task={task} />)
+          <div className="task-list">
+            {tasks.slice(0, 8).map((task) => (
+              <TaskCard key={task.id} task={task} />
+            ))}
+          </div>
         ) : (
           <div className="empty-cta">
-            <Empty message="No tasks yet. Register a project, then create a Verified Fix task." />
+            <Empty message="No tasks yet. Register a project, then create your first governed task." />
             <div className="actions">
-              <Link className="buttonish" to="/projects">
+              <Link className="quiet buttonish" to="/projects">
                 Add a project
               </Link>
-              <Link className="quiet buttonish" to="/tasks/new">
-                Create a task
+              <Link className="buttonish" to="/tasks/new">
+                Create task
               </Link>
             </div>
           </div>

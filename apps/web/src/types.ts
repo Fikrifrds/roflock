@@ -20,6 +20,7 @@ export type DisclosureGrant = {
 
 export type Task = {
   id: string;
+  projectId?: string;
   title: string;
   type: string;
   state: string;
@@ -31,6 +32,8 @@ export type Task = {
   expectedBehaviour?: string;
   actualBehaviour?: string;
   verificationCommand?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type Project = {
@@ -196,6 +199,30 @@ export type GraphRunView = {
     }>;
   };
 };
+
+export type TaskWorkspace =
+  | { available: false }
+  | {
+      available: true;
+      branchName: string;
+      baseCommit: string;
+      headCommit: string;
+      headSubject: string;
+      writerLeaseActive: boolean;
+      worktreeStatus: string;
+      remote: string | null;
+      ahead: number;
+      behind: number;
+      files: Array<{
+        path: string;
+        indexStatus: string;
+        worktreeStatus: string;
+        added: number;
+        removed: number;
+      }>;
+      patch: string;
+      stagedPatch: string;
+    };
 
 export type RoleCandidateView = {
   providerId: string;

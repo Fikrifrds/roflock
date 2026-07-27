@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Shell } from '../components/Shell.js';
-import { Empty, Section } from '../components/primitives.js';
+import { Empty, PageHeader, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import type { Approval } from '../types.js';
 
@@ -67,8 +67,19 @@ export function Approvals() {
 
   return (
     <Shell>
-      <Section title="Approvals">
-        <p className="lede">Decisions waiting before a task can continue.</p>
+      <PageHeader
+        eyebrow="Human authority"
+        title="Approval inbox"
+        description="Review the exact action, affected task, and risk before allowing the workflow to continue."
+      />
+      <Section
+        title={
+          data.length
+            ? `${data.length} decision${data.length === 1 ? '' : 's'} waiting`
+            : 'All clear'
+        }
+        description="Approvals are persisted and revalidated before execution resumes."
+      >
         {data.length ? (
           data.map((approval) => {
             const sameFingerprint = fingerprintCounts[approval.fingerprint] ?? 1;

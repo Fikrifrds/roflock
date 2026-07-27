@@ -4,7 +4,7 @@ import { Field } from '../components/Field.js';
 import { ProviderModels } from '../components/ProviderModels.js';
 import { Select } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
-import { Empty, Section, StatusPill } from '../components/primitives.js';
+import { Empty, PageHeader, Section, StatusPill } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { providerStatusLabel, providerTone } from '../lib/format.js';
 import type { DisclosureGrant, Project, Provider } from '../types.js';
@@ -83,11 +83,15 @@ export function Providers() {
 
   return (
     <Shell>
-      <Section title="Providers">
-        <p className="lede">
-          Connect the CLIs RoleFlock will use. Sign in here when asked, then open vendor usage for
-          plan limits.
-        </p>
+      <PageHeader
+        eyebrow="Model connections"
+        title="Providers"
+        description="Connect the local CLIs and model endpoints the flock can route to. Authentication remains owned by each provider."
+      />
+      <Section
+        title="Available providers"
+        description="Health, account state, capabilities, and local usage are checked independently."
+      >
         {providersLoading ? (
           <Empty message="Loading providers…" />
         ) : visible.length ? (

@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { UnauthorizedError, type RuntimeInfo } from '../lib/api.js';
 import { api, queryClient } from '../lib/client.js';
+import { TaskInbox } from './TaskInbox.js';
 
 type Connection = 'connecting' | 'live' | 'unauthorized' | 'error';
 
@@ -69,45 +70,71 @@ export function Shell({ children }: { children: ReactNode }) {
   if (connection === 'unauthorized') return <Unauthorized />;
 
   return (
-    <>
+    <div className="app-shell">
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <header>
-        <Link className="wordmark" to="/">
-          ROLE<span>FLOCK</span>
+      <aside className="activity-rail">
+        <Link className="rail-mark" to="/" aria-label="RoleFlock home">
+          RF
         </Link>
         <nav aria-label="Primary">
-          <NavLink to="/" end>
-            Home
+          <NavLink to="/" end aria-label="Task inbox" title="Task inbox">
+            <span aria-hidden="true">▤</span>
           </NavLink>
-          <NavLink to="/projects">Projects</NavLink>
-          <NavLink to="/tasks/new">New task</NavLink>
-          <NavLink to="/approvals">Approvals</NavLink>
-          <NavLink to="/providers">Providers</NavLink>
-          <NavLink to="/roles">Roles</NavLink>
-          <NavLink to="/knowledge" className="nav-secondary">
-            Knowledge
+          <NavLink to="/projects" aria-label="Projects" title="Projects">
+            <span aria-hidden="true">◇</span>
           </NavLink>
-          <NavLink to="/privacy" className="nav-secondary">
-            Privacy
+          <NavLink to="/tasks/new" aria-label="New task" title="New task">
+            <span aria-hidden="true">＋</span>
+          </NavLink>
+          <NavLink to="/approvals" aria-label="Approvals" title="Approvals">
+            <span aria-hidden="true">✓</span>
+          </NavLink>
+          <NavLink to="/knowledge" aria-label="Knowledge" title="Knowledge">
+            <span aria-hidden="true">◎</span>
           </NavLink>
         </nav>
-        <i
-          className={connection === 'live' ? 'live' : connection === 'error' ? 'offline' : ''}
-          role="status"
-          aria-live="polite"
-        >
-          {CONNECTION_LABELS[connection]}
-        </i>
-      </header>
-      {runtime?.forcedProvider === 'fake' ? (
-        <aside className="simulation-banner" role="alert">
-          <strong>Simulation mode.</strong> Providers, code changes, and tests are scripted; results
-          are not production verification.
-        </aside>
-      ) : null}
-      <main id="main">{children}</main>
-    </>
+        <nav className="rail-bottom" aria-label="Configuration">
+          <NavLink to="/roles" aria-label="Agent roles" title="Agent roles">
+            <span aria-hidden="true">⌘</span>
+          </NavLink>
+          <NavLink to="/providers" aria-label="Providers" title="Providers">
+            <span aria-hidden="true">⌁</span>
+          </NavLink>
+          <NavLink to="/privacy" aria-label="Settings and privacy" title="Settings and privacy">
+            <span aria-hidden="true">⚙</span>
+          </NavLink>
+        </nav>
+      </aside>
+      <TaskInbox />
+      <div className="workbench">
+        <header className="workbench-bar">
+          <Link className="wordmark" to="/">
+            ROLE<span>FLOCK</span>
+          </Link>
+          <div className="workbench-principle">
+            <span className="principle-dot" />
+            Governed agent workspace
+          </div>
+          <i
+            className={connection === 'live' ? 'live' : connection === 'error' ? 'offline' : ''}
+            role="status"
+            aria-live="polite"
+          >
+            {CONNECTION_LABELS[connection]}
+          </i>
+        </header>
+        {runtime?.forcedProvider === 'fake' ? (
+          <aside className="simulation-banner" role="alert">
+            <strong>Simulation mode.</strong> Providers, code changes, and tests are scripted;
+            results are not production verification.
+          </aside>
+        ) : null}
+        <main id="main" className="app-main">
+          {children}
+        </main>
+      </div>
+    </div>
   );
 }
