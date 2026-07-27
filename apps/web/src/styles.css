@@ -3779,13 +3779,57 @@ pre {
   margin: 0;
 }
 
-.provider-usage span {
+.provider-usage > p > span {
   color: var(--text-faint);
   margin-right: var(--space-2);
   font-size: var(--text-2xs);
   font-weight: 700;
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
+}
+
+.provider-usage > small {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.provider-model-usage {
+  list-style: none;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.provider-model-usage li {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px var(--space-3);
+}
+
+.provider-model-usage code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.provider-model-usage li > span {
+  color: var(--text-muted);
+  font-weight: 650;
+}
+
+.provider-model-usage li > small {
+  grid-column: 1 / -1;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
 }
 
 .provider-details {

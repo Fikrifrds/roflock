@@ -4,7 +4,7 @@ import { Shell } from '../components/Shell.js';
 import { TaskCard } from '../components/TaskCard.js';
 import { Empty, Metric, PageHeader, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
-import { formatTaskState, formatUsage } from '../lib/format.js';
+import { formatTaskState, formatTokenCount, formatUsage } from '../lib/format.js';
 import type { Approval, Task } from '../types.js';
 
 export function Home() {
@@ -87,7 +87,13 @@ export function Home() {
         <Metric
           label="Local usage"
           value={usage ? formatUsage(usage) : '—'}
-          detail="Actual and shadow cost stay separate"
+          detail={
+            usage
+              ? `${formatTokenCount(usage.inputTokens)} input · ${formatTokenCount(
+                  usage.outputTokens,
+                )} output`
+              : 'Measured tokens across local runs'
+          }
         />
       </div>
 

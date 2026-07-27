@@ -6,7 +6,7 @@ import { Select } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
 import { Empty, PageHeader, Section, StatusPill } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
-import { providerStatusLabel, providerTone } from '../lib/format.js';
+import { formatTokenCount, providerStatusLabel, providerTone } from '../lib/format.js';
 import type { DisclosureGrant, Project, Provider } from '../types.js';
 
 export function Providers() {
@@ -166,11 +166,37 @@ export function Providers() {
                   {provider.localUsage ? (
                     <div className="provider-usage">
                       <p>
-                        <span>Local meter</span>
-                        {provider.localUsage.entryCount} calls ·{' '}
-                        {provider.localUsage.inputTokens + provider.localUsage.outputTokens} tokens
-                        · ${provider.localUsage.actualCostUsd.toFixed(4)}
+                        <span>Local tokens</span>
+                        <b>
+                          {formatTokenCount(
+                            provider.localUsage.inputTokens + provider.localUsage.outputTokens,
+                          )}
+                        </b>{' '}
+                        · {provider.localUsage.entryCount} calls
                       </p>
+                      <small>
+                        {formatTokenCount(provider.localUsage.inputTokens)} input ·{' '}
+                        {formatTokenCount(provider.localUsage.outputTokens)} output
+                      </small>
+                      {expanded[provider.id] && provider.localUsage.models.length ? (
+                        <ul
+                          className="provider-model-usage"
+                          aria-label={`${provider.displayName} token usage by model`}
+                        >
+                          {provider.localUsage.models.map((model) => (
+                            <li key={model.modelId}>
+                              <code>{model.modelId}</code>
+                              <span>
+                                {formatTokenCount(model.inputTokens + model.outputTokens)} tokens
+                              </span>
+                              <small>
+                                {formatTokenCount(model.inputTokens)} in ·{' '}
+                                {formatTokenCount(model.outputTokens)} out
+                              </small>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </div>
                   ) : null}
                   {authNote[provider.id] ? <p className="hint">{authNote[provider.id]}</p> : null}

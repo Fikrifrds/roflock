@@ -91,11 +91,19 @@ export function parseJsonField(
   }
 }
 
-/** Actual and shadow are always shown apart — they are never one expected bill. */
+export function formatTokenCount(value: unknown): string {
+  const count = Math.max(0, Number(value) || 0);
+  return new Intl.NumberFormat('en', {
+    notation: count >= 10_000 ? 'compact' : 'standard',
+    maximumFractionDigits: count >= 10_000 ? 1 : 3,
+  }).format(count);
+}
+
+/** Local usage is a measured token count, not an inferred dollar bill. */
 export function formatUsage(usage: Record<string, unknown>): string {
-  const actual = Number(usage.actualCostUsd ?? usage.actual_cost_usd ?? 0);
-  const shadow = Number(usage.shadowCostUsd ?? usage.shadow_cost_usd ?? 0);
-  return `$${actual.toFixed(4)} actual · $${shadow.toFixed(4)} shadow`;
+  const input = Number(usage.inputTokens ?? usage.input_tokens ?? 0);
+  const output = Number(usage.outputTokens ?? usage.output_tokens ?? 0);
+  return `${formatTokenCount(input + output)} tokens`;
 }
 
 export function downloadJson(payload: unknown, filename: string): void {

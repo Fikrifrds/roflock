@@ -280,7 +280,7 @@ describe('daemon boundary', () => {
       localUsage: { note: string };
     };
     expect(body.account.providerId).toBe('claude');
-    expect(body.localUsage.note).toMatch(/local meter/i);
+    expect(body.localUsage.note).toMatch(/local token meter/i);
 
     const listed = await app.inject({ method: 'GET', url: '/api/providers', headers });
     expect(
@@ -307,7 +307,7 @@ describe('daemon boundary', () => {
     expect(intents.statusCode).toBe(200);
     expect((intents.json() as Array<{ id: string }>).some((i) => i.id === 'bug_fix')).toBe(true);
   });
-  it('exposes local usage with separated actual and shadow costs', async () => {
+  it('exposes local token usage grouped by provider and model', async () => {
     const { app } = await server();
     const headers = {
       'x-roleflock-token': 'test-token',
@@ -317,14 +317,18 @@ describe('daemon boundary', () => {
     expect(summary.statusCode).toBe(200);
     const body = summary.json() as {
       scope: string;
-      actualCostUsd: number;
-      shadowCostUsd: number;
+      inputTokens: number;
+      outputTokens: number;
+      byProviderModel: unknown[];
       note: string;
     };
     expect(body.scope).toBe('local-daemon');
-    expect(body.note).toMatch(/not provider account-wide/i);
-    expect(typeof body.actualCostUsd).toBe('number');
-    expect(typeof body.shadowCostUsd).toBe('number');
+    expect(body.note).toMatch(/provider and model/i);
+    expect(typeof body.inputTokens).toBe('number');
+    expect(typeof body.outputTokens).toBe('number');
+    expect(Array.isArray(body.byProviderModel)).toBe(true);
+    expect(summary.body).not.toContain('actualCostUsd');
+    expect(summary.body).not.toContain('shadowCostUsd');
 
     const prices = await app.inject({ method: 'GET', url: '/api/price-cards', headers });
     expect(prices.statusCode).toBe(200);

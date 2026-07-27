@@ -29,8 +29,13 @@ export interface RegisteredProvider {
     entryCount: number;
     inputTokens: number;
     outputTokens: number;
-    actualCostUsd: number;
-    shadowCostUsd: number;
+    models: Array<{
+      providerConnectionId: string;
+      modelId: string;
+      inputTokens: number;
+      outputTokens: number;
+      entryCount: number;
+    }>;
     note: string;
   };
 }
@@ -72,9 +77,7 @@ const connectionTypes: Record<string, RegisteredProvider['connectionType']> = {
  * into a scripted one.
  */
 function fakeProviderEnabled(): boolean {
-  return (
-    process.env.ROLEFLOCK_FORCE_FAKE === '1' || process.env.ROLEFLOCK_INCLUDE_FAKE === '1'
-  );
+  return process.env.ROLEFLOCK_FORCE_FAKE === '1' || process.env.ROLEFLOCK_INCLUDE_FAKE === '1';
 }
 
 function mergeAccountIntoHealth(

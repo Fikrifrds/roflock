@@ -113,8 +113,13 @@ export type Provider = {
     entryCount: number;
     inputTokens: number;
     outputTokens: number;
-    actualCostUsd: number;
-    shadowCostUsd: number;
+    models: Array<{
+      providerConnectionId: string;
+      modelId: string;
+      inputTokens: number;
+      outputTokens: number;
+      entryCount: number;
+    }>;
     note: string;
   };
 };

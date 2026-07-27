@@ -14,10 +14,21 @@ export interface UsageEntry {
   createdAt: string;
 }
 
+export interface ProviderModelUsage {
+  providerConnectionId: string;
+  modelId: string;
+  inputTokens: number;
+  outputTokens: number;
+  entryCount: number;
+}
+
 export class UsageRepository {
   constructor(private readonly db: SqliteDb) {}
 
-  append(entry: UsageEntry): UsageEntry {
+  append(entry: UsageEntry & { providerConnectionId: string; modelId: string }): UsageEntry {
+    if (!entry.providerConnectionId.trim() || !entry.modelId.trim()) {
+      throw new Error('Usage entries require both providerConnectionId and modelId.');
+    }
     this.db
       .prepare(
         `INSERT INTO usage_ledger_entries
@@ -124,5 +135,32 @@ export class UsageRepository {
       outputTokens: row.outputTokens,
       entryCount: row.entryCount,
     };
+  }
+
+  summarizeByProviderAndModel(providerConnectionId?: string): ProviderModelUsage[] {
+    const rows = this.db
+      .prepare(
+        `SELECT provider_connection_id AS providerConnectionId,
+                model_id AS modelId,
+                COALESCE(SUM(input_tokens), 0) AS inputTokens,
+                COALESCE(SUM(output_tokens), 0) AS outputTokens,
+                COUNT(*) AS entryCount
+         FROM usage_ledger_entries
+         WHERE provider_connection_id IS NOT NULL
+           AND model_id IS NOT NULL
+           ${providerConnectionId ? 'AND provider_connection_id = ?' : ''}
+         GROUP BY provider_connection_id, model_id
+         ORDER BY (COALESCE(SUM(input_tokens), 0) + COALESCE(SUM(output_tokens), 0)) DESC,
+                  provider_connection_id ASC,
+                  model_id ASC`,
+      )
+      .all(...(providerConnectionId ? [providerConnectionId] : [])) as ProviderModelUsage[];
+    return rows.map((row) => ({
+      providerConnectionId: String(row.providerConnectionId),
+      modelId: String(row.modelId),
+      inputTokens: Number(row.inputTokens),
+      outputTokens: Number(row.outputTokens),
+      entryCount: Number(row.entryCount),
+    }));
   }
 }

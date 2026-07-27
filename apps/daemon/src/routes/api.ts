@@ -1012,8 +1012,11 @@ export function registerApi(
       return {
         ...provider,
         localUsage: {
-          ...summary,
-          note: 'RoleFlock local meter for this provider — not the vendor billing dashboard.',
+          entryCount: summary.entryCount,
+          inputTokens: summary.inputTokens,
+          outputTokens: summary.outputTokens,
+          models: usage.summarizeByProviderAndModel(provider.id),
+          note: 'RoleFlock local token meter, attributed to this provider and model.',
         },
       };
     });
@@ -1104,8 +1107,11 @@ export function registerApi(
       return {
         account,
         localUsage: {
-          ...summary,
-          note: 'RoleFlock local meter for this provider — not the vendor billing dashboard.',
+          entryCount: summary.entryCount,
+          inputTokens: summary.inputTokens,
+          outputTokens: summary.outputTokens,
+          models: usage.summarizeByProviderAndModel(id),
+          note: 'RoleFlock local token meter, attributed to this provider and model.',
         },
       };
     } catch {
@@ -1156,9 +1162,7 @@ export function registerApi(
         `SELECT COUNT(DISTINCT task_id) AS taskCount,
               COUNT(*) AS entryCount,
               COALESCE(SUM(input_tokens), 0) AS inputTokens,
-              COALESCE(SUM(output_tokens), 0) AS outputTokens,
-              COALESCE(SUM(actual_cost_usd), 0) AS actualCostUsd,
-              COALESCE(SUM(shadow_cost_usd), 0) AS shadowCostUsd
+              COALESCE(SUM(output_tokens), 0) AS outputTokens
        FROM usage_ledger_entries`,
       )
       .get() as {
@@ -1166,13 +1170,12 @@ export function registerApi(
       entryCount: number;
       inputTokens: number;
       outputTokens: number;
-      actualCostUsd: number;
-      shadowCostUsd: number;
     };
     return {
       scope: 'local-daemon',
-      note: 'Local RoleFlock daemon meter — not provider account-wide usage.',
+      note: 'Locally measured tokens, grouped by the provider and model that consumed them.',
       ...summary,
+      byProviderModel: usage.summarizeByProviderAndModel(),
     };
   });
   app.get('/api/price-cards', async () => new PriceCardRepository(db).list());

@@ -7,6 +7,7 @@ import { Approvals } from '../src/routes/Approvals.js';
 import { Home } from '../src/routes/Home.js';
 import { NewTask } from '../src/routes/NewTask.js';
 import { Evidence } from '../src/routes/Evidence.js';
+import { Providers } from '../src/routes/Providers.js';
 import { WorkspaceChanges } from '../src/components/WorkspaceChanges.js';
 import type { Task } from '../src/types.js';
 import { renderApp, stubApi } from './render.js';
@@ -38,7 +39,7 @@ describe('Home', () => {
       '/api/approvals': [
         { id: 'a1', requestType: 'file_write', rationale: 'x', riskClass: 'low', fingerprint: 'f' },
       ],
-      '/api/usage/summary': { actualCostUsd: 0.12, shadowCostUsd: 0.4 },
+      '/api/usage/summary': { inputTokens: 12_000, outputTokens: 3_500 },
     });
 
     renderApp(<Home />);
@@ -48,8 +49,66 @@ describe('Home', () => {
       (await screen.findAllByRole('link', { name: /1 approval waiting/ })).length,
     ).toBeGreaterThan(0);
     expect((await screen.findAllByText('Fix login')).length).toBeGreaterThan(0);
-    // Actual and shadow are never summed into one number.
-    expect(await screen.findByText('$0.1200 actual · $0.4000 shadow')).toBeInTheDocument();
+    expect(await screen.findByText('15.5K tokens')).toBeInTheDocument();
+    expect(screen.getByText('12K input · 3,500 output')).toBeInTheDocument();
+    expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+  });
+});
+
+describe('Providers', () => {
+  it('shows local tokens by model without presenting a dollar estimate', async () => {
+    authenticated();
+    stubApi({
+      ...RUNTIME,
+      '/api/providers': [
+        {
+          id: 'codex',
+          displayName: 'Codex CLI',
+          status: 'healthy',
+          capabilities: { repositoryWrite: true },
+          localUsage: {
+            entryCount: 3,
+            inputTokens: 15_000,
+            outputTokens: 2_500,
+            models: [
+              {
+                providerConnectionId: 'codex',
+                modelId: 'gpt-5.6-sol',
+                inputTokens: 12_000,
+                outputTokens: 2_000,
+                entryCount: 2,
+              },
+              {
+                providerConnectionId: 'codex',
+                modelId: 'gpt-5.6-terra',
+                inputTokens: 3_000,
+                outputTokens: 500,
+                entryCount: 1,
+              },
+            ],
+            note: 'RoleFlock local token meter.',
+          },
+        },
+      ],
+      '/api/projects': [],
+      '/api/disclosure-grants': [],
+      '/api/tasks': [],
+      '/api/approvals': [],
+      '/api/health': { ok: true },
+    });
+
+    renderApp(<Providers />);
+
+    expect(await screen.findByText('17.5K')).toBeInTheDocument();
+    expect(screen.getByText('15K input · 2,500 output')).toBeInTheDocument();
+    expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+
+    const breakdown = screen.getByRole('list', { name: 'Codex CLI token usage by model' });
+    expect(within(breakdown).getByText('gpt-5.6-sol')).toBeInTheDocument();
+    expect(within(breakdown).getByText('14K tokens')).toBeInTheDocument();
+    expect(within(breakdown).getByText('gpt-5.6-terra')).toBeInTheDocument();
   });
 });
 
