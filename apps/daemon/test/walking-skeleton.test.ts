@@ -126,7 +126,7 @@ describe('verified bug fix walking skeleton', () => {
     };
     const graphNode = (id: string) =>
       planningGraph.graph.nodes.find((candidate) => candidate.id === id)!;
-    expect(planningGraph.graph.version).toBe('bug_fix@2');
+    expect(planningGraph.graph.version).toBe('bug_fix@3');
     expect(planningGraph.graph.maxConcurrency).toBe(2);
     expect(graphNode('planner').state).toBe('completed');
     expect(graphNode('planner_tests').state).toBe('completed');

@@ -72,6 +72,16 @@ describe('workflow graphs', () => {
     expect(legacy.nodes.some((node) => node.id === 'planner_tests')).toBe(false);
     expect(legacy.maxConcurrency).toBe(1);
     expect(validateGraph(legacy)).toEqual([]);
+    expect(getWorkflowGraph('bug_fix@2').edges).toContainEqual({
+      from: 'verifier',
+      to: 'writer',
+      when: 'on_needs_changes',
+    });
+    expect(current.edges).toContainEqual({
+      from: 'verifier',
+      to: 'planner',
+      when: 'on_needs_changes',
+    });
     expect(() => getWorkflowGraph('bug_fix@0')).toThrow(/no longer available/);
     expect(() => getWorkflowGraph('nonsense')).toThrow(/Unknown workflow mode/);
     // Every template carries its own version so a run can be replayed exactly.
@@ -144,11 +154,9 @@ describe('workflow graphs', () => {
       ],
       { edges: [{ from: 'verifier', to: 'test', when: 'on_needs_changes' }] },
     );
-    expect(
-      validateGraph(needsChangesToNonWriter).some((e) =>
-        e.includes('routes on_needs_changes to non-writer'),
-      ),
-    ).toBe(true);
+    expect(validateGraph(needsChangesToNonWriter)).toContain(
+      'incompatible fallback: verifier verifier must route findings to planner, not test',
+    );
   });
 
   it('rejects authority roles that violate leases or bypass the planner', () => {
@@ -183,7 +191,7 @@ describe('workflow graphs', () => {
       },
     );
     expect(validateGraph(verifierToExecutor)).toContain(
-      'incompatible fallback: verifier verifier routes findings directly to executor writer',
+      'incompatible fallback: verifier verifier must route findings to planner, not writer',
     );
   });
 

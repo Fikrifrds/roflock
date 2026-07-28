@@ -185,7 +185,7 @@ describe('graph runtime', () => {
     expect(visited.filter((id) => id === 'planner')).toHaveLength(1);
   });
 
-  it('routes a verifier rejection back to the writer, not to accept', async () => {
+  it('routes a verifier rejection through planner before another execution', async () => {
     const visited: string[] = [];
     let rejections = 0;
     const result = await runGraph(bugFixGraph, async ({ node: n }) => {
@@ -200,6 +200,7 @@ describe('graph runtime', () => {
 
     expect(result.state).toBe('completed');
     expect(result.loopIterations).toBe(1);
+    expect(visited.filter((id) => id === 'planner')).toHaveLength(2);
     expect(visited.filter((id) => id === 'writer')).toHaveLength(2);
     // Accept may only run after the second verifier pass.
     expect(visited.lastIndexOf('accept')).toBeGreaterThan(visited.lastIndexOf('verifier'));

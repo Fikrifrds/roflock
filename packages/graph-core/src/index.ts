@@ -84,7 +84,7 @@ export interface WorkflowRecommendation {
 }
 
 /** Bumped when the shape of a built-in template changes. */
-export const GRAPH_SCHEMA_VERSION = 2;
+export const GRAPH_SCHEMA_VERSION = 3;
 
 export function graphVersionId(mode: GraphMode): string {
   return `${mode}@${GRAPH_SCHEMA_VERSION}`;
@@ -138,14 +138,15 @@ const bugFixEdges: GraphEdge[] = [
     current.dependsOn.map((from) => ({ from, to: current.id, when: 'always' as const })),
   ),
   { from: 'test', to: 'writer', when: 'on_fail' },
-  { from: 'verifier', to: 'writer', when: 'on_needs_changes' },
+  { from: 'verifier', to: 'planner', when: 'on_needs_changes' },
 ];
 
 export const bugFixGraph: WorkflowGraph = {
   id: 'bug_fix',
   version: graphVersionId('bug_fix'),
   label: 'Verified Bug Fix',
-  description: 'Parallel code + test analysis → reviewer → writer → test → verifier → human accept',
+  description:
+    'Parallel planning → reviewer → writer → test → verifier; findings return to planner → human accept',
   nodes: bugFixNodes,
   edges: bugFixEdges,
   maxConcurrency: 2,
@@ -270,6 +271,41 @@ const legacyGraphs: Record<GraphMode, WorkflowGraph> = {
   },
 };
 
+const previousBugFixEdges: GraphEdge[] = [
+  ...bugFixNodes.flatMap((current) =>
+    current.dependsOn.map((from) => ({ from, to: current.id, when: 'always' as const })),
+  ),
+  { from: 'test', to: 'writer', when: 'on_fail' },
+  { from: 'verifier', to: 'writer', when: 'on_needs_changes' },
+];
+
+/** Exact v2 shapes remain available for tasks created before planner-owned routing. */
+const previousGraphsV2: Record<GraphMode, WorkflowGraph> = {
+  direct: { ...directGraph, version: 'direct@2' },
+  fast: { ...fastGraph, version: 'fast@2' },
+  bug_fix: {
+    ...bugFixGraph,
+    version: 'bug_fix@2',
+    description:
+      'Parallel code + test analysis → reviewer → writer → test → verifier → human accept',
+    edges: previousBugFixEdges,
+  },
+  standard: {
+    ...standardGraph,
+    version: 'standard@2',
+    description:
+      'Parallel code + test analysis → reviewer → writer → test → verifier → human accept',
+    edges: previousBugFixEdges,
+  },
+  critical: {
+    ...criticalGraph,
+    version: 'critical@2',
+    description:
+      'High-risk path: parallel code + test analysis → reviewer → writer → test → verifier → human accept',
+    edges: previousBugFixEdges,
+  },
+};
+
 /**
  * Resolves a graph by mode or versioned id. A version that does not match the
  * current schema is rejected rather than silently upgraded: a task must keep the
@@ -277,9 +313,19 @@ const legacyGraphs: Record<GraphMode, WorkflowGraph> = {
  */
 export function getWorkflowGraph(modeOrVersion: string): WorkflowGraph {
   const { mode, version } = parseGraphVersionId(modeOrVersion);
-  const graph = version === 1 ? legacyGraphs[mode as GraphMode] : workflowGraphs[mode as GraphMode];
+  const graph =
+    version === 1
+      ? legacyGraphs[mode as GraphMode]
+      : version === 2
+        ? previousGraphsV2[mode as GraphMode]
+        : workflowGraphs[mode as GraphMode];
   if (!graph) throw new Error(`Unknown workflow mode: ${modeOrVersion}`);
-  if (version !== undefined && version !== 1 && version !== GRAPH_SCHEMA_VERSION) {
+  if (
+    version !== undefined &&
+    version !== 1 &&
+    version !== 2 &&
+    version !== GRAPH_SCHEMA_VERSION
+  ) {
     throw new Error(
       `Workflow graph ${mode} version ${version} is no longer available (current: ${GRAPH_SCHEMA_VERSION})`,
     );
@@ -522,12 +568,22 @@ export function validateGraph(graph: WorkflowGraph): string[] {
     if (target.role === 'accept') {
       errors.push(`incompatible fallback: ${edge.from} routes ${edge.when} straight to accept`);
     }
-    if (edge.when === 'on_needs_changes' && !target.writer) {
+    const source = byId.get(edge.from);
+    const graphVersion = parseGraphVersionId(graph.version).version ?? GRAPH_SCHEMA_VERSION;
+    if (
+      edge.when === 'on_needs_changes' &&
+      source?.role === 'verifier' &&
+      graphVersion >= 3 &&
+      target.role !== 'planner'
+    ) {
+      errors.push(
+        `incompatible fallback: verifier ${edge.from} must route findings to planner, not ${edge.to}`,
+      );
+    } else if (edge.when === 'on_needs_changes' && source?.role !== 'verifier' && !target.writer) {
       errors.push(
         `incompatible fallback: ${edge.from} routes on_needs_changes to non-writer ${edge.to}`,
       );
     }
-    const source = byId.get(edge.from);
     if (
       edge.when === 'on_needs_changes' &&
       source?.authorityRole === 'verifier' &&
