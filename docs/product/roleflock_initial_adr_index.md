@@ -21,3 +21,4 @@ Create these records in `docs/adr/`.
 | ADR-015 | Versioned Change Contract and Execution Plan |
 | ADR-016 | Role authority and planner-owned feedback routing |
 | ADR-017 | Independent verification trust boundary |
+| ADR-018 | Portable Change Passport and signing |
