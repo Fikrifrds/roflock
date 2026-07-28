@@ -7,6 +7,7 @@ import { GraphRunView } from '../components/GraphRunView.js';
 import { LiveTurn } from '../components/LiveTurn.js';
 import { TaskWorkspaceHeader } from '../components/TaskWorkspaceHeader.js';
 import { WorkspaceChanges } from '../components/WorkspaceChanges.js';
+import { ReviewApp } from '../components/ReviewApp.js';
 import { Select } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
 import { Empty, Section } from '../components/primitives.js';
@@ -157,6 +158,7 @@ export function TaskDetail() {
   return (
     <Shell>
       <TaskWorkspaceHeader task={task} activeView={workspaceView} />
+      <ReviewApp taskId={task.id} />
       {workspaceView === 'changes' ? (
         <WorkspaceChanges task={task} />
       ) : (

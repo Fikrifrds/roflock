@@ -53,6 +53,7 @@ import { DocumentService, isDocumentAuthority, isDocumentKind } from '../service
 import { LocalSecretStore } from '../services/local-secret-store.js';
 import { checkForUpdates, getLocalVersion } from '../services/version-check.js';
 import { discoverVerificationCommand } from '../services/verification-command.js';
+import { ReviewAppService } from '../services/review-app.js';
 import {
   commitTaskWorkspace,
   inspectTaskFileDiff,
@@ -72,6 +73,7 @@ export function registerApi(
   documents: DocumentService,
   dataDir: string,
   providerSecrets: LocalSecretStore,
+  reviewApps: ReviewAppService,
   runtime: { host: string; port: number },
 ): void {
   const projects = new ProjectRepository(db),
@@ -594,6 +596,44 @@ export function registerApi(
         error: error instanceof Error ? error.message : 'Unable to inspect task workspace',
       });
     }
+  });
+  app.get('/api/tasks/:id/review-app', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    if (!tasks.get(taskId)) return reply.code(404).send({ error: 'Task not found' });
+    const worktree = worktrees.getByTask(taskId);
+    if (!worktree) return { available: false, detail: 'Start this task to create a review workspace.' };
+    return reviewApps.inspect(taskId, worktree.path);
+  });
+  app.post('/api/tasks/:id/review-app/start', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    if (!tasks.get(taskId)) return reply.code(404).send({ error: 'Task not found' });
+    const worktree = worktrees.getByTask(taskId);
+    if (!worktree) return reply.code(404).send({ error: 'Task workspace not found' });
+    if (worktree.writerLeaseId)
+      return reply.code(409).send({ error: 'Wait until the writer finishes before starting a review preview.' });
+    try {
+      const preview = await reviewApps.start(taskId, worktree.path);
+      audit.append({
+        id: randomUUID(),
+        actor: 'local-user',
+        action: 'review_app.started',
+        targetType: 'task',
+        targetId: taskId,
+        details: { mode: preview.mode, command: preview.command },
+        createdAt: now(),
+      });
+      return preview;
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : 'Unable to start review preview',
+      });
+    }
+  });
+  app.post('/api/tasks/:id/review-app/stop', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    if (!tasks.get(taskId)) return reply.code(404).send({ error: 'Task not found' });
+    await reviewApps.stop(taskId);
+    return { ok: true };
   });
   app.get('/api/tasks/:id/workspace/diff', async (request, reply) => {
     const taskId = (request.params as { id: string }).id;

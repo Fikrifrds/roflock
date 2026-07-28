@@ -25,6 +25,7 @@ import { seedPricingDefaults } from './services/pricing.js';
 import { ProviderRegistry } from './services/provider-registry.js';
 import { DocumentService } from './services/documents.js';
 import { LocalSecretStore } from './services/local-secret-store.js';
+import { ReviewAppService } from './services/review-app.js';
 
 export interface ServerOptions {
   dataDir?: string;
@@ -104,14 +105,18 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
     }
   }
   const documents = new DocumentService(db, join(dataDir, 'documents'));
+  const reviewApps = new ReviewAppService();
   const orchestrator = new Orchestrator(db, bus, join(dataDir, 'worktrees'), providers, documents);
-  registerApi(app, db, session, bus, orchestrator, providers, documents, dataDir, providerSecrets, {
+  registerApi(app, db, session, bus, orchestrator, providers, documents, dataDir, providerSecrets, reviewApps, {
     host,
     port,
   });
   const webDist = join(process.cwd(), 'apps', 'web', 'dist');
   if (existsSync(webDist)) await app.register(statik, { root: webDist, wildcard: false });
-  app.addHook('onClose', async () => db.close());
+  app.addHook('onClose', async () => {
+    await reviewApps.close();
+    db.close();
+  });
   return { app, session, host, port, dataDir };
 }
 

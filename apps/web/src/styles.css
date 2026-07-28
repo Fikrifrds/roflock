@@ -3011,6 +3011,31 @@ button,
   word-break: break-word;
 }
 
+.review-app {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+.review-app p { margin: 0; }
+.review-app strong { display: block; margin: var(--space-1) 0; }
+.review-app code {
+  display: inline-block;
+  max-width: 100%;
+  margin-top: var(--space-2);
+  overflow-wrap: anywhere;
+  font-size: var(--text-xs);
+}
+.review-app .actions { flex: 0 0 auto; }
+@media (max-width: 700px) {
+  .review-app { align-items: flex-start; flex-direction: column; }
+}
+
 @keyframes live-spin {
   to {
     transform: rotate(360deg);
