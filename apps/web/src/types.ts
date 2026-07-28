@@ -36,6 +36,92 @@ export type Task = {
   updatedAt?: string;
 };
 
+export type ContractQuestion = {
+  id: string;
+  question: string;
+  blocking: boolean;
+  status: 'open' | 'resolved' | 'waived';
+  resolution?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+};
+
+export type ChangeContract = {
+  id: string;
+  taskId: string;
+  projectId: string;
+  repositoryId: string;
+  version: number;
+  parentVersionId?: string;
+  changeReason?: string;
+  status:
+    | 'draft'
+    | 'needs_clarification'
+    | 'awaiting_authorisation'
+    | 'authorised'
+    | 'superseded'
+    | 'withdrawn';
+  objective: string;
+  acceptanceCriteria: Array<{
+    id: string;
+    statement: string;
+    verificationType: string;
+    requiredEvidenceIds: string[];
+  }>;
+  prohibitedOutcomes: Array<{
+    id: string;
+    statement: string;
+    severity: string;
+  }>;
+  outOfScope: string[];
+  risk: string;
+  requiredEvidence: Array<{
+    id: string;
+    type: string;
+    description: string;
+    mandatory: boolean;
+  }>;
+  authoritySources: Array<{
+    id: string;
+    kind: string;
+    locator: string;
+    digest: string;
+    title?: string;
+  }>;
+  unresolvedQuestions: ContractQuestion[];
+  draftedBy: string;
+  authorisedBy?: string;
+  authorisedAt?: string;
+  createdAt: string;
+  hashAlgorithm: 'sha256';
+  hash: string;
+};
+
+export type ChangeContractAggregate = {
+  id: string;
+  taskId: string;
+  projectId: string;
+  repositoryId: string;
+  currentContractVersion: number;
+  currentVersionId: string;
+  currentHash: string;
+  status: ChangeContract['status'];
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ChangeContractResponse = {
+  aggregate: ChangeContractAggregate;
+  contract: ChangeContract;
+  replayed?: boolean;
+};
+
+export type ChangeContractVersionsResponse = {
+  aggregate: ChangeContractAggregate;
+  versions: Array<{ versionId: string; contract: ChangeContract }>;
+};
+
 export type Project = {
   id: string;
   name: string;

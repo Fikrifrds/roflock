@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Field, FileDrop } from '../components/Field.js';
 import { BlockedBanner } from '../components/BlockedBanner.js';
+import { ChangeContractPanel } from '../components/ChangeContractPanel.js';
 import { GraphRunView } from '../components/GraphRunView.js';
 import { LiveTurn } from '../components/LiveTurn.js';
 import { TaskWorkspaceHeader } from '../components/TaskWorkspaceHeader.js';
@@ -186,6 +187,7 @@ export function TaskDetail() {
         onDelete={() => void deleteTask()}
         deleting={deleting}
       />
+      <ChangeContractPanel task={task} />
       <ReviewApp taskId={task.id} />
       {workspaceView === 'changes' ? (
         <WorkspaceChanges task={task} />

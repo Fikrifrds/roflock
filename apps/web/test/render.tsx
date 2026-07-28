@@ -6,7 +6,7 @@ import { vi } from 'vitest';
 
 /** Routes a fetch by path prefix so each test declares only what it needs. */
 export function stubApi(routes: Record<string, unknown>) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     const match = Object.keys(routes)
       .sort((a, b) => b.length - a.length)
