@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M2.2 complete; M2.3 is next
+**Execution progress:** M0 through M2.3 complete; M2.4 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1656,7 +1656,7 @@ later ticket merely to make the product appear complete sooner.
 | M1.6 ✅ | Start gate and legacy-task compatibility | M1.3 | New uncontracted task is blocked; legacy task is labelled |
 | M2.1 ✅ | Execution Plan, critique, deviation, report schemas | M1.1 | Artifact semantic-validation tests pass |
 | M2.2 ✅ | Role Protocol package and authority matrix | M2.1 | Invalid role actions are rejected deterministically |
-| M2.3 | Artifact-gated graph node contracts | M2.2 | Executor cannot schedule without approved plan hash |
+| M2.3 ✅ | Artifact-gated graph node contracts | M2.2 | Executor cannot schedule without approved plan hash |
 | M2.4 | Planner context and structured plan output | M2.3 | Planner produces schema-valid plans |
 | M2.5 | Executor context pinning and path enforcement | M2.3 | Executor sees one plan version and cannot leave its paths |
 | M2.6 | Feedback classifier and planner routing | M2.2 | Raw feedback never targets executor |

@@ -1,4 +1,5 @@
 import type { RiskClass, TaskType } from '@roleflock/contracts';
+import { ROLE_AUTHORITY_MATRIX, type RoleId as AuthorityRoleId } from '@roleflock/role-protocol';
 
 export type GraphMode = 'direct' | 'fast' | 'standard' | 'bug_fix' | 'critical';
 
@@ -49,6 +50,11 @@ export interface GraphNode {
   maxAttempts?: number;
   /** Distinct read-only assignment for parallel agents sharing the same role/model. */
   focus?: string;
+  /**
+   * Enforceable authority identity for delivery-assurance graphs. Omitted only
+   * by legacy graph versions whose historical prompts predate Role Protocol.
+   */
+  authorityRole?: AuthorityRoleId;
 }
 
 export interface GraphEdge {
@@ -463,6 +469,15 @@ export function validateGraph(graph: WorkflowGraph): string[] {
       if (!ids.has(dependency)) errors.push(`${n.id} depends on missing ${dependency}`);
       if (dependency === n.id) errors.push(`${n.id} depends on itself`);
     }
+    if (n.authorityRole !== undefined) {
+      const authority = ROLE_AUTHORITY_MATRIX[n.authorityRole];
+      if (n.writer && authority.permissionProfile.repository !== 'planned_write') {
+        errors.push(`${n.id} gives writer authority to read-only role ${n.authorityRole}`);
+      }
+      if (!n.writer && n.authorityRole === 'executor') {
+        errors.push(`${n.id} assigns executor authority without a writer lease`);
+      }
+    }
   }
 
   // Invalid state references.
@@ -510,6 +525,16 @@ export function validateGraph(graph: WorkflowGraph): string[] {
     if (edge.when === 'on_needs_changes' && !target.writer) {
       errors.push(
         `incompatible fallback: ${edge.from} routes on_needs_changes to non-writer ${edge.to}`,
+      );
+    }
+    const source = byId.get(edge.from);
+    if (
+      edge.when === 'on_needs_changes' &&
+      source?.authorityRole === 'verifier' &&
+      target.authorityRole === 'executor'
+    ) {
+      errors.push(
+        `incompatible fallback: verifier ${edge.from} routes findings directly to executor ${edge.to}`,
       );
     }
   }

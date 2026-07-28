@@ -151,6 +151,42 @@ describe('workflow graphs', () => {
     ).toBe(true);
   });
 
+  it('rejects authority roles that violate leases or bypass the planner', () => {
+    const writerPlanner = graph([
+      node('planner', [], {
+        writer: true,
+        role: 'planner',
+        authorityRole: 'planner',
+      }),
+      node('accept', ['planner'], { role: 'accept', kind: 'human_approval' }),
+    ]);
+    expect(validateGraph(writerPlanner)).toContain(
+      'planner gives writer authority to read-only role planner',
+    );
+
+    const verifierToExecutor = graph(
+      [
+        node('writer', [], {
+          writer: true,
+          authorityRole: 'executor',
+          maxAttempts: 2,
+        }),
+        node('test', ['writer'], { role: 'test', required: true }),
+        node('verifier', ['test'], {
+          role: 'verifier',
+          authorityRole: 'verifier',
+        }),
+        node('accept', ['verifier'], { role: 'accept', kind: 'human_approval' }),
+      ],
+      {
+        edges: [{ from: 'verifier', to: 'writer', when: 'on_needs_changes' }],
+      },
+    );
+    expect(validateGraph(verifierToExecutor)).toContain(
+      'incompatible fallback: verifier verifier routes findings directly to executor writer',
+    );
+  });
+
   it('rejects invalid state references and non-finite budgets', () => {
     const bad = graph(
       [

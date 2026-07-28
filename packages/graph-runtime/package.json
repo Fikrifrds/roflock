@@ -20,7 +20,8 @@
   "dependencies": {
     "@roleflock/contracts": "workspace:*",
     "@roleflock/graph-core": "workspace:*",
-    "@roleflock/database": "workspace:*"
+    "@roleflock/database": "workspace:*",
+    "@roleflock/role-protocol": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

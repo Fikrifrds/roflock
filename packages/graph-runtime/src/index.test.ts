@@ -6,7 +6,7 @@ import {
   type GraphNode,
   type WorkflowGraph,
 } from '@roleflock/graph-core';
-import { NodeFailure, classifyFailure, runGraph } from './index.js';
+import { ArtifactGateError, NodeFailure, classifyFailure, runGraph } from './index.js';
 
 function node(id: string, dependsOn: string[] = [], extra: Partial<GraphNode> = {}): GraphNode {
   return { id, role: 'writer', kind: 'agent', dependsOn, ...extra } as GraphNode;
@@ -27,6 +27,92 @@ function graph(nodes: GraphNode[], overrides: Partial<WorkflowGraph> = {}): Work
 }
 
 describe('graph runtime', () => {
+  it('does not schedule an executor without exact approved input artifacts', async () => {
+    const assured = graph([
+      node('executor', [], {
+        writer: true,
+        authorityRole: 'executor',
+      }),
+      node('accept', ['executor'], { role: 'accept', kind: 'human_approval' }),
+    ]);
+    let invoked = false;
+
+    await expect(
+      runGraph(assured, async () => {
+        invoked = true;
+      }),
+    ).rejects.toMatchObject({
+      name: 'ArtifactGateError',
+      nodeId: 'executor',
+      phase: 'start',
+      violation: { code: 'REQUIRED_INPUT_MISSING' },
+    });
+    expect(invoked).toBe(false);
+  });
+
+  it('pins an executor to current inputs and validates its report output', async () => {
+    const assured = graph([
+      node('executor', [], {
+        writer: true,
+        authorityRole: 'executor',
+      }),
+      node('accept', ['executor'], { role: 'accept', kind: 'human_approval' }),
+    ]);
+    const initialArtifacts = [
+      {
+        id: 'contract_1',
+        kind: 'change_contract' as const,
+        status: 'authorised',
+        hash: 'a'.repeat(64),
+        valid: true,
+        current: true,
+      },
+      {
+        id: 'plan_1',
+        kind: 'execution_plan' as const,
+        status: 'approved',
+        hash: 'b'.repeat(64),
+        valid: true,
+        current: true,
+      },
+      {
+        id: 'verification_1',
+        kind: 'verification_specification' as const,
+        status: 'approved',
+        hash: 'c'.repeat(64),
+        valid: true,
+        current: true,
+      },
+    ];
+    const result = await runGraph(
+      assured,
+      async ({ node: current }) =>
+        current.id === 'executor'
+          ? {
+              artifacts: [
+                {
+                  id: 'report_1',
+                  kind: 'execution_report' as const,
+                  hash: 'd'.repeat(64),
+                  valid: true,
+                  current: true,
+                },
+              ],
+            }
+          : current.id,
+      { initialArtifacts },
+    );
+    expect(result.state).toBe('completed');
+
+    const invalid = await runGraph(
+      assured,
+      async ({ node: current }) => (current.id === 'executor' ? { artifacts: [] } : current.id),
+      { initialArtifacts },
+    );
+    expect(invalid.state).toBe('failed');
+    expect(invalid.results[0]?.error).toBeInstanceOf(ArtifactGateError);
+  });
+
   it('does not route setup requirements back through the writer', async () => {
     const ran: string[] = [];
     const result = await runGraph(bugFixGraph, async ({ node: current }) => {

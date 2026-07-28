@@ -5,6 +5,12 @@ import {
   type GraphNode,
   type WorkflowGraph,
 } from '@roleflock/graph-core';
+import {
+  RoleProtocolViolation,
+  assertRoleCompletion,
+  assertRoleStart,
+  type PresentedArtifact,
+} from '@roleflock/role-protocol';
 
 export type NodeState = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
@@ -63,6 +69,39 @@ export interface RunGraphOptions {
   /** Observability hook; fires on every node state transition. */
   onNodeState?: (nodeId: string, state: NodeState, attempt: number) => void;
   signal?: AbortSignal;
+  /** Current, verified artifacts available before this graph run begins. */
+  initialArtifacts?: readonly PresentedArtifact[];
+  /**
+   * Extracts newly produced artifacts from a successful node result. The
+   * default recognises `{ artifacts: PresentedArtifact[] }`.
+   */
+  artifactExtractor?: (output: unknown) => readonly PresentedArtifact[];
+}
+
+export class ArtifactGateError extends Error {
+  constructor(
+    readonly nodeId: string,
+    readonly phase: 'start' | 'completion',
+    readonly violation: RoleProtocolViolation,
+  ) {
+    super(`Artifact gate rejected ${nodeId} at ${phase}: ${violation.message}`, {
+      cause: violation,
+    });
+    this.name = 'ArtifactGateError';
+  }
+}
+
+function defaultArtifactExtractor(output: unknown): readonly PresentedArtifact[] {
+  if (typeof output !== 'object' || output === null || !('artifacts' in output)) return [];
+  const artifacts = (output as { artifacts?: unknown }).artifacts;
+  if (!Array.isArray(artifacts)) return [];
+  return artifacts.filter(
+    (candidate): candidate is PresentedArtifact =>
+      typeof candidate === 'object' &&
+      candidate !== null &&
+      typeof (candidate as PresentedArtifact).id === 'string' &&
+      typeof (candidate as PresentedArtifact).kind === 'string',
+  );
 }
 
 export function classifyFailure(error: unknown): FailureClass {
@@ -131,6 +170,8 @@ export async function runGraph(
   const state = new Map<string, NodeState>(graph.nodes.map((node) => [node.id, 'pending']));
   const attempts = new Map<string, number>(graph.nodes.map((node) => [node.id, 0]));
   const results: NodeResult[] = [];
+  const artifacts: PresentedArtifact[] = [...(options.initialArtifacts ?? [])];
+  const extractArtifacts = options.artifactExtractor ?? defaultArtifactExtractor;
   let loopIterations = 0;
   let runFailed = false;
 
@@ -170,6 +211,16 @@ export async function runGraph(
       if (!isReady(node)) continue;
       // One writer per worktree, independent of the concurrency budget.
       if (node.writer && [...running.keys()].some((id) => byId.get(id)?.writer)) continue;
+      if (node.authorityRole !== undefined) {
+        try {
+          assertRoleStart(node.authorityRole, artifacts);
+        } catch (error) {
+          if (error instanceof RoleProtocolViolation) {
+            throw new ArtifactGateError(node.id, 'start', error);
+          }
+          throw error;
+        }
+      }
 
       const attempt = (attempts.get(node.id) ?? 0) + 1;
       attempts.set(node.id, attempt);
@@ -205,6 +256,21 @@ export async function runGraph(
     running.delete(settled.nodeId);
     const node = byId.get(settled.nodeId)!;
     const attempt = attempts.get(node.id) ?? 1;
+
+    if (settled.error === undefined) {
+      const nodeArtifacts = extractArtifacts(settled.output);
+      if (node.authorityRole !== undefined) {
+        try {
+          assertRoleCompletion(node.authorityRole, nodeArtifacts);
+        } catch (error) {
+          settled.error =
+            error instanceof RoleProtocolViolation
+              ? new ArtifactGateError(node.id, 'completion', error)
+              : error;
+        }
+      }
+      if (settled.error === undefined) artifacts.push(...nodeArtifacts);
+    }
 
     if (settled.error === undefined) {
       setState(node.id, 'completed');
