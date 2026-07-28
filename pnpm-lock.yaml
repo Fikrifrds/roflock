@@ -230,6 +230,9 @@ importers:
 
   packages/database:
     dependencies:
+      '@roleflock/change-contracts':
+        specifier: workspace:*
+        version: link:../change-contracts
       '@roleflock/contracts':
         specifier: workspace:*
         version: link:../contracts

@@ -51,3 +51,13 @@ export type {
   RoleCandidateInput,
   ProviderCooldown,
 } from './repositories/role-assignment-repository.js';
+export {
+  ChangeContractRepository,
+  ContractVersionConflictError,
+  ImmutableContractVersionError,
+  changeContractVersionId,
+} from './repositories/change-contract-repository.js';
+export type {
+  ChangeContractAggregate,
+  StoredChangeContractVersion,
+} from './repositories/change-contract-repository.js';

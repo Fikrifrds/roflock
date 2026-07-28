@@ -18,6 +18,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
+    "@roleflock/change-contracts": "workspace:*",
     "@roleflock/contracts": "workspace:*",
     "better-sqlite3": "^11.10.0"
   },

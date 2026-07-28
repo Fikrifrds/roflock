@@ -8,6 +8,7 @@ import { MIGRATION_004 } from './migrations/004_disclosure_grants.js';
 import { MIGRATION_005 } from './migrations/005_task_verification_command.js';
 import { MIGRATION_006 } from './migrations/006_role_assignments.js';
 import { MIGRATION_007 } from './migrations/007_graph_run_blocked.js';
+import { MIGRATION_008 } from './migrations/008_change_contracts.js';
 
 export type SqliteDb = Database.Database;
 
@@ -52,14 +53,17 @@ export function migrate(db: SqliteDb): void {
     MIGRATION_005,
     MIGRATION_006,
     MIGRATION_007,
+    MIGRATION_008,
   ];
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;
     const tx = db.transaction(() => {
       db.exec(migration.sql);
-      db.prepare(
-        'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
-      ).run(migration.version, migration.name, new Date().toISOString());
+      db.prepare('INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)').run(
+        migration.version,
+        migration.name,
+        new Date().toISOString(),
+      );
     });
     tx();
   }
