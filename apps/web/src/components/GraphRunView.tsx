@@ -48,7 +48,7 @@ const KIND_MARKS: Record<string, string> = {
 
 const NODE_WIDTH = 210;
 const NODE_MIN_HEIGHT = 148;
-const COLUMN_GAP = 76;
+const COLUMN_GAP = 88;
 const ROW_GAP = 48;
 const CANVAS_PADDING_X = 36;
 const CANVAS_PADDING_Y = 40;
@@ -56,10 +56,17 @@ const CANVAS_PADDING_Y = 40;
 type GraphNode = GraphRunViewData['graph']['nodes'][number];
 type GraphEdge = GraphRunViewData['graph']['edges'][number];
 type NodePosition = { x: number; y: number; depth: number; height: number };
+type EdgeTone = 'idle' | 'complete' | 'active' | 'exception' | 'triggered';
+type RoutedPath = {
+  key: string;
+  d: string;
+  state: EdgeTone;
+  marker: boolean;
+};
 
 function nodeDescriptor(node: GraphNode) {
   return [
-    node.role === 'reviewer' ? 'AI review · You approve' : (KIND_LABELS[node.kind] ?? node.kind),
+    node.role === 'reviewer' ? 'AI reviews, then you approve' : (KIND_LABELS[node.kind] ?? node.kind),
     node.writer ? 'writer' : '',
     node.required ? 'required gate' : '',
     node.maxAttempts > 1 ? `up to ${node.maxAttempts} attempts` : '',
@@ -87,9 +94,9 @@ function nodeHeight(node: GraphNode) {
   return height;
 }
 
-function nodeMark(node: GraphNode, index: number) {
-  if (node.role === 'reviewer') return 'AI · YOU';
-  return KIND_MARKS[node.kind] ?? String(index + 1).padStart(2, '0');
+function nodeMarks(node: GraphNode, index: number): string[] {
+  if (node.role === 'reviewer') return ['AI', 'YOU'];
+  return [KIND_MARKS[node.kind] ?? String(index + 1).padStart(2, '0')];
 }
 
 function layoutGraph(nodes: GraphNode[], failureEdgeCount: number) {
@@ -159,24 +166,56 @@ function layoutGraph(nodes: GraphNode[], failureEdgeCount: number) {
   };
 }
 
-function forwardPath(from: NodePosition, to: NodePosition) {
+function midY(position: NodePosition) {
+  return position.y + position.height / 2;
+}
+
+/** Horizontal cubic that eases out of the source and into the target. */
+function smoothForwardPath(from: NodePosition, to: NodePosition) {
   const startX = from.x + NODE_WIDTH;
-  const startY = from.y + from.height / 2;
+  const startY = midY(from);
   const endX = to.x;
-  const endY = to.y + to.height / 2;
-  const bend = Math.max(34, (endX - startX) * 0.46);
+  const endY = midY(to);
+  const dx = Math.max(36, endX - startX);
+  const bend = dx * 0.55;
   return `M ${startX} ${startY} C ${startX + bend} ${startY}, ${endX - bend} ${endY}, ${endX} ${endY}`;
 }
 
-function returnPath(from: NodePosition, to: NodePosition, laneY: number) {
+/** Branch curves into a shared merge point with a horizontal end tangent. */
+function smoothBranchPath(
+  from: NodePosition,
+  mergeX: number,
+  mergeY: number,
+) {
+  const startX = from.x + NODE_WIDTH;
+  const startY = midY(from);
+  const dx = Math.max(28, mergeX - startX);
+  // Arrive along +X so the join into the trunk has no corner.
+  const endHandle = Math.min(36, dx * 0.42);
+  const startHandle = Math.max(28, dx * 0.48);
+  return `M ${startX} ${startY} C ${startX + startHandle} ${startY}, ${mergeX - endHandle} ${mergeY}, ${mergeX} ${mergeY}`;
+}
+
+/** Trunk leaves the merge on the same +X tangent the branches arrived on. */
+function smoothTrunkPath(mergeX: number, mergeY: number, to: NodePosition) {
+  const endX = to.x;
+  const endY = midY(to);
+  const dx = Math.max(24, endX - mergeX);
+  const startHandle = Math.min(34, dx * 0.5);
+  const endHandle = Math.max(22, dx * 0.42);
+  return `M ${mergeX} ${mergeY} C ${mergeX + startHandle} ${mergeY}, ${endX - endHandle} ${endY}, ${endX} ${endY}`;
+}
+
+function smoothReturnPath(from: NodePosition, to: NodePosition, laneY: number) {
   const startX = from.x + NODE_WIDTH / 2;
   const startY = from.y + from.height;
   const endX = to.x + NODE_WIDTH / 2;
   const endY = to.y + to.height;
-  return `M ${startX} ${startY} C ${startX} ${laneY}, ${endX} ${laneY}, ${endX} ${endY}`;
+  const midX = (startX + endX) / 2;
+  return `M ${startX} ${startY} C ${startX} ${laneY}, ${startX} ${laneY}, ${midX} ${laneY} S ${endX} ${laneY}, ${endX} ${endY}`;
 }
 
-function edgeState(edge: GraphEdge, nodes: Map<string, GraphNode>) {
+function edgeState(edge: GraphEdge, nodes: Map<string, GraphNode>): EdgeTone {
   const from = nodes.get(edge.from);
   const to = nodes.get(edge.to);
   if (edge.when !== 'always') {
@@ -185,6 +224,82 @@ function edgeState(edge: GraphEdge, nodes: Map<string, GraphNode>) {
   if (to?.state === 'running') return 'active';
   if (from?.state === 'completed' && to?.state === 'completed') return 'complete';
   return 'idle';
+}
+
+function rankEdgeState(state: EdgeTone) {
+  if (state === 'active') return 3;
+  if (state === 'complete') return 2;
+  if (state === 'triggered') return 1;
+  return 0;
+}
+
+/**
+ * Fan-in edges merge into one trunk, then a single arrow enters the target.
+ * Paths stay cubic so motion can travel continuously along the curve.
+ */
+function routeForwardEdges(
+  edges: GraphEdge[],
+  positions: Map<string, NodePosition>,
+  nodesById: Map<string, GraphNode>,
+): RoutedPath[] {
+  const grouped = new Map<string, GraphEdge[]>();
+  for (const edge of edges) {
+    grouped.set(edge.to, [...(grouped.get(edge.to) ?? []), edge]);
+  }
+
+  const paths: RoutedPath[] = [];
+  for (const [toId, incoming] of grouped) {
+    const to = positions.get(toId);
+    if (!to) continue;
+
+    if (incoming.length === 1) {
+      const edge = incoming[0]!;
+      const from = positions.get(edge.from);
+      if (!from) continue;
+      paths.push({
+        key: `${edge.from}-${edge.to}-${edge.when}`,
+        d: smoothForwardPath(from, to),
+        state: edgeState(edge, nodesById),
+        marker: true,
+      });
+      continue;
+    }
+
+    const sources = incoming
+      .map((edge) => {
+        const from = positions.get(edge.from);
+        return from ? { edge, from } : null;
+      })
+      .filter((entry): entry is { edge: GraphEdge; from: NodePosition } => Boolean(entry));
+    if (!sources.length) continue;
+
+    const maxRight = Math.max(...sources.map(({ from }) => from.x + NODE_WIDTH));
+    const gap = Math.max(40, to.x - maxRight);
+    // Give branches room to flatten onto the trunk tangent before the arrow.
+    const mergeX = maxRight + gap * 0.62;
+    const mergeY = midY(to);
+    const trunkState = sources
+      .map(({ edge }) => edgeState(edge, nodesById))
+      .sort((a, b) => rankEdgeState(b) - rankEdgeState(a))[0]!;
+
+    for (const { edge, from } of sources) {
+      paths.push({
+        key: `branch-${edge.from}-${edge.to}-${edge.when}`,
+        d: smoothBranchPath(from, mergeX, mergeY),
+        state: edgeState(edge, nodesById),
+        marker: false,
+      });
+    }
+
+    paths.push({
+      key: `trunk-${toId}`,
+      d: smoothTrunkPath(mergeX, mergeY, to),
+      state: trunkState,
+      marker: true,
+    });
+  }
+
+  return paths;
 }
 
 /**
@@ -224,6 +339,7 @@ export function GraphRunView({
   const graphLayout = layoutGraph(graph.nodes, failureEdges.length);
   const nodesById = new Map(graph.nodes.map((node) => [node.id, node]));
   const markerPrefix = `graph-${taskId.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  const routedForward = routeForwardEdges(forwardEdges, graphLayout.positions, nodesById);
 
   return (
     <div className="graph-run">
@@ -303,20 +419,18 @@ export function GraphRunView({
               </marker>
             </defs>
 
-            {forwardEdges.map((edge) => {
-              const from = graphLayout.positions.get(edge.from);
-              const to = graphLayout.positions.get(edge.to);
-              if (!from || !to) return null;
-              const state = edgeState(edge, nodesById);
-              return (
-                <path
-                  key={`${edge.from}-${edge.to}-${edge.when}`}
-                  className={`graph-edge-path graph-edge-${state}`}
-                  d={forwardPath(from, to)}
-                  markerEnd={`url(#${markerPrefix}-${state === 'active' ? 'arrow-active' : 'arrow'})`}
-                />
-              );
-            })}
+            {routedForward.map((path) => (
+              <path
+                key={path.key}
+                className={`graph-edge-path graph-edge-${path.state}`}
+                d={path.d}
+                markerEnd={
+                  path.marker
+                    ? `url(#${markerPrefix}-${path.state === 'active' ? 'arrow-active' : 'arrow'})`
+                    : undefined
+                }
+              />
+            ))}
 
             {failureEdges.map((edge, index) => {
               const from = graphLayout.positions.get(edge.from);
@@ -333,7 +447,7 @@ export function GraphRunView({
                 >
                   <path
                     className="graph-edge-path"
-                    d={returnPath(from, to, laneY)}
+                    d={smoothReturnPath(from, to, laneY)}
                     markerEnd={`url(#${markerPrefix}-arrow-return)`}
                   />
                   <rect
@@ -352,42 +466,50 @@ export function GraphRunView({
           </svg>
 
           <ol className="graph-nodes" aria-label="Workflow graph nodes">
-            {graph.nodes.map((node, index) => (
-              <li
-                key={node.id}
-                className={`graph-node ${node.state}`}
-                aria-current={node.state === 'running' ? 'step' : undefined}
-                style={{
-                  left: graphLayout.positions.get(node.id)?.x ?? 0,
-                  top: graphLayout.positions.get(node.id)?.y ?? 0,
-                  height: graphLayout.positions.get(node.id)?.height ?? NODE_MIN_HEIGHT,
-                }}
-              >
-                <div className="graph-node-order" aria-hidden="true">
-                  <span>{nodeMark(node, index)}</span>
-                </div>
-                <div className="graph-node-head">
-                  <b>{node.id.replaceAll('_', ' ')}</b>
-                  <StatusPill tone={NODE_TONES[node.state] ?? 'muted'}>
-                    {node.state.replaceAll('_', ' ')}
-                  </StatusPill>
-                </div>
-                <small>{nodeDescriptor(node)}</small>
-                {node.focus ? <small className="graph-node-focus">{node.focus}</small> : null}
-                {node.primaryProviderDisplayName && node.primaryModelDisplayName ? (
-                  <span className="graph-node-model">
-                    <small>Primary AI</small>
-                    <b>{node.primaryProviderDisplayName}</b>
-                    <span>{node.primaryModelDisplayName}</span>
-                  </span>
-                ) : null}
-                {node.role !== node.id ? (
-                  <span className="graph-node-role">{node.role.replaceAll('_', ' ')}</span>
-                ) : null}
-                {node.attempts > 1 ? <small>{node.attempts} runs recorded</small> : null}
-                {node.dependsOn.length ? <small>after {node.dependsOn.join(', ')}</small> : null}
-              </li>
-            ))}
+            {graph.nodes.map((node, index) => {
+              const marks = nodeMarks(node, index);
+              return (
+                <li
+                  key={node.id}
+                  className={`graph-node ${node.state}`}
+                  aria-current={node.state === 'running' ? 'step' : undefined}
+                  style={{
+                    left: graphLayout.positions.get(node.id)?.x ?? 0,
+                    top: graphLayout.positions.get(node.id)?.y ?? 0,
+                    height: graphLayout.positions.get(node.id)?.height ?? NODE_MIN_HEIGHT,
+                  }}
+                >
+                  <div
+                    className={`graph-node-marks${marks.length > 1 ? ' split' : ''}`}
+                    aria-hidden="true"
+                  >
+                    {marks.map((mark) => (
+                      <span key={mark}>{mark}</span>
+                    ))}
+                  </div>
+                  <div className="graph-node-head">
+                    <b>{node.id.replaceAll('_', ' ')}</b>
+                    <StatusPill tone={NODE_TONES[node.state] ?? 'muted'}>
+                      {node.state.replaceAll('_', ' ')}
+                    </StatusPill>
+                  </div>
+                  <small>{nodeDescriptor(node)}</small>
+                  {node.focus ? <small className="graph-node-focus">{node.focus}</small> : null}
+                  {node.primaryProviderDisplayName && node.primaryModelDisplayName ? (
+                    <span className="graph-node-model">
+                      <small>Primary AI</small>
+                      <b>{node.primaryProviderDisplayName}</b>
+                      <span>{node.primaryModelDisplayName}</span>
+                    </span>
+                  ) : null}
+                  {node.role !== node.id ? (
+                    <span className="graph-node-role">{node.role.replaceAll('_', ' ')}</span>
+                  ) : null}
+                  {node.attempts > 1 ? <small>{node.attempts} runs recorded</small> : null}
+                  {node.dependsOn.length ? <small>after {node.dependsOn.join(', ')}</small> : null}
+                </li>
+              );
+            })}
           </ol>
         </div>
       </div>

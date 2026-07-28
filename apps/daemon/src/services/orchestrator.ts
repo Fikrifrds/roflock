@@ -38,7 +38,8 @@ import {
 import { NodeFailure, runGraph, type NodeContext } from '@roleflock/graph-runtime';
 import {
   captureDiff,
-  createWorktree,
+  DirtyWorkingTreeError,
+  prepareTaskWorkspace,
   registerRepository,
   WriterLease,
 } from '@roleflock/repository-runtime';
@@ -313,6 +314,10 @@ export class Orchestrator {
     }
   }
 
+  isActive(taskId: string): boolean {
+    return this.active.has(taskId);
+  }
+
   control(taskId: string, commandType: string): void {
     const execution = this.executions.getByTask(taskId);
     if (!execution) throw new Error('No active execution for task');
@@ -413,14 +418,38 @@ export class Orchestrator {
       };
     } else {
       const repo = await registerRepository(repositoryPath);
+      // One in-place writer per project folder — a second task would checkout a
+      // different branch under the user's feet.
+      const conflicting = this.worktrees.findActiveByPath(repo.root, task.id);
+      if (conflicting) {
+        throw new Error(
+          `Project folder is already used by another RoleFlock task (${conflicting.taskId.slice(0, 8)}…). Finish or stop that task before starting another here.`,
+        );
+      }
       try {
-        worktree = await createWorktree(repo, task.id, {
-          baseRef: baseBranch === 'HEAD' ? 'HEAD' : baseBranch,
-          worktreeBaseDir: this.worktreeBaseDir,
-        });
+        // Prefer the existing external worktree when recovering an older task;
+        // new runs always work in the project folder itself.
+        const prior = this.worktrees.getByTask(task.id);
+        const reuseExternal =
+          prior &&
+          prior.path !== repo.root &&
+          existsSync(prior.path) &&
+          (prior.status === 'active' || prior.status === 'dirty_preserved');
+
+        worktree = reuseExternal
+          ? {
+              path: prior.path,
+              branchName: prior.branchName,
+              baseCommit: prior.baseCommit,
+            }
+          : await prepareTaskWorkspace(repo, task.id, {
+              mode: 'in_place',
+              baseRef: baseBranch === 'HEAD' ? 'HEAD' : baseBranch,
+            });
       } catch (error) {
+        if (error instanceof DirtyWorkingTreeError) throw error;
         const detail = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to create Git worktree: ${detail}`, { cause: error });
+        throw new Error(`Failed to prepare project workspace: ${detail}`, { cause: error });
       }
       this.worktrees.create({
         id: randomUUID(),

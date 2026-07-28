@@ -106,3 +106,18 @@ async function chooseDirectoryLinux(prompt: string): Promise<string | undefined>
 function appleScriptString(value: string): string {
   return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 }
+
+/** Reveal a folder in Finder / Explorer / file manager. */
+export async function openDirectory(path: string): Promise<void> {
+  const resolved = await realpath(path);
+  const os = platform();
+  if (os === 'darwin') {
+    await exec('open', [resolved]);
+    return;
+  }
+  if (os === 'win32') {
+    await exec('explorer.exe', [resolved]);
+    return;
+  }
+  await exec('xdg-open', [resolved]);
+}

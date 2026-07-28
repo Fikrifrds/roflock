@@ -86,7 +86,7 @@ export function WorkspaceChanges({ task }: { task: Task }) {
       <div className="workspace-empty">
         <span className="workspace-empty-icon">⌘</span>
         <h3>Workspace starts with the task</h3>
-        <p>Start this task to create its isolated branch and worktree.</p>
+        <p>Start this task to check out its branch in the project folder.</p>
       </div>
     );
 
@@ -105,11 +105,35 @@ export function WorkspaceChanges({ task }: { task: Task }) {
     <div className="source-workspace">
       <aside className="changes-list" aria-label="Changed files">
         <div className="branch-card">
-          <span className="eyebrow">Task branch</span>
+          <span className="eyebrow">
+            {workspace.inPlace ? 'Editing in project folder' : 'Task workspace'}
+          </span>
           <code>{workspace.branchName}</code>
           <small>
             {workspace.headCommit} · {workspace.ahead} ahead · {workspace.behind} behind
           </small>
+          <small className="workspace-path" title={workspace.path}>
+            {workspace.path}
+          </small>
+          <button
+            type="button"
+            className="quiet workspace-open-folder"
+            onClick={() => {
+              void (async () => {
+                try {
+                  await api.request('/api/dialogs/open-directory', {
+                    method: 'POST',
+                    body: JSON.stringify({ path: workspace.path }),
+                  });
+                } catch {
+                  void navigator.clipboard?.writeText(workspace.path);
+                  setFeedback(`Could not open Finder — path copied: ${workspace.path}`);
+                }
+              })();
+            }}
+          >
+            Open folder
+          </button>
         </div>
         {workspace.writerLeaseActive ? (
           <div className="lease-note">

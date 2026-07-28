@@ -8,6 +8,7 @@ import {
   assertPathAllowed,
   createFsCursorWriter,
   discoverCursor,
+  extractStreamText,
   parseCursorModelList,
 } from './index.js';
 
@@ -152,6 +153,42 @@ describe('read-only Cursor turns', () => {
   it('still refuses to write without an envelope', async () => {
     const adapter = new CursorWriterAdapter(createFsCursorWriter());
     await expect(adapter.write('x.md', 'content', undefined as unknown as never)).rejects.toThrow();
+  });
+});
+
+describe('extractStreamText', () => {
+  it('decodes write tool file text instead of dumping raw JSON', () => {
+    const line = JSON.stringify({
+      type: 'tool_call',
+      subtype: 'started',
+      tool_call: {
+        writeToolCall: {
+          args: { path: 'index.html', fileText: '<!doctype html>\n<html>\n' },
+        },
+      },
+    });
+    expect(extractStreamText(line)).toContain('<!doctype html>\n<html>\n');
+    expect(extractStreamText(line)).not.toContain('\\n');
+  });
+
+  it('keeps assistant prose and ignores incomplete JSON lines', () => {
+    expect(
+      extractStreamText(
+        JSON.stringify({
+          type: 'assistant',
+          message: { role: 'assistant', content: [{ type: 'text', text: 'Done.' }] },
+        }),
+      ),
+    ).toBe('Done.');
+    expect(
+      extractStreamText('{"type":"tool_call","tool_call":{"writeToolCall":{"args":{"fileText":"a\\nb'),
+    ).toBeUndefined();
+  });
+
+  it('skips terminal result frames that repeat assistant text', () => {
+    expect(
+      extractStreamText(JSON.stringify({ type: 'result', subtype: 'success', result: 'Done.' })),
+    ).toBeUndefined();
   });
 });
 

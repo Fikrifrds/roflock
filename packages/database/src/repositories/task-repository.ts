@@ -57,6 +57,81 @@ export class TaskRepository {
     return this.get(id);
   }
 
+  /**
+   * Removes a task and its local runtime rows. Event history stays append-only;
+   * orphaned events are fine for audit and do not reappear in the inbox.
+   */
+  delete(id: string): boolean {
+    const existing = this.get(id);
+    if (!existing) return false;
+
+    const runIds = (
+      this.db.prepare(`SELECT id FROM graph_runs WHERE task_id = ?`).all(id) as Array<{ id: string }>
+    ).map((row) => row.id);
+    const nodeRunIds =
+      runIds.length === 0
+        ? []
+        : (
+            this.db
+              .prepare(
+                `SELECT id FROM node_runs WHERE graph_run_id IN (${runIds.map(() => '?').join(',')})`,
+              )
+              .all(...runIds) as Array<{ id: string }>
+          ).map((row) => row.id);
+    const confirmationIds = (
+      this.db
+        .prepare(`SELECT id FROM confirmation_requests WHERE task_id = ?`)
+        .all(id) as Array<{ id: string }>
+    ).map((row) => row.id);
+
+    const tx = this.db.transaction(() => {
+      if (nodeRunIds.length) {
+        const placeholders = nodeRunIds.map(() => '?').join(',');
+        this.db
+          .prepare(`DELETE FROM loop_attempts WHERE node_run_id IN (${placeholders})`)
+          .run(...nodeRunIds);
+        this.db
+          .prepare(`DELETE FROM control_commands WHERE node_run_id IN (${placeholders})`)
+          .run(...nodeRunIds);
+        this.db
+          .prepare(`DELETE FROM active_executions WHERE node_run_id IN (${placeholders})`)
+          .run(...nodeRunIds);
+        this.db
+          .prepare(`DELETE FROM process_handles WHERE node_run_id IN (${placeholders})`)
+          .run(...nodeRunIds);
+        this.db
+          .prepare(`DELETE FROM invocations WHERE node_run_id IN (${placeholders})`)
+          .run(...nodeRunIds);
+        this.db
+          .prepare(
+            `DELETE FROM runtime_leases WHERE resource_type = 'node_run' AND resource_id IN (${placeholders})`,
+          )
+          .run(...nodeRunIds);
+        this.db.prepare(`DELETE FROM node_runs WHERE id IN (${placeholders})`).run(...nodeRunIds);
+      }
+
+      if (confirmationIds.length) {
+        const placeholders = confirmationIds.map(() => '?').join(',');
+        this.db
+          .prepare(`DELETE FROM approvals WHERE confirmation_request_id IN (${placeholders})`)
+          .run(...confirmationIds);
+      }
+
+      this.db.prepare(`DELETE FROM active_executions WHERE task_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM confirmation_requests WHERE task_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM worktrees WHERE task_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM usage_ledger_entries WHERE task_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM artefacts WHERE task_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM test_runs WHERE task_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM review_findings WHERE task_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM task_documents WHERE task_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM graph_runs WHERE task_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM tasks WHERE id = ?`).run(id);
+    });
+    tx();
+    return true;
+  }
+
   list(projectId?: string): Task[] {
     const rows = projectId
       ? (this.db

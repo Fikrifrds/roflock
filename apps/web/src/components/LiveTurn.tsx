@@ -25,22 +25,56 @@ function DiffStats({
   );
 }
 
+/**
+ * Cursor write events are one giant NDJSON line. When a partial line was once
+ * dumped into liveOutput, the pane showed literal `\n` instead of newlines.
+ * Decode that shape so the readable view stays usable for older streams too.
+ */
+export function normalizeLiveOutput(output: string): string {
+  const escapedNewlines = (output.match(/\\n/g) ?? []).length;
+  const realNewlines = (output.match(/\n/g) ?? []).length;
+  if (escapedNewlines < 3 || escapedNewlines <= realNewlines * 2) return output;
+  return output
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\r/g, '\r')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
+}
+
+function looksLikeUnifiedDiff(value: string): boolean {
+  const lines = value.split('\n').slice(0, 40);
+  const plusMinus = lines.filter((line) => /^[+-]/.test(line) && !/^[+-]{3}/.test(line)).length;
+  return (
+    /^diff --git /m.test(value) ||
+    /^@@ /m.test(value) ||
+    (plusMinus >= 4 && plusMinus / Math.max(lines.length, 1) > 0.35)
+  );
+}
+
 type OutputBlock =
   | { type: 'text'; value: string }
+  | { type: 'diff'; value: string }
   | { type: 'mermaid'; value: string };
 
 function outputBlocks(output: string): OutputBlock[] {
+  const normalized = normalizeLiveOutput(output);
   const blocks: OutputBlock[] = [];
   const fence = /```mermaid\s*\n([\s\S]*?)```/g;
   let cursor = 0;
-  for (const match of output.matchAll(fence)) {
+  for (const match of normalized.matchAll(fence)) {
     const at = match.index ?? 0;
-    if (at > cursor) blocks.push({ type: 'text', value: output.slice(cursor, at) });
+    if (at > cursor) pushTextOrDiff(blocks, normalized.slice(cursor, at));
     blocks.push({ type: 'mermaid', value: (match[1] ?? '').trim() });
     cursor = at + match[0].length;
   }
-  if (cursor < output.length) blocks.push({ type: 'text', value: output.slice(cursor) });
-  return blocks.length ? blocks : [{ type: 'text', value: output }];
+  if (cursor < normalized.length) pushTextOrDiff(blocks, normalized.slice(cursor));
+  return blocks.length ? blocks : [{ type: 'text', value: normalized }];
+}
+
+function pushTextOrDiff(blocks: OutputBlock[], value: string): void {
+  if (!value.trim()) return;
+  blocks.push(looksLikeUnifiedDiff(value) ? { type: 'diff', value } : { type: 'text', value });
 }
 
 type DiagramStep = { from: string; to: string; label?: string };
@@ -117,6 +151,10 @@ function ReadableOutput({ output, outputRef }: { output: string; outputRef: RefO
         <Fragment key={index}>
           {block.type === 'mermaid' ? (
             <MermaidDiagram source={block.value} />
+          ) : block.type === 'diff' ? (
+            <pre className="diff-pane" tabIndex={0}>
+              {block.value.trim()}
+            </pre>
           ) : block.value.trim() ? (
             <HumanReadableText value={block.value} />
           ) : null}
@@ -150,6 +188,7 @@ export function LiveTurn({
   const outputRef = useRef<HTMLPreElement>(null);
   const previousOutputRef = useRef<HTMLPreElement>(null);
   const output = execution?.liveOutput ?? '';
+  const readableOutput = normalizeLiveOutput(output);
   const diff = execution?.liveDiff;
   const previousTurn = execution?.previousTurn;
   const reasoningChars = execution?.reasoningChars ?? 0;
@@ -227,7 +266,7 @@ export function LiveTurn({
             <span className="live-terminal-mark" aria-hidden="true">›_</span>
             <h4>{finished || awaitingDecision ? 'Final output' : 'Model & command output'}</h4>
           </div>
-          {output ? <small>{output.split('\n').length.toLocaleString()} lines</small> : null}
+          {output ? <small>{readableOutput.split('\n').length.toLocaleString()} lines</small> : null}
         </div>
         {output ? (
           <ReadableOutput output={output} outputRef={outputRef} />

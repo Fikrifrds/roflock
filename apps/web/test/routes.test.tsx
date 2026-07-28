@@ -496,6 +496,8 @@ describe('WorkspaceChanges', () => {
       ...RUNTIME,
       '/api/tasks/t1/workspace': {
         available: true,
+        path: '/tmp/repo',
+        inPlace: true,
         branchName: 'roleflock/t1',
         baseCommit: 'base',
         headCommit: 'abc123',
@@ -541,6 +543,8 @@ describe('WorkspaceChanges', () => {
       ...RUNTIME,
       '/api/tasks/t1/workspace': {
         available: true,
+        path: '/tmp/repo',
+        inPlace: true,
         branchName: 'roleflock/t1',
         baseCommit: 'base',
         headCommit: 'abc123',
@@ -585,6 +589,8 @@ describe('WorkspaceChanges', () => {
       ...RUNTIME,
       '/api/tasks/t1/workspace': {
         available: true,
+        path: '/tmp/repo',
+        inPlace: true,
         branchName: 'roleflock/t1',
         baseCommit: 'base',
         headCommit: 'abc123',

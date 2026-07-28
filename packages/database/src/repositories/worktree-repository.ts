@@ -52,6 +52,31 @@ export class WorktreeRepository {
     return row ? mapWorktree(row) : undefined;
   }
 
+  listActiveByProject(projectId: string): WorktreeRecord[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM worktrees
+         WHERE project_id = ? AND status IN ('active', 'dirty_preserved')
+         ORDER BY created_at DESC`,
+      )
+      .all(projectId) as Array<Record<string, unknown>>;
+    return rows.map(mapWorktree);
+  }
+
+  findActiveByPath(path: string, exceptTaskId?: string): WorktreeRecord | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM worktrees
+         WHERE path = ?
+           AND status IN ('active', 'dirty_preserved')
+           AND (? IS NULL OR task_id != ?)
+         ORDER BY created_at DESC
+         LIMIT 1`,
+      )
+      .get(path, exceptTaskId ?? null, exceptTaskId ?? null) as Record<string, unknown> | undefined;
+    return row ? mapWorktree(row) : undefined;
+  }
+
   setWriterLease(taskId: string, leaseId: string | null): void {
     this.db
       .prepare(`UPDATE worktrees SET writer_lease_id = ? WHERE task_id = ?`)

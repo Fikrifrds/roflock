@@ -193,24 +193,127 @@ function extractStreamUsage(line: string): ReturnType<typeof parseReportedUsage>
   }
 }
 
-function extractStreamText(line: string): string | undefined {
+type ToolCallEnvelope = {
+  writeToolCall?: { args?: { path?: unknown; fileText?: unknown } };
+  readToolCall?: { args?: { path?: unknown }; result?: { success?: { content?: unknown; totalLines?: unknown } } };
+  editToolCall?: { args?: { path?: unknown; oldString?: unknown; newString?: unknown } };
+  function?: { name?: unknown; arguments?: unknown };
+};
+
+/**
+ * Turns one Cursor stream-json NDJSON line into human-readable live output.
+ * Incomplete lines must not be passed here — callers buffer until a full line.
+ * Never returns the raw JSON: that surfaces literal `\n` escapes in the UI.
+ */
+export function extractStreamText(line: string): string | undefined {
+  let json: Record<string, unknown>;
   try {
-    const json = JSON.parse(line) as Record<string, unknown>;
-    if (json.type === 'assistant' && json.message && typeof json.message === 'object') {
-      const message = json.message as { content?: Array<{ text?: string }> };
-      const text = (message.content ?? [])
-        .map((part) => part.text)
-        .filter((value): value is string => Boolean(value))
-        .join('');
-      return text || undefined;
-    }
-    if (typeof json.result === 'string') return json.result;
-    if (typeof json.text === 'string') return json.text;
-    if (typeof json.delta === 'string') return json.delta;
-    return undefined;
+    json = JSON.parse(line) as Record<string, unknown>;
   } catch {
-    return line;
+    return undefined;
   }
+
+  if (json.type === 'assistant' && json.message && typeof json.message === 'object') {
+    // With --stream-partial-output, buffered flushes duplicate earlier deltas.
+    if ('model_call_id' in json) return undefined;
+    const message = json.message as { content?: Array<{ text?: string }> };
+    const text = (message.content ?? [])
+      .map((part) => part.text)
+      .filter((value): value is string => Boolean(value))
+      .join('');
+    return text || undefined;
+  }
+
+  if (json.type === 'tool_call') {
+    return formatToolCallText(json);
+  }
+
+  // Terminal `result` concatenates assistant text again; skip to avoid noise.
+  if (json.type === 'result') return undefined;
+
+  if (typeof json.text === 'string') return json.text;
+  if (typeof json.delta === 'string') return json.delta;
+  return undefined;
+}
+
+function formatToolCallText(json: Record<string, unknown>): string | undefined {
+  const subtype = typeof json.subtype === 'string' ? json.subtype : '';
+  const toolCall = json.tool_call as ToolCallEnvelope | undefined;
+  if (!toolCall || typeof toolCall !== 'object') return undefined;
+
+  const write = toolCall.writeToolCall;
+  if (write?.args && typeof write.args.path === 'string') {
+    const path = write.args.path;
+    if (subtype === 'started' && typeof write.args.fileText === 'string') {
+      return `\n▸ Writing ${path}\n\n${write.args.fileText}\n`;
+    }
+    if (subtype === 'completed') return `\n✓ Wrote ${path}\n`;
+    return `\n▸ Writing ${path}\n`;
+  }
+
+  const read = toolCall.readToolCall;
+  if (read?.args && typeof read.args.path === 'string') {
+    const path = read.args.path;
+    if (subtype === 'completed') {
+      const lines = read.result?.success?.totalLines;
+      return typeof lines === 'number' ? `\n▸ Read ${path} (${lines} lines)\n` : `\n▸ Read ${path}\n`;
+    }
+    return `\n▸ Reading ${path}\n`;
+  }
+
+  const edit = toolCall.editToolCall;
+  if (edit?.args && typeof edit.args.path === 'string') {
+    const path = edit.args.path;
+    if (subtype === 'started' && typeof edit.args.newString === 'string') {
+      return `\n▸ Editing ${path}\n\n${edit.args.newString}\n`;
+    }
+    return `\n▸ Editing ${path}\n`;
+  }
+
+  const fn = toolCall.function;
+  if (fn && typeof fn.name === 'string') {
+    const name = fn.name;
+    if (subtype === 'started' && typeof fn.arguments === 'string') {
+      const decoded = decodeJsonishArguments(fn.arguments);
+      return decoded ? `\n▸ ${name}\n\n${decoded}\n` : `\n▸ ${name}\n`;
+    }
+    return `\n▸ ${name}\n`;
+  }
+
+  return undefined;
+}
+
+/** Prefer a pretty object dump when tool arguments arrive as a JSON string. */
+function decodeJsonishArguments(raw: string): string | undefined {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object') {
+      const record = parsed as Record<string, unknown>;
+      for (const key of ['fileText', 'contents', 'content', 'new_string', 'newString', 'patch', 'diff']) {
+        if (typeof record[key] === 'string') return record[key] as string;
+      }
+      return JSON.stringify(parsed, null, 2);
+    }
+    if (typeof parsed === 'string') return parsed;
+  } catch {
+    // Arguments may already be plain text.
+  }
+  return looksEscaped(raw) ? unescapeJsonString(raw) : raw;
+}
+
+function looksEscaped(value: string): boolean {
+  const escapedNewlines = (value.match(/\\n/g) ?? []).length;
+  const realNewlines = (value.match(/\n/g) ?? []).length;
+  return escapedNewlines >= 3 && escapedNewlines > realNewlines * 2;
+}
+
+function unescapeJsonString(value: string): string {
+  return value
+    .replace(/\\n/g, '\n')
+    .replace(/\\t/g, '\t')
+    .replace(/\\r/g, '\r')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
 }
 
 /** Cursor writer adapter backed by the live Cursor Agent CLI. */
@@ -349,14 +452,27 @@ export class CursorWriterAdapter implements ProviderAdapter {
       // input that will never arrive.
       child.stdin?.end();
 
+      // Write tool events are one giant NDJSON line. Chunk boundaries must not
+      // flush a partial line — that dumps JSON with literal `\n` into the UI.
+      let lineBuffer = '';
       for await (const chunk of child.stdout) {
         yield { type: 'heartbeat', at: new Date().toISOString() };
-        for (const line of String(chunk).split('\n').filter(Boolean)) {
+        lineBuffer += String(chunk);
+        const lines = lineBuffer.split('\n');
+        lineBuffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
           const usage = extractStreamUsage(line);
           if (usage) yield { type: 'usage.updated', usage: { ...usage } };
           const text = extractStreamText(line);
           if (text) yield { type: 'model.output.delta', text };
         }
+      }
+      if (lineBuffer.trim()) {
+        const usage = extractStreamUsage(lineBuffer);
+        if (usage) yield { type: 'usage.updated', usage: { ...usage } };
+        const text = extractStreamText(lineBuffer);
+        if (text) yield { type: 'model.output.delta', text };
       }
 
       const code: number = await new Promise((resolve) =>

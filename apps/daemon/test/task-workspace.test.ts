@@ -43,6 +43,7 @@ describe('task workspace Git service', () => {
 
     let summary = await inspectTaskWorkspace(worktree);
     expect(summary.branchName).toBe('roleflock/task-1');
+    expect(summary.path).toBe(root);
     expect(summary.files).toEqual([
       expect.objectContaining({ path: 'README.md', worktreeStatus: 'M', added: 2 }),
     ]);

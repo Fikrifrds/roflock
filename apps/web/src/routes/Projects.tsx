@@ -30,7 +30,7 @@ export function Projects() {
       <PageHeader
         eyebrow="Repositories"
         title="Projects"
-        description="Register local Git repositories. Every task runs on its own isolated branch and worktree."
+        description="Register local Git repositories. Every task checks out a RoleFlock branch in that project folder."
       />
       <Section
         title="Add repository"
@@ -68,7 +68,7 @@ export function Projects() {
           <Field
             label="Local path"
             htmlFor="repo-path"
-            hint="Tasks run in an isolated worktree, so your working copy is never touched."
+            hint="Tasks edit files in this folder on a RoleFlock branch. Keep the working tree clean before starting."
           >
             {({ id, describedBy }) => (
               <div className="path-row">

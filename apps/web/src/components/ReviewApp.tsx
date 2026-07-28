@@ -27,7 +27,11 @@ export function ReviewApp({ taskId }: { taskId: string }) {
       const preview = await api.request<ReviewAppState>(`/api/tasks/${taskId}/review-app/start`, {
         method: 'POST',
       });
-      if (preview.url) window.open(preview.url, '_blank', 'noopener,noreferrer');
+      if (preview.state === 'failed') {
+        setError(preview.detail || 'Preview failed to start');
+      } else if (preview.url) {
+        window.open(preview.url, '_blank', 'noopener,noreferrer');
+      }
       await refetch();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to start review app');

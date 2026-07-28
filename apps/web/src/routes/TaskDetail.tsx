@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Field, FileDrop } from '../components/Field.js';
 import { BlockedBanner } from '../components/BlockedBanner.js';
 import { GraphRunView } from '../components/GraphRunView.js';
@@ -28,9 +28,11 @@ import type {
 
 export function TaskDetail() {
   const { id = '' } = useParams();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [actionError, setActionError] = useState('');
   const [starting, setStarting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [verificationDraft, setVerificationDraft] = useState('');
   const [savingVerification, setSavingVerification] = useState(false);
   const [docDraft, setDocDraft] = useState({ kind: 'prd', authority: 'reference' });
@@ -155,9 +157,35 @@ export function TaskDetail() {
     }
   };
 
+  const deleteTask = async () => {
+    if (
+      !window.confirm(
+        `Delete “${task.title}”?\n\nThis removes the task from the inbox. Your Git repository is not deleted.`,
+      )
+    ) {
+      return;
+    }
+    setActionError('');
+    setDeleting(true);
+    try {
+      await api.request(`/api/tasks/${id}`, { method: 'DELETE' });
+      await qc.invalidateQueries({ queryKey: ['tasks'] });
+      await qc.invalidateQueries({ queryKey: ['approvals'] });
+      navigate('/');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Unable to delete task');
+      setDeleting(false);
+    }
+  };
+
   return (
     <Shell>
-      <TaskWorkspaceHeader task={task} activeView={workspaceView} />
+      <TaskWorkspaceHeader
+        task={task}
+        activeView={workspaceView}
+        onDelete={() => void deleteTask()}
+        deleting={deleting}
+      />
       <ReviewApp taskId={task.id} />
       {workspaceView === 'changes' ? (
         <WorkspaceChanges task={task} />

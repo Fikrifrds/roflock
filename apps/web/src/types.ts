@@ -223,6 +223,8 @@ export type TaskWorkspace =
   | { available: false }
   | {
       available: true;
+      path: string;
+      inPlace: boolean;
       branchName: string;
       baseCommit: string;
       headCommit: string;

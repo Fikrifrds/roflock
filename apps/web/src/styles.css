@@ -1087,7 +1087,7 @@ textarea.compact {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 54px 292px minmax(0, 1fr);
+  grid-template-columns: 54px 268px minmax(0, 1fr);
   min-height: 100vh;
   background: #0b1012;
 }
@@ -1181,12 +1181,12 @@ textarea.compact {
 }
 
 .inbox-head {
-  min-height: 64px;
+  min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 14px 10px 16px;
+  padding: 10px 12px 8px 14px;
 }
 
 .inbox-head .eyebrow {
@@ -1219,11 +1219,11 @@ textarea.compact {
 }
 
 .inbox-search {
-  height: 34px;
+  height: 32px;
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: 0 11px 11px;
+  margin: 0 10px 6px;
   padding: 0 10px;
   border: 1px solid #2b373b;
   border-radius: 7px;
@@ -1251,14 +1251,133 @@ textarea.compact {
   box-shadow: none;
 }
 
+.inbox-project {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 8px 10px;
+  padding: 0 2px;
+}
+
+.inbox-project-trigger {
+  min-width: 0;
+  flex: 1;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #9aa8a6;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+}
+
+a.inbox-project-trigger {
+  text-decoration: none;
+}
+
+.inbox-project-trigger:hover,
+.inbox-project-trigger[aria-expanded='true'] {
+  background: #172023;
+  color: #e4ecea;
+}
+
+.inbox-project-icon {
+  flex: 0 0 auto;
+  color: #718084;
+  font-size: 11px;
+}
+
+.inbox-project-trigger:hover .inbox-project-icon,
+.inbox-project-trigger[aria-expanded='true'] .inbox-project-icon {
+  color: var(--accent);
+}
+
+.inbox-project-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-project-chevron {
+  margin-left: 2px;
+  color: #5f6e71;
+  font-size: 9px;
+}
+
+.inbox-project-add {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: #7f8e91;
+  font-size: 16px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.inbox-project-add:hover {
+  background: #172023;
+  color: var(--accent);
+}
+
+.inbox-project-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid #2f3b3e;
+  border-radius: 8px;
+  background: #12191b;
+  box-shadow: var(--shadow-popover);
+}
+
+.inbox-project-menu li button {
+  width: 100%;
+  display: block;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #c5d0ce;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inbox-project-menu li[aria-selected='true'] button {
+  background: #1c272a;
+  color: #eef4f2;
+}
+
+.inbox-project-menu li button:hover {
+  background: #1a2427;
+  color: #eef4f2;
+}
+
 .inbox-groups {
   flex: 1;
   overflow: auto;
-  padding: 0 8px 24px;
+  padding: 0 6px 16px;
 }
 
 .inbox-group {
-  margin: 9px 0 17px;
+  margin: 6px 0 12px;
 }
 
 .inbox-group > h3,
@@ -1289,11 +1408,10 @@ textarea.compact {
 .inbox-task {
   position: relative;
   display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  min-height: 68px;
-  margin: 2px 0;
-  padding: 10px 9px;
+  align-items: stretch;
+  gap: 0;
+  min-height: 56px;
+  margin: 1px 0;
   border: 1px solid transparent;
   border-radius: 8px;
 }
@@ -1308,11 +1426,51 @@ textarea.compact {
   box-shadow: inset 2px 0 var(--accent);
 }
 
+.inbox-task-link {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.inbox-task-delete {
+  flex: 0 0 auto;
+  width: 28px;
+  margin: 6px 6px 6px 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #667579;
+  font-size: 11px;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.inbox-task:hover .inbox-task-delete,
+.inbox-task.selected .inbox-task-delete,
+.inbox-task-delete:focus-visible {
+  opacity: 1;
+}
+
+.inbox-task-delete:hover:not(:disabled) {
+  background: var(--danger-wash);
+  color: var(--danger);
+}
+
+.inbox-task-delete:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
 .inbox-state-dot {
   flex: 0 0 auto;
   width: 7px;
   height: 7px;
-  margin-top: 19px;
+  margin-top: 14px;
   border-radius: 50%;
   background: #687679;
 }
@@ -1414,17 +1572,46 @@ main.app-main {
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: 30px clamp(22px, 3.4vw, 52px) 72px;
+  padding: 16px var(--page-gutter) 40px;
 }
 
 .task-workspace-head {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 24px;
-  margin: -4px 0 24px;
-  padding-bottom: 17px;
+  gap: 16px;
+  margin: 0 0 16px;
+  padding-bottom: 12px;
   border-bottom: 1px solid #2c373a;
+}
+
+.task-workspace-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.task-delete-button {
+  min-height: 30px;
+  padding: 6px 12px;
+  border-color: var(--danger-line);
+  background: var(--danger-wash);
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.task-delete-button:hover:not(:disabled) {
+  background: var(--danger-solid);
+  border-color: var(--danger-solid);
+  color: #fff;
+}
+
+.task-delete-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .task-workspace-head .eyebrow {
@@ -1432,9 +1619,9 @@ main.app-main {
 }
 
 .task-workspace-head h1 {
-  margin: 5px 0 0;
+  margin: 4px 0 0;
   font-family: var(--font-display);
-  font-size: clamp(24px, 3vw, 36px);
+  font-size: clamp(22px, 2.4vw, 30px);
   letter-spacing: -0.02em;
 }
 
@@ -1521,6 +1708,23 @@ main.app-main {
 .branch-card small {
   color: #6f7d80;
   font-size: 9px;
+}
+
+.branch-card .workspace-path {
+  overflow: hidden;
+  color: #8a989a;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-open-folder {
+  align-self: flex-start;
+  margin-top: 4px;
+  min-height: 26px;
+  padding: 4px 8px;
+  font-size: 10px;
 }
 
 .lease-note {
@@ -1794,7 +1998,7 @@ main.app-main {
 
 @media (max-width: 1160px) {
   .app-shell {
-    grid-template-columns: 50px 252px minmax(0, 1fr);
+    grid-template-columns: 50px 240px minmax(0, 1fr);
   }
 
   .source-workspace {
@@ -2560,8 +2764,8 @@ button,
   grid-template-columns: 190px minmax(0, 1fr);
   align-items: center;
   gap: var(--space-5);
-  margin: calc(var(--space-2) * -1) 0 var(--space-6);
-  padding: var(--space-4);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -3016,8 +3220,8 @@ button,
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  margin: 0 0 var(--space-5);
-  padding: var(--space-4) var(--space-5);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--accent) 6%, var(--surface));
@@ -3453,22 +3657,23 @@ pre {
 .graph-edge-path {
   fill: none;
   stroke: var(--border-strong);
-  stroke-width: 1.5;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+  transition: stroke var(--duration) var(--ease), stroke-width var(--duration) var(--ease);
 }
 
 .graph-edge-complete {
-  stroke: var(--ok-line);
+  stroke: color-mix(in srgb, var(--ok) 72%, var(--border-strong));
 }
 
 .graph-edge-active {
   stroke: var(--info);
-  stroke-width: 2;
-  stroke-dasharray: 7 9;
-  filter: drop-shadow(0 0 4px var(--info-line));
-  animation: graph-edge-flow 0.85s linear infinite;
+  stroke-width: 2.1;
+  stroke-dasharray: 5 11;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--info) 45%, transparent));
+  animation: graph-edge-flow 1.15s linear infinite;
 }
 
 .graph-arrow-head {
@@ -3485,7 +3690,8 @@ pre {
 
 .graph-return-edge .graph-edge-path {
   stroke: var(--warn-line);
-  stroke-dasharray: 5 6;
+  stroke-dasharray: 4 8;
+  stroke-linecap: round;
 }
 
 .graph-return-edge rect {
@@ -3501,9 +3707,9 @@ pre {
 
 .graph-return-triggered .graph-edge-path {
   stroke: var(--warn);
-  stroke-width: 2;
+  stroke-width: 1.9;
   filter: drop-shadow(0 0 4px var(--warn-line));
-  animation: graph-return-flow 1s linear infinite;
+  animation: graph-return-flow 1.2s linear infinite;
 }
 
 .graph-nodes {
@@ -3538,6 +3744,36 @@ pre {
   transform: translateY(-2px);
   border-color: var(--border-interactive);
   background: var(--surface-overlay);
+}
+
+.graph-node-marks {
+  width: fit-content;
+  min-width: 34px;
+  height: 28px;
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+}
+
+.graph-node-marks span {
+  min-width: 28px;
+  height: 100%;
+  padding: 0 8px;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  font: 700 var(--text-2xs) / 1 var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.graph-node-marks.split span + span {
+  border-left: 1px solid var(--border);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .graph-node-order {
@@ -3631,10 +3867,12 @@ pre {
   background: linear-gradient(180deg, var(--ok-wash), transparent 50%), var(--surface-raised);
 }
 
+.graph-node.completed .graph-node-marks,
 .graph-node.completed .graph-node-order {
   border-color: var(--ok-line);
 }
 
+.graph-node.completed .graph-node-marks span,
 .graph-node.completed .graph-node-order span {
   color: var(--ok);
 }
@@ -3648,10 +3886,12 @@ pre {
     0 14px 38px -22px var(--info);
 }
 
+.graph-node.running .graph-node-marks,
 .graph-node.running .graph-node-order {
   border-color: var(--info-line);
 }
 
+.graph-node.running .graph-node-marks span,
 .graph-node.running .graph-node-order span {
   color: var(--info);
 }
@@ -3732,22 +3972,14 @@ pre {
 }
 
 @keyframes graph-edge-flow {
-  from {
-    stroke-dashoffset: 16;
-  }
-
   to {
-    stroke-dashoffset: 0;
+    stroke-dashoffset: -16;
   }
 }
 
 @keyframes graph-return-flow {
-  from {
-    stroke-dashoffset: 0;
-  }
-
   to {
-    stroke-dashoffset: -22;
+    stroke-dashoffset: -12;
   }
 }
 
@@ -4534,8 +4766,8 @@ pre {
 .task-workspace-head,
 .task-journey {
   width: 100%;
-  max-width: 1180px;
-  margin-inline: auto;
+  max-width: none;
+  margin-inline: 0;
 }
 
 .task-workspace-kicker .eyebrow {
@@ -4550,15 +4782,15 @@ pre {
 
 .task-workspace-brief {
   max-width: 74ch;
-  margin: var(--space-2) 0 0;
+  margin: var(--space-1) 0 0;
   color: var(--text-muted);
   font-size: var(--text-sm);
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .task-control-section {
-  max-width: 1180px;
-  margin-inline: auto;
+  max-width: none;
+  margin-inline: 0;
 }
 
 .task-control-section > .section-heading {
@@ -4566,15 +4798,15 @@ pre {
 }
 
 .task-now {
-  min-height: 88px;
-  padding: var(--space-4);
+  min-height: 72px;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: linear-gradient(100deg, var(--accent-wash), transparent 38%), var(--surface);
   display: grid;
   grid-template-columns: minmax(220px, 1fr) auto auto;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
   box-shadow: var(--shadow-card);
 }
 
@@ -4590,7 +4822,7 @@ pre {
   margin: 0;
   color: var(--text);
   font-family: var(--font-display);
-  font-size: clamp(var(--text-xl), 2.2vw, var(--text-2xl));
+  font-size: clamp(var(--text-lg), 1.8vw, var(--text-xl));
 }
 
 .task-now-copy > p:last-child {
@@ -4634,7 +4866,7 @@ pre {
 
 .task-run-details,
 .workflow-map-panel {
-  margin-top: var(--space-3);
+  margin-top: var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -4643,14 +4875,14 @@ pre {
 
 .task-run-details > summary,
 .workflow-map-panel > summary {
-  min-height: 58px;
-  padding: var(--space-3) var(--space-4);
+  min-height: 48px;
+  padding: var(--space-2) var(--space-4);
   cursor: pointer;
   list-style: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-3);
   transition: background var(--duration) var(--ease);
 }
 
@@ -4749,7 +4981,7 @@ pre {
 }
 
 .workflow-map-panel + .live-turn {
-  margin-top: var(--space-3);
+  margin-top: var(--space-2);
   margin-bottom: 0;
 }
 
@@ -4851,14 +5083,24 @@ pre {
     font-size: var(--text-xs);
   }
 
+  .task-workspace-actions {
+    width: 100%;
+    justify-content: stretch;
+  }
+
   .workspace-tabs {
     width: 100%;
+    flex: 1;
   }
 
   .workspace-tabs button,
   .workspace-tab-link {
     flex: 1;
     text-align: center;
+  }
+
+  .task-delete-button {
+    width: 100%;
   }
 
   .task-now {

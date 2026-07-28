@@ -206,6 +206,102 @@ export async function createWorktree(
   return { path: await realpath(path), branchName, baseCommit: baseCommit.trim() };
 }
 
+export type TaskWorkspaceMode = 'in_place' | 'external';
+
+export class DirtyWorkingTreeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DirtyWorkingTreeError';
+  }
+}
+
+async function gitStdout(repoRoot: string, args: string[]): Promise<string> {
+  return (await exec('git', ['-C', repoRoot, ...args])).stdout.trim();
+}
+
+/**
+ * Prepares the task workspace. Default is in-place: checkout `roleflock/<taskId>`
+ * inside the project folder so users see files where they expect them.
+ * External worktrees remain available for recovery of older runs.
+ */
+export async function prepareTaskWorkspace(
+  repo: Repository,
+  taskId: string,
+  options: {
+    mode?: TaskWorkspaceMode;
+    baseRef?: string;
+    worktreeBaseDir?: string;
+  } = {},
+): Promise<{ path: string; branchName: string; baseCommit: string; mode: TaskWorkspaceMode }> {
+  const mode = options.mode ?? 'in_place';
+  if (mode === 'external') {
+    if (!options.worktreeBaseDir) {
+      throw new Error('worktreeBaseDir is required for external task workspaces');
+    }
+    const created = await createWorktree(repo, taskId, {
+      baseRef: options.baseRef,
+      worktreeBaseDir: options.worktreeBaseDir,
+    });
+    return { ...created, mode };
+  }
+
+  const baseRef = options.baseRef ?? 'HEAD';
+  const baseCommit = await gitStdout(repo.root, ['rev-parse', baseRef]);
+  const branchName = `roleflock/${taskId}`;
+  const status = await gitStdout(repo.root, ['status', '--porcelain']);
+  const currentBranch = await gitStdout(repo.root, ['branch', '--show-current']);
+
+  if (status && currentBranch !== branchName) {
+    throw new DirtyWorkingTreeError(
+      'Project folder has uncommitted changes. Commit, stash, or discard them before starting a RoleFlock task here.',
+    );
+  }
+
+  const branchExists = await exec('git', ['-C', repo.root, 'rev-parse', '--verify', branchName])
+    .then(() => true)
+    .catch(() => false);
+
+  if (!branchExists) {
+    await exec('git', ['-C', repo.root, 'branch', branchName, baseCommit]);
+  }
+
+  if (currentBranch !== branchName) {
+    await exec('git', ['-C', repo.root, 'checkout', branchName]);
+  }
+
+  return {
+    path: await realpath(repo.root),
+    branchName,
+    baseCommit,
+    mode: 'in_place',
+  };
+}
+
+/**
+ * Leaves the task branch when safe. Never deletes the project folder.
+ * Returns whether the checkout was restored to the base branch.
+ */
+export async function releaseInPlaceWorkspace(
+  repoRoot: string,
+  branchName: string,
+  baseBranch = 'main',
+): Promise<{ restored: boolean }> {
+  const root = await realpath(repoRoot);
+  const currentBranch = await gitStdout(root, ['branch', '--show-current']).catch(() => '');
+  if (currentBranch !== branchName) return { restored: false };
+
+  const status = await gitStdout(root, ['status', '--porcelain']);
+  if (status) return { restored: false };
+
+  const hasBase = await exec('git', ['-C', root, 'rev-parse', '--verify', baseBranch])
+    .then(() => true)
+    .catch(() => false);
+  if (!hasBase) return { restored: false };
+
+  await exec('git', ['-C', root, 'checkout', baseBranch]);
+  return { restored: true };
+}
+
 export async function captureDiff(worktreePath: string): Promise<{
   status: string;
   patch: string;

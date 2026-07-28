@@ -7,8 +7,11 @@ import {
   WriterLease,
   assertSafePath,
   createWorktree,
+  DirtyWorkingTreeError,
+  prepareTaskWorkspace,
   initializeEmptyRepository,
   registerRepository,
+  releaseInPlaceWorkspace,
 } from './index.js';
 
 const dirs: string[] = [];
@@ -105,5 +108,51 @@ describe('repository-runtime', () => {
     expect(b.acquire()).toBe(false);
     a.release();
     expect(b.acquire()).toBe(true);
+  });
+
+  it('prepares an in-place task branch inside the project folder', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'rf-inplace-'));
+    dirs.push(root);
+    execFileSync('git', ['init'], { cwd: root });
+    execFileSync('git', ['config', 'user.email', 'test@roleflock.local'], { cwd: root });
+    execFileSync('git', ['config', 'user.name', 'RoleFlock'], { cwd: root });
+    writeFileSync(join(root, 'README.md'), '# fixture\n');
+    execFileSync('git', ['add', 'README.md'], { cwd: root });
+    execFileSync('git', ['commit', '-m', 'init'], { cwd: root });
+    execFileSync('git', ['branch', '-M', 'main'], { cwd: root });
+
+    const repo = await registerRepository(root);
+    const workspace = await prepareTaskWorkspace(repo, 'task-in-place', { mode: 'in_place' });
+
+    expect(workspace.path).toBe(realpathSync(root));
+    expect(workspace.branchName).toBe('roleflock/task-in-place');
+    expect(workspace.mode).toBe('in_place');
+    expect(
+      execFileSync('git', ['-C', root, 'branch', '--show-current'], { encoding: 'utf8' }).trim(),
+    ).toBe('roleflock/task-in-place');
+
+    writeFileSync(join(root, 'note.html'), '<h1>hi</h1>\n');
+    expect(existsSync(join(root, 'note.html'))).toBe(true);
+
+    const released = await releaseInPlaceWorkspace(root, 'roleflock/task-in-place', 'main');
+    // Dirty tree must not force-checkout away from the user's edits.
+    expect(released.restored).toBe(false);
+  });
+
+  it('refuses in-place start when the project folder is dirty on another branch', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'rf-dirty-'));
+    dirs.push(root);
+    execFileSync('git', ['init'], { cwd: root });
+    execFileSync('git', ['config', 'user.email', 'test@roleflock.local'], { cwd: root });
+    execFileSync('git', ['config', 'user.name', 'RoleFlock'], { cwd: root });
+    writeFileSync(join(root, 'README.md'), '# fixture\n');
+    execFileSync('git', ['add', 'README.md'], { cwd: root });
+    execFileSync('git', ['commit', '-m', 'init'], { cwd: root });
+    writeFileSync(join(root, 'dirty.txt'), 'wip\n');
+
+    const repo = await registerRepository(root);
+    await expect(
+      prepareTaskWorkspace(repo, 'task-dirty', { mode: 'in_place' }),
+    ).rejects.toBeInstanceOf(DirtyWorkingTreeError);
   });
 });

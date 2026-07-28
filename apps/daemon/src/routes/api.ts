@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { ActiveExecution, Task } from '@roleflock/contracts';
 import {
@@ -26,13 +27,15 @@ import { getWorkflowGraph, recommendWorkflow, workflowGraphs } from '@roleflock/
 import { budgetStatus } from '@roleflock/usage-ledger';
 import { EFFORT_LEVELS, isEffort } from '@roleflock/provider-core';
 import {
+  DirtyWorkingTreeError,
   initializeEmptyRepository,
   registerRepository,
+  releaseInPlaceWorkspace,
   RepositoryRegistrationError,
 } from '@roleflock/repository-runtime';
 import type { Session } from '../auth.js';
 import { EventBus } from '../services/event-bus.js';
-import { chooseDirectory, DirectoryPickerCancelled } from '../services/directory-picker.js';
+import { chooseDirectory, DirectoryPickerCancelled, openDirectory } from '../services/directory-picker.js';
 import {
   backupLocalData,
   buildDiagnosticsExport,
@@ -139,6 +142,18 @@ export function registerApi(
       }
       return reply.code(500).send({
         error: error instanceof Error ? error.message : 'Failed to open folder picker',
+      });
+    }
+  });
+  app.post('/api/dialogs/open-directory', async (request, reply) => {
+    const body = request.body as { path?: string };
+    if (!body.path) return reply.code(400).send({ error: 'path is required' });
+    try {
+      await openDirectory(body.path);
+      return { opened: true };
+    } catch (error) {
+      return reply.code(500).send({
+        error: error instanceof Error ? error.message : 'Failed to open folder',
       });
     }
   });
@@ -586,11 +601,17 @@ export function registerApi(
   });
   app.get('/api/tasks/:id/workspace', async (request, reply) => {
     const taskId = (request.params as { id: string }).id;
-    if (!tasks.get(taskId)) return reply.code(404).send({ error: 'Task not found' });
+    const task = tasks.get(taskId);
+    if (!task) return reply.code(404).send({ error: 'Task not found' });
     const worktree = worktrees.getByTask(taskId);
     if (!worktree) return { available: false };
+    const project = projects.get(task.projectId);
     try {
-      return await inspectTaskWorkspace(worktree);
+      const summary = await inspectTaskWorkspace(worktree);
+      return {
+        ...summary,
+        inPlace: Boolean(project && worktree.path === project.resolvedPath),
+      };
     } catch (error) {
       return reply.code(500).send({
         error: error instanceof Error ? error.message : 'Unable to inspect task workspace',
@@ -879,9 +900,14 @@ export function registerApi(
       );
       return reply.code(202).send({ accepted: true, graphRunId: started.graphRunId });
     } catch (error) {
-      return reply.code(500).send({
-        error: error instanceof Error ? error.message : 'Failed to start task',
-      });
+      if (error instanceof DirtyWorkingTreeError) {
+        return reply.code(409).send({ error: error.message });
+      }
+      const message = error instanceof Error ? error.message : 'Failed to start task';
+      if (/already used by another RoleFlock task/i.test(message)) {
+        return reply.code(409).send({ error: message });
+      }
+      return reply.code(500).send({ error: message });
     }
   });
   for (const action of ['pause', 'resume', 'cancel'] as const)
@@ -905,6 +931,72 @@ export function registerApi(
       return { accepted: true };
     });
   }
+  app.delete('/api/tasks/:id', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    const task = tasks.get(id);
+    if (!task) return reply.code(404).send({ error: 'Task not found' });
+    if (
+      orchestrator.isActive(id) ||
+      task.state === 'running' ||
+      task.state === 'stopping' ||
+      task.state === 'paused' ||
+      task.state === 'awaiting_confirmation' ||
+      task.state === 'awaiting_acceptance'
+    ) {
+      return reply.code(409).send({
+        error: 'Stop or finish the task before deleting it',
+      });
+    }
+
+    const worktree = worktrees.getByTask(id);
+    const project = projects.get(task.projectId);
+    try {
+      await reviewApps.stop(id);
+    } catch {
+      /* preview may already be gone */
+    }
+
+    if (worktree && project && worktree.path === project.resolvedPath) {
+      try {
+        await releaseInPlaceWorkspace(
+          worktree.path,
+          worktree.branchName,
+          project.baseBranch === 'HEAD' ? 'main' : project.baseBranch,
+        );
+      } catch {
+        /* leave the checkout as-is; branch history remains for the user */
+      }
+    }
+
+    const deleted = tasks.delete(id);
+    if (!deleted) return reply.code(404).send({ error: 'Task not found' });
+
+    const externalRoot = join(dataDir, 'worktrees');
+    if (
+      worktree?.path &&
+      existsSync(worktree.path) &&
+      worktree.path.startsWith(externalRoot + '/') &&
+      worktree.path !== project?.resolvedPath
+    ) {
+      try {
+        rmSync(worktree.path, { recursive: true, force: true });
+      } catch {
+        /* leaving a stale external worktree dir is recoverable */
+      }
+    }
+
+    audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'task.delete',
+      targetType: 'task',
+      targetId: id,
+      details: { title: task.title, state: task.state },
+      createdAt: now(),
+    });
+    bus.publish('task.deleted', { id, title: task.title });
+    return { deleted: true, id };
+  });
   app.get('/api/tasks/:id/active-execution', async (request) => {
     const taskId = (request.params as { id: string }).id;
     const rows = db

@@ -20,6 +20,8 @@ type PorcelainFile = {
 
 export type TaskWorkspaceSummary = {
   available: true;
+  path: string;
+  inPlace: boolean;
   branchName: string;
   baseCommit: string;
   headCommit: string;
@@ -119,6 +121,8 @@ export async function inspectTaskWorkspace(
     : [0, baseAhead];
   return {
     available: true,
+    path: worktree.path,
+    inPlace: true,
     branchName: worktree.branchName,
     baseCommit: worktree.baseCommit,
     headCommit,
