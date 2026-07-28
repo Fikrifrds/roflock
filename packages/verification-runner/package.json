@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@roleflock/change-contracts": "workspace:*",
+    "@roleflock/command-runner": "workspace:*",
     "@roleflock/contracts": "workspace:*",
     "zod": "^3.25.76"
   },

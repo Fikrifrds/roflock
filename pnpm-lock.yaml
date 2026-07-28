@@ -510,6 +510,9 @@ importers:
       '@roleflock/change-contracts':
         specifier: workspace:*
         version: link:../change-contracts
+      '@roleflock/command-runner':
+        specifier: workspace:*
+        version: link:../command-runner
       '@roleflock/contracts':
         specifier: workspace:*
         version: link:../contracts

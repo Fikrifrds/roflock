@@ -63,6 +63,25 @@ describe('command-runner', () => {
     await expect(access(marker)).resolves.toBeUndefined();
   });
 
+  it('can execute without inheriting the ambient process environment', async () => {
+    const root = await sandbox();
+    const secretName = 'ROLEFLOCK_COMMAND_RUNNER_SECRET';
+    process.env[secretName] = 'writer-secret';
+    try {
+      const result = await runCommand({
+        command: process.execPath,
+        args: ['-e', `process.stdout.write(process.env.${secretName} ?? "absent")`],
+        cwd: root,
+        sandboxRoot: root,
+        env: { PATH: process.env.PATH },
+        inheritEnv: false,
+      });
+      expect(result.stdout).toBe('absent');
+    } finally {
+      delete process.env[secretName];
+    }
+  });
+
   it('times out long-running commands', async () => {
     const root = await sandbox();
     try {

@@ -9,6 +9,8 @@ export interface CommandSpec {
   sandboxRoot: string;
   timeoutMs?: number;
   env?: NodeJS.ProcessEnv;
+  /** Disable ambient process environment inheritance for restricted runners. */
+  inheritEnv?: boolean;
   input?: string;
   /** Fired for each stdout/stderr chunk so a live view can stream the turn. */
   onChunk?: (stream: 'stdout' | 'stderr', chunk: string) => void;
@@ -98,7 +100,7 @@ export async function runCommand(spec: CommandSpec): Promise<CommandResult> {
   return new Promise((resolveResult, reject) => {
     const child = spawn(spec.command, spec.args ?? [], {
       cwd,
-      env: { ...process.env, ...spec.env },
+      env: spec.inheritEnv === false ? spec.env : { ...process.env, ...spec.env },
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: process.platform !== 'win32',
     });
