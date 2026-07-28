@@ -11,6 +11,7 @@ import { MIGRATION_007 } from './migrations/007_graph_run_blocked.js';
 import { MIGRATION_008 } from './migrations/008_change_contracts.js';
 import { MIGRATION_009 } from './migrations/009_task_contract_requirement.js';
 import { MIGRATION_010 } from './migrations/010_feedback_items.js';
+import { MIGRATION_011 } from './migrations/011_execution_plans.js';
 
 export type SqliteDb = Database.Database;
 
@@ -58,6 +59,7 @@ export function migrate(db: SqliteDb): void {
     MIGRATION_008,
     MIGRATION_009,
     MIGRATION_010,
+    MIGRATION_011,
   ];
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;

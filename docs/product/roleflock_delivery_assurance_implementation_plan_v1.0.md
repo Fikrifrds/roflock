@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M2.8 complete; M2.9 is next
+**Execution progress:** M0 through M2 complete; M3.1 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1662,7 +1662,7 @@ later ticket merely to make the product appear complete sooner.
 | M2.6 ✅ | Feedback classifier and planner routing | M2.2 | Raw feedback never targets executor |
 | M2.7 ✅ | Verifier-to-planner graph migration | M2.3 | All non-mechanical findings route through planner |
 | M2.8 ✅ | Repair-envelope classifier | M2.7 | Only approved mechanical repairs bypass planner |
-| M2.9 | Plan/deviation UI and end-to-end tests | M2.4–M2.8 | Full revision loop passes fixture test |
+| M2.9 ✅ | Plan/deviation UI and end-to-end tests | M2.4–M2.8 | Full revision loop passes fixture test |
 | M3.1 | External worktree default for new tasks | M2.5 | Primary checkout stays untouched |
 | M3.2 | Per-worktree writer lease concurrency | M3.1 | Distinct worktrees write concurrently |
 | M3.3 | Global/project concurrency policy | M3.2 | Limits remain durable across restart |

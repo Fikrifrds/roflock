@@ -123,6 +123,104 @@ export type ChangeContractVersionsResponse = {
   versions: Array<{ versionId: string; contract: ChangeContract }>;
 };
 
+export type ExecutionPlan = {
+  id: string;
+  taskId: string;
+  contractId: string;
+  contractHash: string;
+  version: number;
+  status: 'proposed' | 'approved' | 'superseded' | 'cancelled';
+  summary: string;
+  assumptions: Array<{
+    id: string;
+    statement: string;
+    riskIfFalse: string;
+    status: 'unverified' | 'verified' | 'rejected';
+    evidence: Array<{ id: string; digest: string }>;
+  }>;
+  steps: Array<{
+    id: string;
+    objective: string;
+    criterionIds: string[];
+    allowedOperations: string[];
+    expectedFiles: string[];
+    completionEvidenceIds: string[];
+  }>;
+  allowedPaths: string[];
+  expectedChangedPaths: string[];
+  forbiddenPaths: string[];
+  dependencyChanges: Array<Record<string, unknown>>;
+  migrationActions: Array<Record<string, unknown>>;
+  verificationSpecId: string;
+  repairEnvelope: {
+    allowedFailureClasses: string[];
+    maxAttempts: number;
+    mayAddFiles: boolean;
+    mayChangeDependencies: boolean;
+    mayChangePublicApi: boolean;
+    mayChangeSchema: boolean;
+    pathScope: string[];
+  };
+  changeBudget: {
+    maxChangedFiles: number;
+    maxAddedLines: number;
+    maxDeletedLines: number;
+    maxNewDependencies: number;
+  };
+  decisionLog: Array<Record<string, unknown>>;
+  parentPlanId?: string;
+  revisionReason?: string;
+  proposedBy: {
+    invocationId: string;
+    role: string;
+    providerId: string;
+    modelId: string;
+  };
+  reviewedBy?: {
+    actorId?: string;
+    actorType?: string;
+    invocationId?: string;
+    role?: string;
+    providerId?: string;
+    modelId?: string;
+  };
+  approvedAt?: string;
+  hashAlgorithm: 'sha256';
+  hash: string;
+};
+
+export type PlanDeviation = {
+  id: string;
+  planId: string;
+  planHash: string;
+  detectedBy: 'executor' | 'runtime' | 'verifier' | 'human';
+  type: string;
+  evidence: Array<{ id: string; digest: string }>;
+  proposedOptions: string[];
+  status: 'open' | 'resolved_by_plan_revision' | 'rejected' | 'waived';
+  hash: string;
+};
+
+export type ExecutionPlanAggregate = {
+  id: string;
+  taskId: string;
+  contractId: string;
+  currentVersion: number;
+  currentSnapshotId: string;
+  currentHash: string;
+  status: ExecutionPlan['status'];
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ExecutionPlanResponse = {
+  aggregate: ExecutionPlanAggregate;
+  plan: ExecutionPlan;
+  snapshots?: ExecutionPlan[];
+  deviations: PlanDeviation[];
+};
+
 export type Project = {
   id: string;
   name: string;

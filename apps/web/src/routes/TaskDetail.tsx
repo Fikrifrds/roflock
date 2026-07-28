@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Field, FileDrop } from '../components/Field.js';
 import { BlockedBanner } from '../components/BlockedBanner.js';
 import { ChangeContractPanel } from '../components/ChangeContractPanel.js';
+import { ExecutionPlanPanel } from '../components/ExecutionPlanPanel.js';
 import { GraphRunView } from '../components/GraphRunView.js';
 import { LiveTurn } from '../components/LiveTurn.js';
 import { TaskWorkspaceHeader } from '../components/TaskWorkspaceHeader.js';
@@ -15,10 +16,7 @@ import { Empty, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { DOCUMENT_AUTHORITIES, DOCUMENT_KINDS } from '../lib/choices.js';
 import { formatPhase, isTerminalState } from '../lib/format.js';
-import {
-  isMissingVerificationFinding,
-  type TaskFinding,
-} from '../lib/verification.js';
+import { isMissingVerificationFinding, type TaskFinding } from '../lib/verification.js';
 import type {
   ActiveExecution,
   Approval,
@@ -188,6 +186,7 @@ export function TaskDetail() {
         deleting={deleting}
       />
       <ChangeContractPanel task={task} />
+      <ExecutionPlanPanel task={task} />
       <ReviewApp taskId={task.id} />
       {workspaceView === 'changes' ? (
         <WorkspaceChanges task={task} />

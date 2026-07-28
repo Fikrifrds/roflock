@@ -59,6 +59,11 @@ export {
 } from './repositories/change-contract-repository.js';
 export { FeedbackRepository } from './repositories/feedback-repository.js';
 export type { StoredFeedbackItem } from './repositories/feedback-repository.js';
+export {
+  ExecutionPlanRepository,
+  planSnapshotId,
+} from './repositories/execution-plan-repository.js';
+export type { ExecutionPlanAggregate } from './repositories/execution-plan-repository.js';
 export type {
   ChangeContractAggregate,
   StoredChangeContractVersion,

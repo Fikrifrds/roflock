@@ -3226,8 +3226,13 @@ button,
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--accent) 6%, var(--surface));
 }
-.review-app p { margin: 0; }
-.review-app strong { display: block; margin: var(--space-1) 0; }
+.review-app p {
+  margin: 0;
+}
+.review-app strong {
+  display: block;
+  margin: var(--space-1) 0;
+}
 .review-app code {
   display: inline-block;
   max-width: 100%;
@@ -3235,9 +3240,14 @@ button,
   overflow-wrap: anywhere;
   font-size: var(--text-xs);
 }
-.review-app .actions { flex: 0 0 auto; }
+.review-app .actions {
+  flex: 0 0 auto;
+}
 @media (max-width: 700px) {
-  .review-app { align-items: flex-start; flex-direction: column; }
+  .review-app {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @keyframes live-spin {
@@ -3613,8 +3623,12 @@ pre {
   height: 132px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background:
-    linear-gradient(110deg, var(--surface) 25%, var(--surface-hover) 45%, var(--surface) 65%);
+  background: linear-gradient(
+    110deg,
+    var(--surface) 25%,
+    var(--surface-hover) 45%,
+    var(--surface) 65%
+  );
   background-size: 220% 100%;
   animation: graph-skeleton-shimmer 1.35s var(--ease) infinite;
   box-shadow: inset 0 0 0 1px var(--border-subtle);
@@ -3703,7 +3717,9 @@ pre {
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
-  transition: stroke var(--duration) var(--ease), stroke-width var(--duration) var(--ease);
+  transition:
+    stroke var(--duration) var(--ease),
+    stroke-width var(--duration) var(--ease);
 }
 
 .graph-edge-complete {
@@ -5103,8 +5119,192 @@ pre {
   color: var(--text-faint);
 }
 
+.execution-plan-panel {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(120deg, var(--info-wash), transparent 34%), var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.execution-plan-panel > .section-heading {
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.execution-plan-panel h3 {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+}
+
+.plan-seal,
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.plan-seal > div,
+.plan-grid > div,
+.plan-summary {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.plan-seal .eyebrow,
+.plan-summary .eyebrow,
+.plan-path-group .eyebrow {
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.plan-seal code {
+  color: var(--accent);
+}
+
+.plan-summary p {
+  margin: 0;
+}
+
+.plan-summary .hint {
+  margin-top: var(--space-2);
+}
+
+.plan-grid {
+  grid-template-columns: minmax(0, 1.25fr) minmax(240px, 0.75fr);
+}
+
+.plan-path-group + .plan-path-group {
+  margin-top: var(--space-3);
+}
+
+.plan-path-group p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.plan-budget {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.plan-budget div {
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+}
+
+.plan-budget dt {
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.plan-budget dd {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+
+.plan-step-list,
+.plan-deviation-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.plan-step {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--surface-sunken);
+}
+
+.plan-step-number {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.plan-step p {
+  margin: var(--space-1) 0 0;
+}
+
+.plan-deviation {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius);
+  background: var(--warn-wash);
+}
+
+.plan-deviation p {
+  grid-column: 2 / -1;
+  margin: 0;
+}
+
+.plan-lineage {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--info);
+  background: var(--info-wash);
+}
+
+.plan-actions {
+  display: grid;
+  grid-template-columns: auto minmax(260px, 1fr) auto;
+  align-items: end;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+.plan-revision-field {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.plan-history {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.plan-history summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.plan-history li + li {
+  margin-top: var(--space-2);
+}
+
 @media (max-width: 760px) {
   .contract-panel {
+    padding: var(--space-4);
+  }
+
+  .execution-plan-panel {
     padding: var(--space-4);
   }
 
@@ -5134,6 +5334,17 @@ pre {
   .contract-history li code,
   .contract-history li small {
     grid-column: 2;
+  }
+
+  .plan-seal,
+  .plan-grid,
+  .plan-actions,
+  .plan-deviation {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-deviation p {
+    grid-column: 1;
   }
 }
 
