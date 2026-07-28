@@ -20,3 +20,4 @@ Create these records in `docs/adr/`.
 | ADR-014 | Independent delivery-assurance boundary |
 | ADR-015 | Versioned Change Contract and Execution Plan |
 | ADR-016 | Role authority and planner-owned feedback routing |
+| ADR-017 | Independent verification trust boundary |
