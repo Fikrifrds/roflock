@@ -22,3 +22,4 @@ Create these records in `docs/adr/`.
 | ADR-016 | Role authority and planner-owned feedback routing |
 | ADR-017 | Independent verification trust boundary |
 | ADR-018 | Portable Change Passport and signing |
+| ADR-019 | Deterministic role recommendation and outcome scoring |
