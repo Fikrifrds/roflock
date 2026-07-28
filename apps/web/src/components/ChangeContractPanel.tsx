@@ -214,6 +214,13 @@ export function ChangeContractPanel({ task }: { task: Task }) {
         ) : undefined
       }
     >
+      {task.contractRequirement === 'legacy_uncontracted' && contract === undefined ? (
+        <p className="legacy-contract-banner" role="status">
+          Legacy uncontracted task — execution remains available, but its brief is not represented
+          as human-authorised. Create a contract to move into assured mode.
+        </p>
+      ) : null}
+
       {error ? (
         <p className="error" role="alert">
           {error}

@@ -4855,6 +4855,16 @@ pre {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.legacy-contract-banner {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius-md);
+  background: var(--warn-wash);
+  color: var(--text);
+  line-height: 1.45;
+}
+
 .contract-status-row {
   display: flex;
   align-items: center;

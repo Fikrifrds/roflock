@@ -29,6 +29,7 @@ export type Task = {
   maxAttempts: number;
   maxActualCostUsd?: number;
   workflowGraphVersionId: string;
+  contractRequirement?: 'required' | 'legacy_uncontracted';
   expectedBehaviour?: string;
   actualBehaviour?: string;
   verificationCommand?: string;

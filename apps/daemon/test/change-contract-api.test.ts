@@ -118,6 +118,41 @@ function mutationHeaders(
 }
 
 describe('Change Contract API', () => {
+  it('blocks task start until the exact current contract is authorised', async () => {
+    const { app, headers, task } = await fixture();
+
+    const missing = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${task.id}/start`,
+      headers,
+      payload: {},
+    });
+    expect(missing.statusCode).toBe(409);
+    expect(missing.json()).toMatchObject({ code: 'CHANGE_CONTRACT_REQUIRED' });
+
+    const created = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${task.id}/change-contract`,
+      headers: mutationHeaders(headers, 'create-start-gate'),
+      payload: contractBody(),
+    });
+    const contractId = (created.json() as { contract: { id: string } }).contract.id;
+
+    const draft = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${task.id}/start`,
+      headers,
+      payload: {},
+    });
+    expect(draft.statusCode).toBe(409);
+    expect(draft.json()).toMatchObject({
+      code: 'CHANGE_CONTRACT_NOT_AUTHORISED',
+      contractId,
+      contractStatus: 'draft',
+      revision: 1,
+    });
+  });
+
   it('creates, idempotently replays, version-checks, and authorises a contract', async () => {
     const { app, headers, task } = await fixture();
     const createHeaders = mutationHeaders(headers, 'create-contract-1');

@@ -50,12 +50,7 @@ export const ExecutionPhaseSchema = z.enum([
 ]);
 export type ExecutionPhase = z.infer<typeof ExecutionPhaseSchema>;
 
-export const UsageConfidenceSchema = z.enum([
-  'exact',
-  'provider_reported',
-  'estimated',
-  'unknown',
-]);
+export const UsageConfidenceSchema = z.enum(['exact', 'provider_reported', 'estimated', 'unknown']);
 export type UsageConfidence = z.infer<typeof UsageConfidenceSchema>;
 
 export const ConfirmationRequestTypeSchema = z.enum([
@@ -115,6 +110,7 @@ export const TaskSchema = z.object({
   state: TaskStateSchema,
   workflowGraphVersionId: z.string(),
   budgetPolicyId: z.string(),
+  contractRequirement: z.enum(['required', 'legacy_uncontracted']).optional(),
   expectedBehaviour: z.string().optional(),
   actualBehaviour: z.string().optional(),
   verificationCommand: z.string().optional(),

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer } from '../src/server.js';
+import { authoriseTaskContract } from './contract-fixture.js';
 
 const cleanup: Array<() => Promise<void>> = [];
 const session = { token: 'test-token', csrf: 'test-csrf' };
@@ -76,6 +77,7 @@ describe('daemon recovery', () => {
     });
     expect(task.statusCode).toBe(201);
     const taskId = (task.json() as { id: string }).id;
+    await authoriseTaskContract(first.app, headers, taskId);
 
     expect(
       (

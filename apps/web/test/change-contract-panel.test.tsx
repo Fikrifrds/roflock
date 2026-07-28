@@ -90,6 +90,24 @@ function response(value: ChangeContract): ChangeContractResponse {
 }
 
 describe('ChangeContractPanel', () => {
+  it('labels legacy tasks without inventing authority', async () => {
+    stubApi({
+      '/api/tasks/t1/change-contract': {
+        code: 'CHANGE_CONTRACT_NOT_FOUND',
+        error: 'Change Contract not found',
+      },
+    });
+
+    renderApp(
+      <ChangeContractPanel task={{ ...task, contractRequirement: 'legacy_uncontracted' }} />,
+    );
+
+    expect(
+      await screen.findByText(/Legacy uncontracted task — execution remains available/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create change contract' })).toBeInTheDocument();
+  });
+
   it('presents an authorised contract as a sealed authority record', async () => {
     const value = contract('authorised');
     stubApi({

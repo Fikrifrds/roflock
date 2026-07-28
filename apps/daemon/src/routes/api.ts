@@ -6,6 +6,7 @@ import type { ActiveExecution, Task } from '@roleflock/contracts';
 import {
   AuditRepository,
   ApprovalGrantRepository,
+  ChangeContractRepository,
   ConfirmationRepository,
   DisclosureGrantRepository,
   EvidenceRepository,
@@ -35,7 +36,11 @@ import {
 } from '@roleflock/repository-runtime';
 import type { Session } from '../auth.js';
 import { EventBus } from '../services/event-bus.js';
-import { chooseDirectory, DirectoryPickerCancelled, openDirectory } from '../services/directory-picker.js';
+import {
+  chooseDirectory,
+  DirectoryPickerCancelled,
+  openDirectory,
+} from '../services/directory-picker.js';
 import {
   backupLocalData,
   buildDiagnosticsExport,
@@ -66,6 +71,7 @@ import {
   unstageTaskFiles,
 } from '../services/task-workspace.js';
 import { registerChangeContractRoutes } from './change-contracts.js';
+import { evaluateContractStartGate } from '../services/contract-start-gate.js';
 
 export function registerApi(
   app: FastifyInstance,
@@ -82,6 +88,7 @@ export function registerApi(
 ): void {
   const projects = new ProjectRepository(db),
     tasks = new TaskRepository(db),
+    changeContracts = new ChangeContractRepository(db),
     approvals = new ConfirmationRepository(db),
     approvalGrants = new ApprovalGrantRepository(db),
     disclosureGrants = new DisclosureGrantRepository(db),
@@ -258,6 +265,7 @@ export function registerApi(
       state: 'ready',
       workflowGraphVersionId,
       budgetPolicyId: 'local-default',
+      contractRequirement: 'required',
       expectedBehaviour: body.expectedBehaviour,
       actualBehaviour: body.actualBehaviour,
       verificationCommand: body.verificationCommand,
@@ -603,7 +611,8 @@ export function registerApi(
     const taskId = (request.params as { id: string }).id;
     if (!tasks.get(taskId)) return reply.code(404).send({ error: 'Task not found' });
     const worktree = worktrees.getByTask(taskId);
-    if (!worktree) return { available: false, detail: 'Start this task to create a review workspace.' };
+    if (!worktree)
+      return { available: false, detail: 'Start this task to create a review workspace.' };
     return reviewApps.inspect(taskId, worktree.path);
   });
   app.post('/api/tasks/:id/review-app/start', async (request, reply) => {
@@ -612,7 +621,9 @@ export function registerApi(
     const worktree = worktrees.getByTask(taskId);
     if (!worktree) return reply.code(404).send({ error: 'Task workspace not found' });
     if (worktree.writerLeaseId)
-      return reply.code(409).send({ error: 'Wait until the writer finishes before starting a review preview.' });
+      return reply
+        .code(409)
+        .send({ error: 'Wait until the writer finishes before starting a review preview.' });
     try {
       const preview = await reviewApps.start(taskId, worktree.path);
       audit.append({
@@ -867,6 +878,16 @@ export function registerApi(
     ) {
       return reply.code(409).send({ error: `Cannot start task in state ${task.state}` });
     }
+    const contractGate = evaluateContractStartGate(task, changeContracts);
+    if (!contractGate.allowed) {
+      return reply.code(409).send({
+        code: contractGate.code,
+        error: contractGate.message,
+        contractId: contractGate.contractId,
+        contractStatus: contractGate.contractStatus,
+        revision: contractGate.revision,
+      });
+    }
     const project = projects.get(task.projectId);
     if (!project) return reply.code(400).send({ error: 'Task project missing' });
     try {
@@ -874,12 +895,18 @@ export function registerApi(
       if (task.state === 'failed' || task.state === 'cancelled') {
         tasks.upsert({ ...task, state: 'ready', updatedAt: now() });
       }
-      const started = await orchestrator.start(
-        task,
-        project.resolvedPath,
-        project.baseBranch,
-      );
-      return reply.code(202).send({ accepted: true, graphRunId: started.graphRunId });
+      const started = await orchestrator.start(task, project.resolvedPath, project.baseBranch);
+      return reply.code(202).send({
+        accepted: true,
+        graphRunId: started.graphRunId,
+        contract:
+          contractGate.mode === 'authorised'
+            ? contractGate.pin
+            : {
+                mode: contractGate.mode,
+                warning: contractGate.warning,
+              },
+      });
     } catch (error) {
       if (error instanceof DirtyWorkingTreeError) {
         return reply.code(409).send({ error: error.message });
@@ -987,9 +1014,7 @@ export function registerApi(
       )
       .all(taskId) as Array<{ projection_json: string }>;
     if (!rows.length) return null;
-    const executions = rows.map(
-      (row) => JSON.parse(row.projection_json) as ActiveExecution,
-    );
+    const executions = rows.map((row) => JSON.parse(row.projection_json) as ActiveExecution);
     const latest = executions[0]!;
     const previous = executions.find(
       (execution) =>

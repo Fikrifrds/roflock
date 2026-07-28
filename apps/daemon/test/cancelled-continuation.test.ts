@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { openMigratedDatabase, WorktreeRepository } from '@roleflock/database';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer } from '../src/server.js';
+import { authoriseTaskContract } from './contract-fixture.js';
 
 const cleanup: Array<() => Promise<void>> = [];
 const session = { token: 'test-token', csrf: 'test-csrf' };
@@ -57,6 +58,7 @@ describe('cancelled task continuation', () => {
         },
       })
     ).json() as { id: string; workflowGraphVersionId: string };
+    await authoriseTaskContract(instance.app, headers, task.id);
 
     const worktreePath = join(dataDir, 'preserved-worktree');
     const branchName = `roleflock/test-${task.id}`;

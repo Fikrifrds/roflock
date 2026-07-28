@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer } from '../src/server.js';
+import { authoriseTaskContract } from './contract-fixture.js';
 
 const cleanup: Array<() => Promise<void>> = [];
 
@@ -86,6 +87,7 @@ describe('verified bug fix walking skeleton', () => {
     });
     expect(task.statusCode).toBe(201);
     const taskBody = task.json() as { id: string };
+    await authoriseTaskContract(app, headers, taskBody.id);
 
     const started = await app.inject({
       method: 'POST',
