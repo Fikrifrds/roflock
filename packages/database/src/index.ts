@@ -70,6 +70,7 @@ export {
   planSnapshotId,
 } from './repositories/execution-plan-repository.js';
 export type { ExecutionPlanAggregate } from './repositories/execution-plan-repository.js';
+export { VerificationSpecificationRepository } from './repositories/verification-specification-repository.js';
 export type {
   ChangeContractAggregate,
   StoredChangeContractVersion,

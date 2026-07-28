@@ -6,5 +6,9 @@
     "composite": true
   },
   "include": ["src/**/*"],
-  "references": [{ "path": "../contracts" }, { "path": "../change-contracts" }]
+  "references": [
+    { "path": "../contracts" },
+    { "path": "../change-contracts" },
+    { "path": "../verification-runner" }
+  ]
 }

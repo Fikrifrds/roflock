@@ -81,6 +81,35 @@ describe('task handoff', () => {
       payload: {},
     });
     const approvedPlan = approved.json() as { plan: { id: string; hash: string } };
+    const verification = await server.app.inject({
+      method: 'POST',
+      url: `/api/tasks/${task.id}/verification-specification`,
+      headers,
+      payload: verificationSpecificationBody(),
+    });
+    expect(verification.statusCode).toBe(201);
+    const specification = verification.json() as {
+      specification: { id: string; contractHash: string; planHash: string; hash: string };
+    };
+    expect(specification.specification).toMatchObject({
+      id: 'verification_handoff',
+      contractHash: contract.hash,
+      planHash: approvedPlan.plan.hash,
+    });
+    expect(verification.headers.etag).toBe(`"${specification.specification.hash}"`);
+    const mutation = await server.app.inject({
+      method: 'POST',
+      url: `/api/tasks/${task.id}/verification-specification`,
+      headers,
+      payload: {
+        ...verificationSpecificationBody(),
+        checks: [],
+      },
+    });
+    expect(mutation.statusCode).toBe(409);
+    expect(mutation.json()).toMatchObject({
+      code: 'VERIFICATION_SPECIFICATION_FROZEN',
+    });
     const db = openMigratedDatabase(join(dataDir, 'roleflock.db'));
     new WorktreeRepository(db).create({
       id: 'worktree_handoff',
@@ -161,5 +190,41 @@ function proposal() {
       maxNewDependencies: 0,
     },
     decisionLog: [],
+  };
+}
+
+function verificationSpecificationBody() {
+  return {
+    checks: [
+      {
+        id: 'CHECK-1',
+        criterionIds: ['AC-1'],
+        required: true,
+        description: 'Run exact handoff verification.',
+        kind: 'command',
+        argv: ['pnpm', 'test', '--', 'handoff'],
+        timeoutMs: 120_000,
+        expectedExitCodes: [0],
+      },
+    ],
+    environment: {
+      platform: 'linux',
+      architecture: 'x64',
+      requiredTools: [],
+      network: 'deny',
+      networkAllowlist: [],
+      environmentVariableAllowlist: ['CI'],
+      credentialProfileId: 'verifier-isolated',
+    },
+    testMutationPolicy: 'forbid',
+    minimumEvidence: [
+      {
+        id: 'E-1',
+        criterionId: 'AC-1',
+        evidenceType: 'test_result',
+        minimumCount: 1,
+        mandatory: true,
+      },
+    ],
   };
 }

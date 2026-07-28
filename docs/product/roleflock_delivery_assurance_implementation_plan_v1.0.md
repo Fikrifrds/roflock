@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M3 complete; M4.1 is next
+**Execution progress:** M0 through M4.1 complete; M4.2 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1669,7 +1669,7 @@ later ticket merely to make the product appear complete sooner.
 | M3.4 ✅ | Expected-path collision analysis                    | M2.1, M3.1      | Overlap warning appears before start                      |
 | M3.5 ✅ | IDE/agent handoff commands                          | M3.1            | Handoff preserves contract/plan/task identity             |
 | M3.6 ✅ | Parallel crash-recovery test suite                  | M3.2–M3.5       | Forced daemon restart recovers safely                     |
-| M4.1    | Verification Specification schema and freeze gate   | M2.1            | Executor cannot mutate verification input                 |
+| M4.1 ✅ | Verification Specification schema and freeze gate   | M2.1            | Executor cannot mutate verification input                 |
 | M4.2    | Clean verifier worktree lifecycle                   | M3.1, M4.1      | Verification runs from result commit                      |
 | M4.3    | Restricted deterministic verifier runner            | M4.2            | Exact argv and credential isolation tests pass            |
 | M4.4    | Test-mutation and command-drift detection           | M4.3            | Weakened tests/scripts are detected                       |

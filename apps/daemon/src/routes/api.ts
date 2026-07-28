@@ -74,6 +74,7 @@ import {
 import { registerChangeContractRoutes } from './change-contracts.js';
 import { registerFeedbackRoutes } from './feedback.js';
 import { registerExecutionPlanRoutes } from './execution-plans.js';
+import { registerVerificationSpecificationRoutes } from './verification-specifications.js';
 import { evaluateContractStartGate } from '../services/contract-start-gate.js';
 import { findTaskPathCollisions } from '../services/path-collision.js';
 import { buildTaskHandoff } from '../services/task-handoff.js';
@@ -106,6 +107,7 @@ export function registerApi(
   registerChangeContractRoutes(app, db, bus);
   registerFeedbackRoutes(app, db, bus);
   registerExecutionPlanRoutes(app, db, bus);
+  registerVerificationSpecificationRoutes(app, db, bus);
   app.get('/api/concurrency-policy', async (request) => {
     const projectId = (request.query as { projectId?: string }).projectId;
     return {

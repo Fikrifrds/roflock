@@ -43,6 +43,7 @@ import {
   ProcessHandleRepository,
   TaskRepository,
   UsageRepository,
+  VerificationSpecificationRepository,
   WorktreeRepository,
   type SqliteDb,
 } from '@roleflock/database';
@@ -69,6 +70,10 @@ import {
 } from '@roleflock/provider-core';
 import { CursorWriterAdapter, assertChangedPathsAllowed } from '@roleflock/provider-cursor';
 import { budgetStatus, estimateInvocationCost } from '@roleflock/usage-ledger';
+import {
+  freezeVerificationSpecification,
+  type VerificationSpecification,
+} from '@roleflock/verification-runner';
 import { EventBus } from './event-bus.js';
 import { authoritativeConflictMessage, type DocumentService } from './documents.js';
 import { applyModelPatch, buildPatchWriterContext } from './model-patch.js';
@@ -265,6 +270,7 @@ export class Orchestrator {
   private readonly commands: ControlCommandRepository;
   private readonly evidence: EvidenceRepository;
   private readonly usage: UsageRepository;
+  private readonly verificationSpecifications: VerificationSpecificationRepository;
   private readonly worktrees: WorktreeRepository;
   private readonly events: EventStore;
   private readonly confirmations: ConfirmationRepository;
@@ -292,6 +298,7 @@ export class Orchestrator {
     this.commands = new ControlCommandRepository(db);
     this.evidence = new EvidenceRepository(db);
     this.usage = new UsageRepository(db);
+    this.verificationSpecifications = new VerificationSpecificationRepository(db);
     this.worktrees = new WorktreeRepository(db);
     this.events = new EventStore(db);
     this.confirmations = new ConfirmationRepository(db);
@@ -766,10 +773,22 @@ export class Orchestrator {
     }> => {
       openRuns.delete(node.id);
       const role = node.role;
+      const contract = this.currentContract(task.id);
       const pinnedPlan =
         node.authorityRole === 'executor' ? approvedPlanFromCompleted(completed) : undefined;
       if (node.authorityRole === 'executor' && pinnedPlan === undefined) {
         throw new Error('Executor cannot start without one current approved Execution Plan');
+      }
+      let pinnedVerification: Readonly<VerificationSpecification> | undefined;
+      if (pinnedPlan !== undefined) {
+        if (contract === undefined) {
+          throw new Error('Executor cannot start without the current authorised contract');
+        }
+        const specification = this.verificationSpecifications.getByTask(task.id);
+        if (specification === undefined) {
+          throw new Error('Executor cannot start without a frozen Verification Specification');
+        }
+        pinnedVerification = freezeVerificationSpecification(specification, contract, pinnedPlan);
       }
       if (pinnedPlan !== undefined) activeApprovedPlan = pinnedPlan;
       let nodeOutput: string | undefined;
@@ -850,7 +869,6 @@ export class Orchestrator {
           ];
         },
       );
-      const contract = this.currentContract(task.id);
       const disclosureEntries = [
         ...(pinnedPlan === undefined
           ? []
@@ -860,6 +878,16 @@ export class Orchestrator {
                 id: pinnedPlan.id,
                 hash: pinnedPlan.hash,
                 content: JSON.stringify(pinnedPlan),
+              }),
+            ]),
+        ...(pinnedVerification === undefined
+          ? []
+          : [
+              buildPinnedArtifactContext({
+                kind: 'verification_specification',
+                id: pinnedVerification.id,
+                hash: pinnedVerification.hash,
+                content: JSON.stringify(pinnedVerification),
               }),
             ]),
         ...(role === 'planner' && contract !== undefined
