@@ -186,10 +186,12 @@ export function TaskDetail() {
               </p>
               <label>
                 Verification command
-                <input
+                <textarea
+                  className="verification-command-input"
                   value={verificationCommand}
                   onChange={(event) => setVerificationDraft(event.target.value)}
                   placeholder="e.g. python3 -m pytest"
+                  rows={3}
                 />
               </label>
               {verificationSuggestion?.command ? (

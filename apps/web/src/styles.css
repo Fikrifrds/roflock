@@ -2985,14 +2985,30 @@ button,
   font-size: var(--text-sm);
   font-weight: 700;
 }
-.verification-recovery input {
+.verification-command-input {
   width: 100%;
+  min-width: 0;
+  resize: vertical;
   font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 .verification-suggestion {
   justify-self: start;
+  max-width: 100%;
+  min-width: 0;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+}
+.verification-suggestion code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 @keyframes live-spin {
