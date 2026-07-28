@@ -85,7 +85,7 @@ export function assertChangedPathsAllowed(
 
 const INSTALL_HINT = 'Install with: curl https://cursor.com/install -fsS | bash';
 
-/** Other vendors also ship a bare `agent` binary; never mistake one for Cursor. */
+/** Other vendors ship generic agent binaries; never mistake one for Cursor. */
 function isForeignAgent(binary: string): boolean {
   return /[\\/]\.(grok|gemini|qwen)[\\/]/.test(binary);
 }
@@ -109,17 +109,19 @@ async function looksLikeCursorAgent(binary: string): Promise<boolean> {
 }
 
 /**
- * Discover the Cursor Agent CLI (`agent` / `cursor-agent`), never another vendor's `agent`.
+ * Discover only the explicitly named Cursor Agent CLI (`cursor-agent`). A bare
+ * `agent` binary is deliberately never probed: other providers (such as Grok)
+ * use that generic name too.
  *
- * An explicitly configured binary — the `binary` argument, `CURSOR_AGENT_PATH`, or
- * `CURSOR_PATH` — is authoritative: if it is missing or is not the Cursor Agent CLI the
+ * An explicitly configured binary — the `binary` argument or `CURSOR_AGENT_PATH` — is
+ * authoritative: if it is missing or is not the Cursor Agent CLI the
  * result is `missing`. Falling back to PATH there would silently run a different binary
  * than the one the operator configured.
  */
 export async function discoverCursor(
   binary?: string,
 ): Promise<Pick<ProviderHealth, 'binary' | 'version' | 'status' | 'detail'>> {
-  const configured = binary ?? process.env.CURSOR_AGENT_PATH ?? process.env.CURSOR_PATH;
+  const configured = binary ?? process.env.CURSOR_AGENT_PATH;
 
   if (configured) {
     const resolved = await resolveCandidate(configured);
@@ -135,12 +137,8 @@ export async function discoverCursor(
     return { status: 'ready', binary: resolved };
   }
 
-  for (const candidate of ['cursor-agent', 'agent']) {
-    const resolved = await resolveCandidate(candidate);
-    if (!resolved) continue;
-    if (!(await looksLikeCursorAgent(resolved))) continue;
-    return { status: 'ready', binary: resolved };
-  }
+  const resolved = await resolveCandidate('cursor-agent');
+  if (resolved && (await looksLikeCursorAgent(resolved))) return { status: 'ready', binary: resolved };
 
   return {
     status: 'missing',
@@ -227,7 +225,7 @@ export class CursorWriterAdapter implements ProviderAdapter {
 
   constructor(
     private readonly writer: CursorWriter = createFsCursorWriter(),
-    private readonly binaryHint = process.env.CURSOR_AGENT_PATH ?? process.env.CURSOR_PATH,
+    private readonly binaryHint = process.env.CURSOR_AGENT_PATH,
   ) {}
 
   async healthCheck(): Promise<ProviderHealth> {
