@@ -353,6 +353,10 @@ export class WriterLease {
     return WriterLease.owners.get(worktree);
   }
 
+  static clear(worktree: string): void {
+    WriterLease.owners.delete(worktree);
+  }
+
   static clearAll(): void {
     WriterLease.owners.clear();
   }

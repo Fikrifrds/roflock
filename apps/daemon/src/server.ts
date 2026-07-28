@@ -10,6 +10,7 @@ import {
   ProcessHandleRepository,
   ProviderConnectionRepository,
 } from '@roleflock/database';
+import { WriterLease } from '@roleflock/repository-runtime';
 import { OUTCOME_UNKNOWN, reconcileProcess } from '@roleflock/run-control';
 import {
   authenticate,
@@ -84,6 +85,7 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
   seedPricingDefaults(db);
   reconcileOrphanedProcesses(db);
   reconcileInterruptedGraphRuns(db);
+  reconcileWriterLeases(db);
   const bus = new EventBus();
   const providers = new ProviderRegistry();
   const providerConnections = new ProviderConnectionRepository(db);
@@ -95,7 +97,9 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
         displayName: connection.displayName,
         endpoint: connection.endpoint,
         model: connection.model,
-        apiKey: connection.apiKeySecretId ? (await providerSecrets.get(connection.apiKeySecretId)) ?? '' : '',
+        apiKey: connection.apiKeySecretId
+          ? ((await providerSecrets.get(connection.apiKeySecretId)) ?? '')
+          : '',
       });
     } catch (error) {
       app.log.warn(
@@ -107,10 +111,22 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
   const documents = new DocumentService(db, join(dataDir, 'documents'));
   const reviewApps = new ReviewAppService();
   const orchestrator = new Orchestrator(db, bus, join(dataDir, 'worktrees'), providers, documents);
-  registerApi(app, db, session, bus, orchestrator, providers, documents, dataDir, providerSecrets, reviewApps, {
-    host,
-    port,
-  });
+  registerApi(
+    app,
+    db,
+    session,
+    bus,
+    orchestrator,
+    providers,
+    documents,
+    dataDir,
+    providerSecrets,
+    reviewApps,
+    {
+      host,
+      port,
+    },
+  );
   const webDist = join(process.cwd(), 'apps', 'web', 'dist');
   if (existsSync(webDist)) await app.register(statik, { root: webDist, wildcard: false });
   app.addHook('onClose', async () => {
@@ -140,6 +156,25 @@ function reconcileInterruptedGraphRuns(db: ReturnType<typeof openMigratedDatabas
   db.prepare(
     "UPDATE invocations SET status = 'interrupted', outcome = COALESCE(outcome, 'interrupted'), completed_at = ? WHERE status = 'running'",
   ).run(at);
+}
+
+/**
+ * Writer leases represent live process ownership and therefore cannot survive
+ * a daemon process boundary. The worktree and task concurrency slot do survive:
+ * after restart the task reclaims its durable admission and takes a fresh
+ * writer lease when it reaches the executor again.
+ */
+function reconcileWriterLeases(db: ReturnType<typeof openMigratedDatabase>): void {
+  const at = new Date().toISOString();
+  const worktrees = db
+    .prepare(`SELECT path FROM worktrees WHERE writer_lease_id IS NOT NULL`)
+    .all() as Array<{ path: string }>;
+  db.prepare(
+    `UPDATE runtime_leases SET released_at = ?
+     WHERE resource_type = 'writer' AND released_at IS NULL`,
+  ).run(at);
+  db.prepare(`UPDATE worktrees SET writer_lease_id = NULL WHERE writer_lease_id IS NOT NULL`).run();
+  for (const worktree of worktrees) WriterLease.clear(worktree.path);
 }
 
 function reconcileOrphanedProcesses(db: ReturnType<typeof openMigratedDatabase>): void {
