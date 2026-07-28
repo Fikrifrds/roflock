@@ -61,6 +61,7 @@ export interface ChangeContractStore {
 export interface ContractCommandMetadata {
   actorId: string;
   idempotencyKey?: string;
+  requestHash?: string;
   correlationId?: string;
   causationId?: string;
 }
@@ -361,6 +362,7 @@ export class ChangeContractService {
         schemaVersion: 1,
         actorId: metadata.actorId,
         idempotencyKey: metadata.idempotencyKey,
+        requestHash: metadata.requestHash,
         correlationId: metadata.correlationId,
         causationId: metadata.causationId,
       },

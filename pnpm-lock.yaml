@@ -52,6 +52,9 @@ importers:
       '@roleflock/command-runner':
         specifier: workspace:*
         version: link:../../packages/command-runner
+      '@roleflock/change-contracts':
+        specifier: workspace:*
+        version: link:../../packages/change-contracts
       '@roleflock/context-compiler':
         specifier: workspace:*
         version: link:../../packages/context-compiler

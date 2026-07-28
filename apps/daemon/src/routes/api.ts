@@ -65,6 +65,7 @@ import {
   stageTaskFiles,
   unstageTaskFiles,
 } from '../services/task-workspace.js';
+import { registerChangeContractRoutes } from './change-contracts.js';
 
 export function registerApi(
   app: FastifyInstance,
@@ -89,6 +90,7 @@ export function registerApi(
     providerConnections = new ProviderConnectionRepository(db),
     worktrees = new WorktreeRepository(db),
     audit = new AuditRepository(db);
+  registerChangeContractRoutes(app, db, bus);
   app.get('/api/health', async () => ({
     ok: true,
     status: 'ok',
