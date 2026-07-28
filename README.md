@@ -1,12 +1,20 @@
 # RoleFlock
 
-**RoleFlock by Mlola** — local-first control plane for governed multi-agent software engineering.
+**RoleFlock by Mlola** — local-first delivery assurance for AI-generated software changes.
+
+Use any supported coding agent. RoleFlock is evolving into the independent authority that
+binds authorised intent, a planner-owned execution plan, independent verification, policy,
+and human acceptance to the exact change that is allowed to ship.
 
 - Public site: https://roleflock.com
 - Local UI (dev): http://127.0.0.1:5173
 - Local daemon: http://127.0.0.1:4178
 
 ## Status: reliable local beta
+
+The current beta implements the governed execution foundation. The delivery-assurance
+architecture is now in execution; see
+[`docs/product/roleflock_delivery_assurance_implementation_plan_v1.0.md`](docs/product/roleflock_delivery_assurance_implementation_plan_v1.0.md).
 
 See [`docs/test-plans/mvp-readiness.md`](docs/test-plans/mvp-readiness.md) for the Public MVP exit-gate checklist.
 

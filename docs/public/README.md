@@ -1,8 +1,16 @@
 # RoleFlock
 
-**Governed multi-agent software engineering — local-first.**
+**Keep your coding agent. Ship with proof — local-first.**
 
-RoleFlock runs on your machine. You register Git repositories, define tasks, and let a role graph (planner, reviewer, writer, test, verifier, accept) execute with explicit approvals, evidence, and usage metering.
+RoleFlock is becoming the independent delivery-assurance layer for AI-generated software.
+Coding agents propose and implement changes; RoleFlock binds authorised intent,
+planner-owned decisions, independent verification, policy, and human acceptance to the
+exact change that is allowed to ship.
+
+RoleFlock runs on your machine and works with the coding agents you already use. The
+current local beta provides the governed execution foundation while Change Contracts,
+independent verification, and portable Change Passports are implemented milestone by
+milestone.
 
 ## Why local-first
 

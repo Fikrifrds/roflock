@@ -1,6 +1,10 @@
 # Positioning: unattended execution over interactive iteration
 
-Status: proposed. Written while designing the post-acceptance feedback flow.
+Status: accepted as a foundation by ADR-013 and refined by ADR-014.
+
+ADR-014 preserves the conclusion that RoleFlock must not compete with the interactive
+agent loop. It advances the primary position from unattended parallel execution to
+independent delivery assurance. Parallel execution remains required product parity.
 
 ## The question this answers
 
@@ -49,7 +53,8 @@ Honest sorting of what exists in the repo today.
 | Enforced verification, fails closed (`test` node, `NodeFailure`) | **Replicable.** A `Stop`/`PostToolUse` hook in `settings.json` can force a test run and fail hard. This is hygiene, not a differentiator. |
 | Evidence, audit trail, disclosure manifest, approval grants with expiry and use limits | **Real, but only with a second party.** Claude Code produces a transcript; RoleFlock produces a record. The difference is worth nothing to a solo developer on a private project, and a great deal to a reviewer, client, or auditor who must trust the change without redoing the work. |
 | Multi-provider routing with quota failover | **Real and immediate.** But it is a feature, not a product category. |
-| Running many tasks unattended and in parallel | **Should be the core. Currently dormant.** |
+| Running many tasks unattended and in parallel | **Required parity, currently dormant.** It creates throughput but is also native to leading coding-agent products. |
+| Contract-bound intent, independent verification, policy authority, and portable commit-bound acceptance evidence | **Primary product boundary.** The coding agent is the worker; RoleFlock is the independent authority. |
 
 ## The architectural contradiction
 
@@ -86,9 +91,11 @@ cancelled, but its framing inverts.
    because chat requires you to be present. Framed this way the loop is worth
    building, and the lost conversational context is acceptable — the feedback is
    written as a specification rather than as an aside.
-3. **Parallelism outranks the feedback loop.** Re-enable external worktrees so N
+3. **Parallelism outranks the feedback loop, but assurance outranks parallelism.**
+   Re-enable external worktrees so N
    tasks can run at once. Without that, every refinement to the feedback flow is
-   improving the wrong shape.
+   improving the wrong shape. Parallelism supplies throughput; Change Contracts,
+   independent verification, and Change Passports supply the differentiated trust layer.
 
 ## What this rules out
 
@@ -99,9 +106,9 @@ cancelled, but its framing inverts.
   it. If that is the intended market, the premise above is wrong and this document
   should be rejected rather than worked around.
 
-## Open question
+## Buyer decision
 
-Who is the buyer? Teams and regulated or client-facing work, where a change must
-arrive with proof, and operators running many tasks at once — those follow from the
-premise. Confirming or rejecting this decides whether the parallelism work above is
-the priority.
+The initial buyer is an AI-native agency or multi-repository engineering team whose
+senior-review capacity is becoming the bottleneck. Client-facing, platform, security, and
+regulated teams are expansion markets. Solo interactive development remains an adoption
+path, not the paid product core.

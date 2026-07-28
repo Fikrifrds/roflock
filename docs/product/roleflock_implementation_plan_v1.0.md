@@ -2,11 +2,17 @@
 
 **Version:** 1.0  
 **Date:** 26 July 2026  
-**Status:** Development start plan  
+**Status:** Historical development-start baseline
 **Based on:** RoleFlock PRD v2.4 — Development Start Baseline  
 **Product:** RoleFlock by Mlola  
 **Public website:** `https://roleflock.com`  
 **Local application:** `http://127.0.0.1:4178`
+
+> This plan records the orchestration-first implementation baseline that produced the
+> current local beta. Product direction and future execution are now governed by
+> [`roleflock_delivery_assurance_implementation_plan_v1.0.md`](roleflock_delivery_assurance_implementation_plan_v1.0.md)
+> and ADR-014 through ADR-019. Existing safety, recovery, provider, approval, and
+> local-first work remains valid.
 
 ---
 

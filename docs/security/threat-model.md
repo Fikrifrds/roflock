@@ -1,7 +1,11 @@
-# RoleFlock local-first threat model
+# RoleFlock local-first and delivery-assurance threat model
 
 **Scope:** Phase 0 daemon + web UI on a single developer machine.  
 **Assumption:** The operator trusts their OS user account; untrusted code may exist in registered repositories and provider prompts.
+
+Delivery-assurance controls from ADR-014 through ADR-019 are target requirements unless a
+section explicitly says they are implemented. The current beta must not represent planned
+assurance as already achieved.
 
 ## Trust boundaries
 
@@ -51,8 +55,53 @@ There is no HTTP route that executes arbitrary shell strings. Deterministic chec
 
 Claude, Codex, Cursor, and custom HTTP providers run outside the daemon sandbox. RoleFlock governs _when_ they are invoked, _what context_ is disclosed, and _where_ writes may land — but vendor CLIs retain their own permissions on the host. Operators should treat installed provider binaries like any other privileged local tool.
 
+## Delivery-assurance assets and boundaries
+
+The target architecture adds protected assets:
+
+- authorised Change Contracts;
+- approved Execution Plans;
+- verification specifications and attestations;
+- runner and issuer signing keys;
+- approval identities;
+- Change Passports and revocations;
+- provider/model outcome history.
+
+Required boundaries:
+
+| Boundary | Threat | Required control |
+|---|---|---|
+| Contract drafter ↔ contract authority | Model authorises its own interpretation | Separate authority identity, immutable authorised version, exact hash approval |
+| Planner ↔ executor | Executor silently changes plan | Artifact-gated execution, pinned plan hash, allowed-path/action enforcement |
+| Feedback source ↔ executor | Raw feedback bypasses planner | Persist, classify, and route feedback to planner or contract authority |
+| Writer worktree ↔ verifier workspace | Writer controls evidence environment | Clean result-commit workspace, frozen checks, no writer credentials |
+| Evidence store ↔ passport issuer | Database is changed before export | Event-time chained integrity, subject validation, protected signing identity |
+| Local issuer ↔ organisation consumer | Local self-signature is mistaken for independent trust | Explicit assurance level and organisation trust roots |
+| Passport ↔ Git result | Passport is replayed for another commit | Bind base/result/tree/diff digests and invalidate status on new commit |
+| Role recommender ↔ provider catalogue | Ineligible model is selected | Deterministic hard constraints, versioned profiles, audited override |
+
+### Untrusted model output
+
+All model output is untrusted structured input. A schema-valid plan, report, finding, or
+explanation does not grant authority by itself. Deterministic code verifies state,
+permissions, artifact identity, and approval before any transition or side effect.
+
+### Signing keys
+
+Local issuer private keys must be held in the OS keychain, not SQLite. Organisation runner
+keys require registration, rotation, revocation, and repository scope. A valid signature
+proves issuer possession only; policy separately determines whether that issuer and
+assurance level are trusted.
+
+### Independent verification
+
+Executor test output is a claim. Required deterministic evidence must bind the result
+commit, frozen verification specification, environment, command, and runner identity.
+Unknown, missing, infrastructure error, and unverifiable evidence fail closed.
+
 ## Out of scope (Phase 0)
 
 - Multi-user or hosted deployment hardening
 - Supply-chain signing of provider binaries
 - Network egress filtering beyond update-check payload limits
+- Organisation-trusted passport issuance until runner identity and revocation are implemented
