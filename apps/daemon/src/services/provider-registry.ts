@@ -208,7 +208,7 @@ export class ProviderRegistry {
         ]);
         return {
           id: adapter.id,
-          displayName: this.customNames.get(adapter.id) ?? providerNames[adapter.id] ?? adapter.id,
+          displayName: this.displayName(adapter.id),
           status: health.status,
           health,
           capabilities,
@@ -217,6 +217,11 @@ export class ProviderRegistry {
         };
       }),
     );
+  }
+
+  /** Sync label for UI projections that must not wait on health/model probes. */
+  displayName(id: string): string {
+    return this.customNames.get(id) ?? providerNames[id] ?? id;
   }
 
   async account(

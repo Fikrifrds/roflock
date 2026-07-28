@@ -55,7 +55,7 @@ export function TaskDetail() {
     `/api/tasks/${id}/documents`,
     Boolean(id),
   );
-  const { data: runView } = useData<GraphRunViewData>(
+  const { data: runView, isLoading: runViewLoading } = useData<GraphRunViewData>(
     ['task-graph', id],
     `/api/tasks/${id}/graph`,
     Boolean(id),
@@ -407,9 +407,13 @@ export function TaskDetail() {
               <div>
                 <span className="eyebrow">Workflow map</span>
                 <strong>
-                  {activeGraphNode
-                    ? `${activeGraphNode.id.replaceAll('_', ' ')} in progress`
-                    : `${completedGraphNodes} of ${graphNodes.length} steps complete`}
+                  {runViewLoading
+                    ? 'Loading workflow…'
+                    : activeGraphNode
+                      ? `${activeGraphNode.id.replaceAll('_', ' ')} in progress`
+                      : graphNodes.length
+                        ? `${completedGraphNodes} of ${graphNodes.length} steps complete`
+                        : 'No workflow run yet'}
                 </strong>
               </div>
             </summary>

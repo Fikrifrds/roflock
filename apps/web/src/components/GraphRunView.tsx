@@ -1,7 +1,7 @@
 import { useData } from '../lib/client.js';
 import type { Tone } from '../lib/format.js';
 import type { ActiveExecution, GraphRunView as GraphRunViewData } from '../types.js';
-import { Empty, StatusPill } from './primitives.js';
+import { StatusPill } from './primitives.js';
 
 const NODE_TONES: Record<string, Tone> = {
   completed: 'ok',
@@ -48,10 +48,10 @@ const KIND_MARKS: Record<string, string> = {
 
 const NODE_WIDTH = 210;
 const NODE_MIN_HEIGHT = 148;
-const COLUMN_GAP = 88;
-const ROW_GAP = 48;
-const CANVAS_PADDING_X = 36;
-const CANVAS_PADDING_Y = 40;
+const COLUMN_GAP = 104;
+const ROW_GAP = 56;
+const CANVAS_PADDING_X = 48;
+const CANVAS_PADDING_Y = 52;
 
 type GraphNode = GraphRunViewData['graph']['nodes'][number];
 type GraphEdge = GraphRunViewData['graph']['edges'][number];
@@ -313,14 +313,62 @@ export function GraphRunView({
   taskId: string;
   execution?: ActiveExecution | null;
 }) {
-  const { data, isLoading } = useData<GraphRunViewData>(
+  const { data, isLoading, isError, error } = useData<GraphRunViewData>(
     ['task-graph', taskId],
     `/api/tasks/${taskId}/graph`,
     Boolean(taskId),
   );
 
-  if (isLoading) return <p className="hint">Loading run graph…</p>;
-  if (!data) return <Empty message="No run graph available for this task." />;
+  if (isLoading) {
+    return (
+      <div className="graph-run graph-run-loading" role="status" aria-live="polite">
+        <div className="graph-overview">
+          <div>
+            <span className="eyebrow">Governed workflow</span>
+            <strong>Loading workflow map</strong>
+            <small>Reading the recorded run graph…</small>
+          </div>
+          <span className="live-spinner" aria-hidden="true" />
+        </div>
+        <div className="graph-canvas graph-canvas-loading">
+          <div className="graph-skeleton" aria-hidden="true">
+            {[0, 1, 2, 3].map((index) => (
+              <div key={index} className="graph-skeleton-node" style={{ animationDelay: `${index * 90}ms` }} />
+            ))}
+          </div>
+          <p className="graph-loading-copy">Preparing the visual workflow…</p>
+        </div>
+      </div>
+    );
+  }
+  if (isError) {
+    return (
+      <div className="graph-run">
+        <div className="graph-overview">
+          <div>
+            <span className="eyebrow">Governed workflow</span>
+            <strong>Workflow map unavailable</strong>
+            <small>
+              {error instanceof Error ? error.message : 'Unable to load the run graph for this task.'}
+            </small>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!data) {
+    return (
+      <div className="graph-run">
+        <div className="graph-overview">
+          <div>
+            <span className="eyebrow">Governed workflow</span>
+            <strong>No run graph yet</strong>
+            <small>Start the task to pin a workflow map.</small>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const { graph } = data;
   const activeNode = graph.nodes.find((node) => node.state === 'running');

@@ -484,23 +484,9 @@ export function registerApi(
         primaryByRole.set(node.role, orchestrator.router.listRole(node.role)[0]);
       }
     }
-    const primaryProviderIds = [
-      ...new Set(
-        [...primaryByRole.values()]
-          .filter((candidate) => Boolean(candidate))
-          .map((candidate) => candidate!.providerConnectionId),
-      ),
-    ];
-    const providerCatalogue = await providers.list();
-    const modelsByProvider = new Map(
-      await Promise.all(
-        primaryProviderIds.map(
-          async (providerId) =>
-            [providerId, await providers.models(providerId).catch(() => [])] as const,
-        ),
-      ),
-    );
 
+    // Graph rendering must stay instant. Provider health and `listModels` can
+    // hang for tens of seconds; the map only needs configured route labels.
     return {
       taskId,
       graphRunId: run?.id ?? null,
@@ -516,15 +502,6 @@ export function registerApi(
         edges: graph.edges,
         nodes: graph.nodes.map((node) => {
           const primary = primaryByRole.get(node.role);
-          const providerDisplayName = primary
-            ? (providerCatalogue.find((provider) => provider.id === primary.providerConnectionId)
-                ?.displayName ?? primary.providerConnectionId)
-            : null;
-          const modelDisplayName = primary
-            ? (modelsByProvider
-                .get(primary.providerConnectionId)
-                ?.find((model) => model.id === primary.modelId)?.displayName ?? primary.modelId)
-            : null;
           return {
             id: node.id,
             role: node.role,
@@ -535,9 +512,11 @@ export function registerApi(
             maxAttempts: node.maxAttempts ?? 1,
             focus: node.focus ?? null,
             primaryProviderId: primary?.providerConnectionId ?? null,
-            primaryProviderDisplayName: providerDisplayName,
+            primaryProviderDisplayName: primary
+              ? providers.displayName(primary.providerConnectionId)
+              : null,
             primaryModelId: primary?.modelId ?? null,
-            primaryModelDisplayName: modelDisplayName,
+            primaryModelDisplayName: primary?.modelId ?? null,
             state: latest.get(node.id)?.state ?? unreachedState,
             outcome: latest.get(node.id)?.outcome ?? null,
             startedAt: latest.get(node.id)?.started_at ?? null,

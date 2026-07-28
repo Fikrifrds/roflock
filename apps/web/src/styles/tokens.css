@@ -116,10 +116,9 @@
 
   --focus-ring: 0 0 0 2px var(--surface-page), 0 0 0 4px var(--accent);
 
-  /* Layout — keep gutters tight so the workbench reads like a tool,
-     not a marketing page with empty side rails. */
+  /* Layout — tool density with enough air that panels don’t feel jammed. */
   --measure: 68ch;
   --page-width: 1240px;
-  --page-gutter: 16px;
-  --panel-padding: 16px;
+  --page-gutter: 20px;
+  --panel-padding: 18px;
 }

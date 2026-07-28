@@ -1087,7 +1087,7 @@ textarea.compact {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 54px 268px minmax(0, 1fr);
+  grid-template-columns: 54px 292px minmax(0, 1fr);
   min-height: 100vh;
   background: #0b1012;
 }
@@ -1181,12 +1181,12 @@ textarea.compact {
 }
 
 .inbox-head {
-  min-height: 52px;
+  min-height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 12px 8px 14px;
+  padding: 12px 14px 10px 16px;
 }
 
 .inbox-head .eyebrow {
@@ -1219,12 +1219,12 @@ textarea.compact {
 }
 
 .inbox-search {
-  height: 32px;
+  height: 34px;
   display: flex;
   align-items: center;
   gap: 7px;
-  margin: 0 10px 6px;
-  padding: 0 10px;
+  margin: 0 12px 8px;
+  padding: 0 11px;
   border: 1px solid #2b373b;
   border-radius: 7px;
   background: #0b1113;
@@ -1256,7 +1256,7 @@ textarea.compact {
   display: flex;
   align-items: center;
   gap: 2px;
-  margin: 0 8px 10px;
+  margin: 0 10px 12px;
   padding: 0 2px;
 }
 
@@ -1373,11 +1373,11 @@ a.inbox-project-trigger {
 .inbox-groups {
   flex: 1;
   overflow: auto;
-  padding: 0 6px 16px;
+  padding: 0 10px 20px;
 }
 
 .inbox-group {
-  margin: 6px 0 12px;
+  margin: 8px 0 14px;
 }
 
 .inbox-group > h3,
@@ -1385,7 +1385,7 @@ a.inbox-project-trigger {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 0 6px 6px;
+  margin: 0 8px 8px;
   color: #718084;
   font-family: var(--font-body);
   font-size: 10px;
@@ -1410,8 +1410,8 @@ a.inbox-project-trigger {
   display: flex;
   align-items: stretch;
   gap: 0;
-  min-height: 56px;
-  margin: 1px 0;
+  min-height: 60px;
+  margin: 2px 0;
   border: 1px solid transparent;
   border-radius: 8px;
 }
@@ -1431,8 +1431,8 @@ a.inbox-project-trigger {
   flex: 1;
   display: flex;
   align-items: flex-start;
-  gap: 9px;
-  padding: 8px 8px;
+  gap: 10px;
+  padding: 10px 10px;
   color: inherit;
   text-decoration: none;
 }
@@ -1572,16 +1572,16 @@ main.app-main {
   width: 100%;
   max-width: none;
   margin: 0;
-  padding: 16px var(--page-gutter) 40px;
+  padding: 20px var(--page-gutter) 48px;
 }
 
 .task-workspace-head {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: 16px;
-  margin: 0 0 16px;
-  padding-bottom: 12px;
+  gap: 20px;
+  margin: 0 0 20px;
+  padding-bottom: 16px;
   border-bottom: 1px solid #2c373a;
 }
 
@@ -3479,8 +3479,8 @@ pre {
 }
 
 .graph-overview {
-  min-height: 76px;
-  padding: var(--space-4) var(--space-5);
+  min-height: 80px;
+  padding: var(--space-5) var(--space-6);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -3584,7 +3584,7 @@ pre {
 
 .graph-canvas {
   overflow-x: auto;
-  padding: var(--space-5);
+  padding: var(--space-6);
   background-image:
     linear-gradient(var(--border-subtle) 1px, transparent 1px),
     linear-gradient(90deg, var(--border-subtle) 1px, transparent 1px);
@@ -3593,12 +3593,54 @@ pre {
   scrollbar-color: var(--border-strong) transparent;
 }
 
+.graph-canvas-loading {
+  min-height: 280px;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: var(--space-5);
+}
+
+.graph-skeleton {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-6);
+  padding: var(--space-2) 0;
+}
+
+.graph-skeleton-node {
+  width: 196px;
+  height: 132px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(110deg, var(--surface) 25%, var(--surface-hover) 45%, var(--surface) 65%);
+  background-size: 220% 100%;
+  animation: graph-skeleton-shimmer 1.35s var(--ease) infinite;
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.graph-loading-copy {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+@keyframes graph-skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
 .graph-legend {
   position: sticky;
   z-index: 4;
   left: 0;
   width: fit-content;
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-5);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-pill);
@@ -4866,7 +4908,7 @@ pre {
 
 .task-run-details,
 .workflow-map-panel {
-  margin-top: var(--space-2);
+  margin-top: var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -4875,8 +4917,8 @@ pre {
 
 .task-run-details > summary,
 .workflow-map-panel > summary {
-  min-height: 48px;
-  padding: var(--space-2) var(--space-4);
+  min-height: 52px;
+  padding: var(--space-3) var(--space-5);
   cursor: pointer;
   list-style: none;
   display: flex;
