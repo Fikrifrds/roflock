@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M1.2 complete; M1.3 is next
+**Execution progress:** M0 through M1.3 complete; M1.4 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1650,7 +1650,7 @@ later ticket merely to make the product appear complete sooner.
 | M0.7 ✅ | README, positioning, threat-model alignment | M0.1–M0.6 | Product docs have no conflicting primary position |
 | M1.1 ✅ | Change Contract TypeScript schemas | M0.2 | Canonical validation and hash tests pass |
 | M1.2 ✅ | Contract database migrations/repository | M1.1 | Versions persist and authorised rows are immutable |
-| M1.3 | Contract domain service and events | M1.2 | Draft/revise/authorise state tests pass |
+| M1.3 ✅ | Contract domain service and events | M1.2 | Draft/revise/authorise state tests pass |
 | M1.4 | Contract API with idempotency/version checks | M1.3 | API integration tests pass |
 | M1.5 | Contract intake and authorisation UI | M1.4 | User can resolve and authorise criteria |
 | M1.6 | Start gate and legacy-task compatibility | M1.3 | New uncontracted task is blocked; legacy task is labelled |

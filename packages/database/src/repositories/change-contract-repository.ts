@@ -1,4 +1,8 @@
-import { parseVerifiedChangeContract, type ChangeContract } from '@roleflock/change-contracts';
+import {
+  parseVerifiedChangeContract,
+  type ChangeContract,
+  type ChangeContractDomainEvent,
+} from '@roleflock/change-contracts';
 import type { SqliteDb } from '../client.js';
 
 export interface ChangeContractAggregate {
@@ -49,7 +53,10 @@ export function changeContractVersionId(contractId: string, version: number): st
 export class ChangeContractRepository {
   constructor(private readonly db: SqliteDb) {}
 
-  create(contractInput: ChangeContract): ChangeContractAggregate {
+  create(
+    contractInput: ChangeContract,
+    event?: ChangeContractDomainEvent,
+  ): ChangeContractAggregate {
     const contract = parseVerifiedChangeContract(contractInput);
     if (contract.version !== 1 || contract.parentVersionId !== undefined) {
       throw new Error('A new Change Contract aggregate must start at version 1 without a parent');
@@ -77,6 +84,7 @@ export class ChangeContractRepository {
           contract.createdAt,
         );
       this.insertVersion(versionId, contract);
+      if (event !== undefined) this.insertEvent(event);
     });
     transaction();
     return this.getAggregateOrThrow(contract.id);
@@ -90,6 +98,7 @@ export class ChangeContractRepository {
     contractInput: ChangeContract,
     expectedRevision: number,
     updatedAt: string,
+    event?: ChangeContractDomainEvent,
   ): ChangeContractAggregate {
     const contract = parseVerifiedChangeContract(contractInput);
     const aggregate = this.getAggregateOrThrow(contract.id);
@@ -113,6 +122,7 @@ export class ChangeContractRepository {
 
     const transaction = this.db.transaction(() => {
       this.replaceCurrentVersion(contract, stored.versionId, expectedRevision, updatedAt);
+      if (event !== undefined) this.insertEvent(event);
     });
     transaction();
     return this.getAggregateOrThrow(contract.id);
@@ -126,6 +136,7 @@ export class ChangeContractRepository {
     contractInput: ChangeContract,
     expectedRevision: number,
     updatedAt: string,
+    event?: ChangeContractDomainEvent,
   ): ChangeContractAggregate {
     const contract = parseVerifiedChangeContract(contractInput);
     const aggregate = this.getAggregateOrThrow(contract.id);
@@ -144,6 +155,7 @@ export class ChangeContractRepository {
 
     const transaction = this.db.transaction(() => {
       this.replaceCurrentVersion(contract, stored.versionId, expectedRevision, updatedAt);
+      if (event !== undefined) this.insertEvent(event);
     });
     transaction();
     return this.getAggregateOrThrow(contract.id);
@@ -153,6 +165,7 @@ export class ChangeContractRepository {
     contractInput: ChangeContract,
     expectedRevision: number,
     updatedAt: string,
+    event?: ChangeContractDomainEvent,
   ): ChangeContractAggregate {
     const contract = parseVerifiedChangeContract(contractInput);
     const aggregate = this.getAggregateOrThrow(contract.id);
@@ -176,6 +189,7 @@ export class ChangeContractRepository {
     const transaction = this.db.transaction(() => {
       this.compareAndSwapAggregate(contract, expectedRevision, updatedAt);
       this.insertVersion(versionId, contract);
+      if (event !== undefined) this.insertEvent(event);
     });
     transaction();
     return this.getAggregateOrThrow(contract.id);
@@ -269,6 +283,25 @@ export class ChangeContractRepository {
         contract.hash,
         JSON.stringify(contract),
         contract.createdAt,
+      );
+  }
+
+  private insertEvent(event: ChangeContractDomainEvent): void {
+    this.db
+      .prepare(
+        `INSERT INTO events
+          (id, aggregate_type, aggregate_id, sequence, event_type, payload_json, metadata_json, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        event.id,
+        event.aggregateType,
+        event.aggregateId,
+        event.sequence,
+        event.eventType,
+        JSON.stringify(event.payload),
+        JSON.stringify(event.metadata),
+        event.createdAt,
       );
   }
 

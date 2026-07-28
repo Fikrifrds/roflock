@@ -339,3 +339,5 @@ export function parseVerifiedChangeContract(input: unknown): ChangeContract {
   }
   return contract;
 }
+
+export * from './service.js';

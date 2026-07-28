@@ -1,4 +1,9 @@
-import { sealChangeContract, type UnhashedChangeContract } from '@roleflock/change-contracts';
+import {
+  ChangeContractService,
+  sealChangeContract,
+  type UnhashedChangeContract,
+} from '@roleflock/change-contracts';
+import { FakeClock } from '@roleflock/contracts';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +15,7 @@ import {
   ImmutableContractVersionError,
   changeContractVersionId,
 } from './repositories/change-contract-repository.js';
+import { EventStore } from './repositories/event-store.js';
 
 const dirs: string[] = [];
 
@@ -181,5 +187,24 @@ describe('ChangeContractRepository', () => {
       repository.appendVersion(sealChangeContract(secondInput), 1, '2026-07-28T09:00:00.000Z'),
     ).toThrow(/Expected parentVersionId/);
     expect(() => repository.create(first)).toThrow();
+  });
+
+  it('commits domain events in the same repository transactions', () => {
+    const db = tempDb();
+    const repository = new ChangeContractRepository(db);
+    const service = new ChangeContractService(
+      repository,
+      new FakeClock(new Date('2026-07-28T08:00:00.000Z')),
+    );
+
+    service.createDraft(contractInput(), { actorId: 'planner_1' });
+    service.requestAuthorisation('contract_1', 1, { actorId: 'planner_1' });
+    service.authorise('contract_1', 2, { actorId: 'authority_1' });
+
+    expect(new EventStore(db).list('contract_1').map((event) => event.eventType)).toEqual([
+      'change_contract.draft_created',
+      'change_contract.authorisation_requested',
+      'change_contract.authorised',
+    ]);
   });
 });
