@@ -68,4 +68,44 @@ describe('LeaseRepository', () => {
       }),
     ).toThrow(/already held/);
   });
+
+  it('allows writers on distinct worktrees to hold leases concurrently', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'rf-lease-'));
+    dirs.push(dir);
+    const db = openMigratedDatabase(join(dir, 'test.db'));
+    const leases = new LeaseRepository(db);
+
+    const first = leases.tryAcquire({
+      id: 'lease-a',
+      resourceType: 'writer',
+      resourceId: '/tmp/worktree-a',
+      ownerId: 'node-a',
+      acquiredAt: '2026-01-01T00:00:00.000Z',
+    });
+    const second = leases.tryAcquire({
+      id: 'lease-b',
+      resourceType: 'writer',
+      resourceId: '/tmp/worktree-b',
+      ownerId: 'node-b',
+      acquiredAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(leases.getActive('writer', '/tmp/worktree-a')).toMatchObject({
+      id: first.id,
+      ownerId: 'node-a',
+    });
+    expect(leases.getActive('writer', '/tmp/worktree-b')).toMatchObject({
+      id: second.id,
+      ownerId: 'node-b',
+    });
+    expect(() =>
+      leases.tryAcquire({
+        id: 'lease-c',
+        resourceType: 'writer',
+        resourceId: '/tmp/worktree-a',
+        ownerId: 'node-c',
+        acquiredAt: '2026-01-01T00:00:01.000Z',
+      }),
+    ).toThrow(/node-a/);
+  });
 });

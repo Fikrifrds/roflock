@@ -1123,7 +1123,7 @@ export class Orchestrator {
           const detail = error instanceof Error ? error.message : String(error);
           throw new Error(`Writer lease unavailable (durable): ${detail}`, { cause: error });
         }
-        this.worktrees.setWriterLease(task.id, nodeRunId);
+        this.worktrees.setWriterLease(task.id, leaseId);
         try {
           const relativeTarget = 'ROLEFLOCK_SIMULATION.md';
           let writerRoute = route;

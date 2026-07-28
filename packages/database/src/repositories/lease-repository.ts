@@ -21,65 +21,65 @@ export class LeaseRepository {
    * release therefore fails with a constraint error even though nobody holds
    * the resource. Reclaiming the released row (or inserting only when none
    * exists) is what makes a second writer turn on the same worktree possible.
+   * The read and claim are one immediate SQLite transaction, so two schedulers
+   * cannot both observe an apparently free worktree and become its writer.
    */
   tryAcquire(record: LeaseRecord): LeaseRecord {
-    const existing = this.db
-      .prepare(
-        `SELECT * FROM runtime_leases
-         WHERE resource_type = ? AND resource_id = ? AND released_at IS NULL`,
-      )
-      .get(record.resourceType, record.resourceId) as Record<string, unknown> | undefined;
-
-    if (existing) {
-      throw new Error(
-        `Lease already held for ${record.resourceType}:${record.resourceId} by ${String(existing.owner_id)}`,
-      );
-    }
-
-    const prior = this.db
-      .prepare(
-        `SELECT id FROM runtime_leases WHERE resource_type = ? AND resource_id = ?`,
-      )
-      .get(record.resourceType, record.resourceId) as { id: string } | undefined;
-
-    if (prior) {
-      this.db
+    return this.db.transaction(() => {
+      const existing = this.db
         .prepare(
-          `UPDATE runtime_leases
-           SET id = ?, owner_id = ?, acquired_at = ?, expires_at = ?, released_at = NULL
-           WHERE resource_type = ? AND resource_id = ?`,
+          `SELECT * FROM runtime_leases
+           WHERE resource_type = ? AND resource_id = ? AND released_at IS NULL`,
         )
-        .run(
-          record.id,
-          record.ownerId,
-          record.acquiredAt,
-          record.expiresAt ?? null,
-          record.resourceType,
-          record.resourceId,
+        .get(record.resourceType, record.resourceId) as Record<string, unknown> | undefined;
+
+      if (existing) {
+        throw new Error(
+          `Lease already held for ${record.resourceType}:${record.resourceId} by ${String(existing.owner_id)}`,
         );
-    } else {
-      this.db
-        .prepare(
-          `INSERT INTO runtime_leases
-            (id, resource_type, resource_id, owner_id, acquired_at, expires_at, released_at)
-           VALUES (?, ?, ?, ?, ?, ?, NULL)`,
-        )
-        .run(
-          record.id,
-          record.resourceType,
-          record.resourceId,
-          record.ownerId,
-          record.acquiredAt,
-          record.expiresAt ?? null,
-        );
-    }
-    return record;
+      }
+
+      const prior = this.db
+        .prepare(`SELECT id FROM runtime_leases WHERE resource_type = ? AND resource_id = ?`)
+        .get(record.resourceType, record.resourceId) as { id: string } | undefined;
+
+      if (prior) {
+        this.db
+          .prepare(
+            `UPDATE runtime_leases
+             SET id = ?, owner_id = ?, acquired_at = ?, expires_at = ?, released_at = NULL
+             WHERE resource_type = ? AND resource_id = ?`,
+          )
+          .run(
+            record.id,
+            record.ownerId,
+            record.acquiredAt,
+            record.expiresAt ?? null,
+            record.resourceType,
+            record.resourceId,
+          );
+      } else {
+        this.db
+          .prepare(
+            `INSERT INTO runtime_leases
+              (id, resource_type, resource_id, owner_id, acquired_at, expires_at, released_at)
+             VALUES (?, ?, ?, ?, ?, ?, NULL)`,
+          )
+          .run(
+            record.id,
+            record.resourceType,
+            record.resourceId,
+            record.ownerId,
+            record.acquiredAt,
+            record.expiresAt ?? null,
+          );
+      }
+      return record;
+    })();
   }
 
   release(id: string, releasedAt: string): void {
-    this.db
-      .prepare(`UPDATE runtime_leases SET released_at = ? WHERE id = ?`)
-      .run(releasedAt, id);
+    this.db.prepare(`UPDATE runtime_leases SET released_at = ? WHERE id = ?`).run(releasedAt, id);
   }
 
   getActive(resourceType: string, resourceId: string): LeaseRecord | undefined {
