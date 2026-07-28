@@ -17,7 +17,9 @@ import {
 } from '@roleflock/context-compiler';
 import {
   assertExecutorChangedPaths,
+  classifyMechanicalFailure,
   compilePlannerPlanProposal,
+  evaluateRepairEnvelope,
   executorInstructionBlock,
   executorPermissionEnvelope,
   parseApprovedExecutionPlan,
@@ -724,6 +726,7 @@ export class Orchestrator {
   ): Promise<void> {
     const { graphRunId, graph, worktreePath, baseCommit, resumeCompleted } = prepared;
     let executions = 0;
+    let activeApprovedPlan: ExecutionPlan | undefined;
 
     // The rows the node body has opened but not closed, keyed by node id. A
     // failing node used to leave both of them on `running` for good, and the run
@@ -754,6 +757,7 @@ export class Orchestrator {
       if (node.authorityRole === 'executor' && pinnedPlan === undefined) {
         throw new Error('Executor cannot start without one current approved Execution Plan');
       }
+      if (pinnedPlan !== undefined) activeApprovedPlan = pinnedPlan;
       let nodeOutput: string | undefined;
       const producedArtifacts: Array<{
         id: string;
@@ -1336,6 +1340,9 @@ export class Orchestrator {
                 : 'Verification failed'
             } (${verification.label})${stderr ? `: ${stderr.slice(0, 400)}` : ''}`,
             'verification_failed',
+            {
+              repairClass: classifyMechanicalFailure(`${verification.label}\n${stderr ?? ''}`),
+            },
           );
         }
       } else if (role === 'accept') {
@@ -1391,6 +1398,40 @@ export class Orchestrator {
                 },
               ];
         })(),
+        evaluateEdgeGuard: ({ edge, error, loopIteration }) => {
+          if (edge.guard !== 'repair_envelope') return false;
+          const repairClass = error instanceof NodeFailure ? error.repairClass : undefined;
+          if (activeApprovedPlan === undefined || repairClass === undefined) return false;
+          const decision = evaluateRepairEnvelope(activeApprovedPlan, {
+            failureClass: repairClass as Parameters<
+              typeof evaluateRepairEnvelope
+            >[1]['failureClass'],
+            changedPaths: activeApprovedPlan.expectedChangedPaths,
+            requiredOperations: ['modify_file', 'run_command'],
+            attempt: loopIteration + 1,
+            deterministic: true,
+            addsFiles: false,
+            changesDependencies: false,
+            changesPublicApi: false,
+            changesSchema: false,
+            requiresArchitectureDecision: false,
+            expandsScope: false,
+            changesRequirement: false,
+            planStillSufficient: true,
+            contractStillSufficient: this.currentContract(task.id) !== undefined,
+            retryBudgetRemaining: loopIteration + 1 <= task.maxAttempts,
+            costBudgetRemaining: true,
+            timeBudgetRemaining: true,
+          });
+          this.appendEvent(task.id, 'repair.envelope.evaluated', {
+            graphRunId,
+            edge,
+            decision: decision.decision,
+            reasons: decision.reasons,
+            planHash: decision.planHash,
+          });
+          return decision.allowed;
+        },
         onNodeState: (nodeId, state, attempt) => {
           this.appendEvent(task.id, 'node.state', { graphRunId, nodeId, state, attempt });
           this.bus.publish('graph.node.updated', { taskId: task.id, graphRunId, nodeId, state });

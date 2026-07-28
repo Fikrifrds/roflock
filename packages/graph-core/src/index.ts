@@ -61,6 +61,8 @@ export interface GraphEdge {
   from: string;
   to: string;
   when: EdgeCondition;
+  /** A deterministic policy predicate required before this edge may be taken. */
+  guard?: 'repair_envelope';
 }
 
 export interface WorkflowGraph {
@@ -137,7 +139,8 @@ const bugFixEdges: GraphEdge[] = [
   ...bugFixNodes.flatMap((current) =>
     current.dependsOn.map((from) => ({ from, to: current.id, when: 'always' as const })),
   ),
-  { from: 'test', to: 'writer', when: 'on_fail' },
+  { from: 'test', to: 'writer', when: 'on_fail', guard: 'repair_envelope' },
+  { from: 'test', to: 'planner', when: 'on_fail' },
   { from: 'verifier', to: 'planner', when: 'on_needs_changes' },
 ];
 
@@ -166,7 +169,10 @@ export const directGraph: WorkflowGraph = {
   label: 'Direct',
   description: 'Writer → test → human accept',
   nodes: directNodes,
-  edges: [...sequential(directNodes), { from: 'test', to: 'writer', when: 'on_fail' }],
+  edges: [
+    ...sequential(directNodes),
+    { from: 'test', to: 'writer', when: 'on_fail', guard: 'repair_envelope' },
+  ],
   maxConcurrency: 1,
   maxLoopIterations: 2,
 };
@@ -185,7 +191,11 @@ export const fastGraph: WorkflowGraph = {
   label: 'Fast',
   description: 'Planner → writer → test → human accept',
   nodes: fastNodes,
-  edges: [...sequential(fastNodes), { from: 'test', to: 'writer', when: 'on_fail' }],
+  edges: [
+    ...sequential(fastNodes),
+    { from: 'test', to: 'writer', when: 'on_fail', guard: 'repair_envelope' },
+    { from: 'test', to: 'planner', when: 'on_fail' },
+  ],
   maxConcurrency: 1,
   maxLoopIterations: 2,
 };
@@ -228,8 +238,16 @@ const legacyBugFixNodes: GraphNode[] = [
 ];
 
 const legacyGraphs: Record<GraphMode, WorkflowGraph> = {
-  direct: { ...directGraph, version: 'direct@1' },
-  fast: { ...fastGraph, version: 'fast@1' },
+  direct: {
+    ...directGraph,
+    version: 'direct@1',
+    edges: [...sequential(directNodes), { from: 'test', to: 'writer', when: 'on_fail' }],
+  },
+  fast: {
+    ...fastGraph,
+    version: 'fast@1',
+    edges: [...sequential(fastNodes), { from: 'test', to: 'writer', when: 'on_fail' }],
+  },
   bug_fix: {
     ...bugFixGraph,
     version: 'bug_fix@1',
@@ -281,8 +299,16 @@ const previousBugFixEdges: GraphEdge[] = [
 
 /** Exact v2 shapes remain available for tasks created before planner-owned routing. */
 const previousGraphsV2: Record<GraphMode, WorkflowGraph> = {
-  direct: { ...directGraph, version: 'direct@2' },
-  fast: { ...fastGraph, version: 'fast@2' },
+  direct: {
+    ...directGraph,
+    version: 'direct@2',
+    edges: [...sequential(directNodes), { from: 'test', to: 'writer', when: 'on_fail' }],
+  },
+  fast: {
+    ...fastGraph,
+    version: 'fast@2',
+    edges: [...sequential(fastNodes), { from: 'test', to: 'writer', when: 'on_fail' }],
+  },
   bug_fix: {
     ...bugFixGraph,
     version: 'bug_fix@2',
@@ -320,12 +346,7 @@ export function getWorkflowGraph(modeOrVersion: string): WorkflowGraph {
         ? previousGraphsV2[mode as GraphMode]
         : workflowGraphs[mode as GraphMode];
   if (!graph) throw new Error(`Unknown workflow mode: ${modeOrVersion}`);
-  if (
-    version !== undefined &&
-    version !== 1 &&
-    version !== 2 &&
-    version !== GRAPH_SCHEMA_VERSION
-  ) {
+  if (version !== undefined && version !== 1 && version !== 2 && version !== GRAPH_SCHEMA_VERSION) {
     throw new Error(
       `Workflow graph ${mode} version ${version} is no longer available (current: ${GRAPH_SCHEMA_VERSION})`,
     );
@@ -530,6 +551,20 @@ export function validateGraph(graph: WorkflowGraph): string[] {
   for (const edge of graph.edges) {
     if (!ids.has(edge.from)) errors.push(`edge from unknown node ${edge.from}`);
     if (!ids.has(edge.to)) errors.push(`edge to unknown node ${edge.to}`);
+    const graphVersion = parseGraphVersionId(graph.version).version ?? GRAPH_SCHEMA_VERSION;
+    const target = graph.nodes.find((node) => node.id === edge.to);
+    const source = graph.nodes.find((node) => node.id === edge.from);
+    if (
+      graphVersion >= 3 &&
+      source?.role === 'test' &&
+      target?.writer &&
+      edge.when === 'on_fail' &&
+      edge.guard !== 'repair_envelope'
+    ) {
+      errors.push(
+        `incompatible fallback: ${edge.from} can repair through ${edge.to} without repair_envelope`,
+      );
+    }
   }
 
   // Unbounded cycles: a loop is only legal if the runtime can exhaust it.

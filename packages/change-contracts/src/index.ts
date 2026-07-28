@@ -344,3 +344,4 @@ export * from './service.js';
 export * from './execution-artifacts.js';
 export * from './planner-output.js';
 export * from './executor-assignment.js';
+export * from './repair-envelope.js';

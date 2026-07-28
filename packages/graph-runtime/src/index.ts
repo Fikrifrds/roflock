@@ -30,13 +30,16 @@ export type FailureClass =
   | 'unknown';
 
 export class NodeFailure extends Error {
+  readonly repairClass?: string;
+
   constructor(
     message: string,
     readonly failureClass: FailureClass,
-    options?: { cause?: unknown },
+    options?: { cause?: unknown; repairClass?: string },
   ) {
     super(message, options);
     this.name = 'NodeFailure';
+    this.repairClass = options?.repairClass;
   }
 }
 
@@ -76,6 +79,15 @@ export interface RunGraphOptions {
    * default recognises `{ artifacts: PresentedArtifact[] }`.
    */
   artifactExtractor?: (output: unknown) => readonly PresentedArtifact[];
+  /** Evaluates typed edge guards; absent evaluators fail closed. */
+  evaluateEdgeGuard?: (input: {
+    edge: WorkflowGraph['edges'][number];
+    node: GraphNode;
+    error: unknown;
+    failureClass: FailureClass;
+    attempt: number;
+    loopIteration: number;
+  }) => boolean;
 }
 
 export class ArtifactGateError extends Error {
@@ -294,15 +306,26 @@ export async function runGraph(
 
     // 2. Typed failure edge.
     const edge = ROUTES[failureClass]
-      .map((condition) =>
-        graph.edges.find(
+      .flatMap((condition) =>
+        graph.edges.filter(
           (candidate) =>
             candidate.from === node.id &&
             candidate.when === condition &&
             isFailureCondition(candidate.when),
         ),
       )
-      .find(Boolean);
+      .find(
+        (candidate) =>
+          candidate.guard === undefined ||
+          options.evaluateEdgeGuard?.({
+            edge: candidate,
+            node,
+            error: settled.error,
+            failureClass,
+            attempt,
+            loopIteration: loopIterations,
+          }) === true,
+      );
 
     if (edge && loopIterations < graph.maxLoopIterations) {
       loopIterations += 1;

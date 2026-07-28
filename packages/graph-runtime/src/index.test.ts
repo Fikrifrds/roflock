@@ -168,14 +168,20 @@ describe('graph runtime', () => {
   it('routes a failed deterministic check back to the writer', async () => {
     const visited: string[] = [];
     let testRuns = 0;
-    const result = await runGraph(bugFixGraph, async ({ node: n }) => {
-      visited.push(n.id);
-      if (n.id !== 'test') return n.id;
-      testRuns += 1;
-      if (testRuns === 1)
-        throw new NodeFailure('Verification failed (npm test)', 'verification_failed');
-      return 'green';
-    });
+    const result = await runGraph(
+      bugFixGraph,
+      async ({ node: n }) => {
+        visited.push(n.id);
+        if (n.id !== 'test') return n.id;
+        testRuns += 1;
+        if (testRuns === 1)
+          throw new NodeFailure('Verification failed (npm test)', 'verification_failed');
+        return 'green';
+      },
+      {
+        evaluateEdgeGuard: ({ edge }) => edge.guard === 'repair_envelope',
+      },
+    );
 
     expect(result.state).toBe('completed');
     expect(result.loopIterations).toBe(1);
@@ -183,6 +189,26 @@ describe('graph runtime', () => {
     expect(visited.filter((id) => id === 'writer')).toHaveLength(2);
     expect(visited.filter((id) => id === 'test')).toHaveLength(2);
     expect(visited.filter((id) => id === 'planner')).toHaveLength(1);
+  });
+
+  it('routes a non-repairable deterministic failure to planner', async () => {
+    const visited: string[] = [];
+    let testRuns = 0;
+    const result = await runGraph(
+      bugFixGraph,
+      async ({ node: current }) => {
+        visited.push(current.id);
+        if (current.id === 'test' && ++testRuns === 1) {
+          throw new NodeFailure('Business assertion failed', 'verification_failed');
+        }
+        return current.id;
+      },
+      { evaluateEdgeGuard: () => false },
+    );
+
+    expect(result.state).toBe('completed');
+    expect(visited.filter((id) => id === 'planner')).toHaveLength(2);
+    expect(visited.filter((id) => id === 'writer')).toHaveLength(2);
   });
 
   it('routes a verifier rejection through planner before another execution', async () => {

@@ -120,7 +120,12 @@ describe('workflow graphs', () => {
 
     // The shipped templates loop test → writer, and that must stay legal.
     expect(validateGraph(bugFixGraph)).toEqual([]);
-    expect(bugFixGraph.edges).toContainEqual({ from: 'test', to: 'writer', when: 'on_fail' });
+    expect(bugFixGraph.edges).toContainEqual({
+      from: 'test',
+      to: 'writer',
+      when: 'on_fail',
+      guard: 'repair_envelope',
+    });
   });
 
   it('rejects a pass path that bypasses a required check', () => {
@@ -156,6 +161,20 @@ describe('workflow graphs', () => {
     );
     expect(validateGraph(needsChangesToNonWriter)).toContain(
       'incompatible fallback: verifier verifier must route findings to planner, not test',
+    );
+  });
+
+  it('rejects an unguarded direct repair edge in current graphs', () => {
+    const unsafe = graph(
+      [
+        node('writer', [], { writer: true, maxAttempts: 2 }),
+        node('test', ['writer'], { role: 'test', required: true }),
+        node('accept', ['test'], { role: 'accept', kind: 'human_approval' }),
+      ],
+      { edges: [{ from: 'test', to: 'writer', when: 'on_fail' }] },
+    );
+    expect(validateGraph(unsafe)).toContain(
+      'incompatible fallback: test can repair through writer without repair_envelope',
     );
   });
 
