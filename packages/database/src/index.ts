@@ -57,6 +57,8 @@ export {
   ImmutableContractVersionError,
   changeContractVersionId,
 } from './repositories/change-contract-repository.js';
+export { FeedbackRepository } from './repositories/feedback-repository.js';
+export type { StoredFeedbackItem } from './repositories/feedback-repository.js';
 export type {
   ChangeContractAggregate,
   StoredChangeContractVersion,

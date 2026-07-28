@@ -478,3 +478,5 @@ export function validateAuthorityMatrix(): void {
 }
 
 validateAuthorityMatrix();
+
+export * from './feedback.js';

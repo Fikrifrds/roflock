@@ -137,6 +137,7 @@ export class TaskRepository {
       this.db.prepare(`DELETE FROM test_runs WHERE task_id = ?`).run(id);
       this.db.prepare(`DELETE FROM review_findings WHERE task_id = ?`).run(id);
       this.db.prepare(`DELETE FROM task_documents WHERE task_id = ?`).run(id);
+      this.db.prepare(`DELETE FROM feedback_items WHERE task_id = ?`).run(id);
       this.db.prepare(`DELETE FROM graph_runs WHERE task_id = ?`).run(id);
       this.db.prepare(`DELETE FROM tasks WHERE id = ?`).run(id);
     });

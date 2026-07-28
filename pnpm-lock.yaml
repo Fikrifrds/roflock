@@ -94,6 +94,9 @@ importers:
       '@roleflock/repository-runtime':
         specifier: workspace:*
         version: link:../../packages/repository-runtime
+      '@roleflock/role-protocol':
+        specifier: workspace:*
+        version: link:../../packages/role-protocol
       '@roleflock/run-control':
         specifier: workspace:*
         version: link:../../packages/run-control
@@ -239,6 +242,9 @@ importers:
       '@roleflock/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@roleflock/role-protocol':
+        specifier: workspace:*
+        version: link:../role-protocol
       better-sqlite3:
         specifier: ^11.10.0
         version: 11.10.0

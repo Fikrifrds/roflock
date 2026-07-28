@@ -20,6 +20,7 @@
   "dependencies": {
     "@roleflock/change-contracts": "workspace:*",
     "@roleflock/contracts": "workspace:*",
+    "@roleflock/role-protocol": "workspace:*",
     "better-sqlite3": "^11.10.0"
   },
   "devDependencies": {

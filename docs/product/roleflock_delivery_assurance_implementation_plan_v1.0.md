@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M2.5 complete; M2.6 is next
+**Execution progress:** M0 through M2.6 complete; M2.7 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1659,7 +1659,7 @@ later ticket merely to make the product appear complete sooner.
 | M2.3 ✅ | Artifact-gated graph node contracts | M2.2 | Executor cannot schedule without approved plan hash |
 | M2.4 ✅ | Planner context and structured plan output | M2.3 | Planner produces schema-valid plans |
 | M2.5 ✅ | Executor context pinning and path enforcement | M2.3 | Executor sees one plan version and cannot leave its paths |
-| M2.6 | Feedback classifier and planner routing | M2.2 | Raw feedback never targets executor |
+| M2.6 ✅ | Feedback classifier and planner routing | M2.2 | Raw feedback never targets executor |
 | M2.7 | Verifier-to-planner graph migration | M2.3 | All non-mechanical findings route through planner |
 | M2.8 | Repair-envelope classifier | M2.7 | Only approved mechanical repairs bypass planner |
 | M2.9 | Plan/deviation UI and end-to-end tests | M2.4–M2.8 | Full revision loop passes fixture test |

@@ -71,6 +71,7 @@ import {
   unstageTaskFiles,
 } from '../services/task-workspace.js';
 import { registerChangeContractRoutes } from './change-contracts.js';
+import { registerFeedbackRoutes } from './feedback.js';
 import { evaluateContractStartGate } from '../services/contract-start-gate.js';
 
 export function registerApi(
@@ -98,6 +99,7 @@ export function registerApi(
     worktrees = new WorktreeRepository(db),
     audit = new AuditRepository(db);
   registerChangeContractRoutes(app, db, bus);
+  registerFeedbackRoutes(app, db, bus);
   app.get('/api/health', async () => ({
     ok: true,
     status: 'ok',
