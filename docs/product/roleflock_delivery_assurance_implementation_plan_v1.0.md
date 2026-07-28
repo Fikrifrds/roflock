@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0.1 completed; M0.2 is next
+**Execution progress:** M0.1–M0.2 completed; M0.3 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1642,7 +1642,7 @@ later ticket merely to make the product appear complete sooner.
 | Ticket | Scope | Depends on | Done when |
 |---|---|---|---|
 | M0.1 ✅ | ADR-014 delivery-assurance boundary | Plan acceptance | Authority vs agent boundary is frozen |
-| M0.2 | ADR-015 Change Contract and Execution Plan | M0.1 | Versioning and immutability rules are frozen |
+| M0.2 ✅ | ADR-015 Change Contract and Execution Plan | M0.1 | Versioning and immutability rules are frozen |
 | M0.3 | ADR-016 role authority and feedback routing | M0.2 | Planner-owned revision protocol is frozen |
 | M0.4 | ADR-017 independent verification | M0.2 | Writer/verifier trust boundary is frozen |
 | M0.5 | ADR-018 Change Passport and signing | M0.4 | Attestation/trust levels are frozen |
