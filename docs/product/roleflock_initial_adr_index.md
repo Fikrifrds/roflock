@@ -19,3 +19,4 @@ Create these records in `docs/adr/`.
 | ADR-013 | Unattended execution over interactive iteration |
 | ADR-014 | Independent delivery-assurance boundary |
 | ADR-015 | Versioned Change Contract and Execution Plan |
+| ADR-016 | Role authority and planner-owned feedback routing |
