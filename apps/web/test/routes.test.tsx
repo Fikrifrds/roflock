@@ -8,6 +8,7 @@ import { Home } from '../src/routes/Home.js';
 import { NewTask } from '../src/routes/NewTask.js';
 import { Evidence } from '../src/routes/Evidence.js';
 import { Providers } from '../src/routes/Providers.js';
+import { isMissingVerificationFinding } from '../src/lib/verification.js';
 import { TaskDetail } from '../src/routes/TaskDetail.js';
 import { WorkspaceChanges } from '../src/components/WorkspaceChanges.js';
 import type { Task } from '../src/types.js';
@@ -222,6 +223,17 @@ describe('Approvals', () => {
 });
 
 describe('TaskDetail', () => {
+  it('recognises a missing verification command recorded in finding details', () => {
+    expect(
+      isMissingVerificationFinding({
+        severity: 'error',
+        summary: 'Node test failed',
+        details:
+          'Verification command required: no configured command or supported test convention was found.',
+      }),
+    ).toBe(true);
+  });
+
   it('offers to continue a cancelled task', async () => {
     authenticated();
     const task = {

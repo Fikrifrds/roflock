@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import type { FastifyInstance } from 'fastify';
 import type { ActiveExecution, Task } from '@roleflock/contracts';
 import {
@@ -251,11 +252,17 @@ export function registerApi(
     return reply.code(201).send(task);
   });
   app.get('/api/tasks/:id/verification-suggestion', async (request, reply) => {
-    const task = tasks.get((request.params as { id: string }).id);
+    const taskId = (request.params as { id: string }).id;
+    const task = tasks.get(taskId);
     if (!task) return reply.code(404).send({ error: 'Task not found' });
     const project = projects.get(task.projectId);
     if (!project) return reply.code(404).send({ error: 'Project not found' });
-    return { command: await discoverVerificationCommand(project.resolvedPath) };
+    const worktree = worktrees.getByTask(taskId);
+    return {
+      command: await discoverVerificationCommand(
+        worktree && existsSync(worktree.path) ? worktree.path : project.resolvedPath,
+      ),
+    };
   });
   app.patch('/api/tasks/:id/verification-command', async (request, reply) => {
     const command = (request.body as { verificationCommand?: string }).verificationCommand?.trim();

@@ -29,5 +29,13 @@ export async function discoverVerificationCommand(root: string): Promise<string 
     // RoleFlock's worktree root without handing user input to a shell.
     return `python3 ${directory ? `${directory}/` : ''}${tests[0]}`;
   }
+
+  // A new project may intentionally be a dependency-free, single-file web app.
+  // It still deserves a deterministic gate: confirm the generated document is
+  // complete and contains executable application code without downloading a
+  // package or inventing a framework-specific test command.
+  if (existsSync(join(root, 'index.html'))) {
+    return `node -e "const fs=require('fs');const html=fs.readFileSync('index.html','utf8');if(!/<!doctype html>/i.test(html)||!/<\\\\/html>/i.test(html)||!/<script[\\\\s>]/i.test(html))throw new Error('index.html is incomplete')"`;
+  }
   return undefined;
 }

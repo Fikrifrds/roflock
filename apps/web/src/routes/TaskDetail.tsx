@@ -13,6 +13,10 @@ import { Empty, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { DOCUMENT_AUTHORITIES, DOCUMENT_KINDS } from '../lib/choices.js';
 import { formatPhase, isTerminalState } from '../lib/format.js';
+import {
+  isMissingVerificationFinding,
+  type TaskFinding,
+} from '../lib/verification.js';
 import type {
   ActiveExecution,
   Approval,
@@ -54,7 +58,7 @@ export function TaskDetail() {
     Boolean(id),
   );
   const { data: evidence } = useData<{
-    findings?: Array<{ severity: string; summary: string; details?: string }>;
+    findings?: TaskFinding[];
   }>(['evidence', id], `/api/evidence/tasks/${id}`, Boolean(id));
   const { data: verificationSuggestion } = useData<{ command?: string }>(
     ['verification-suggestion', id],
@@ -124,9 +128,7 @@ export function TaskDetail() {
   const latestError = task.state === 'failed' ? latestFailure : undefined;
   const verificationMissing = Boolean(
     (task.state === 'failed' || task.state === 'cancelled') &&
-    (latestFailure?.summary.includes('Verification command required') ||
-      latestFailure?.details?.includes('missing-verification-command') ||
-      latestFailure?.details?.includes('No verification command')),
+    isMissingVerificationFinding(latestFailure),
   );
   const suggestedCommand = verificationSuggestion?.command ?? task.verificationCommand ?? '';
   const verificationCommand = verificationDraft || suggestedCommand;
@@ -159,7 +161,7 @@ export function TaskDetail() {
         <WorkspaceChanges task={task} />
       ) : (
         <Section title="Current state" className="task-control-section">
-          {actionError || (latestError && !blocked) ? (
+          {actionError || (latestError && !blocked && !verificationMissing) ? (
             <p className="error" role="alert">
               {actionError || latestError?.details || latestError?.summary}
             </p>
@@ -292,7 +294,7 @@ export function TaskDetail() {
             ) : null}
             <div className="actions task-now-actions">
               {task.state === 'ready' ||
-              task.state === 'failed' ||
+              (task.state === 'failed' && !verificationMissing) ||
               (task.state === 'cancelled' && !verificationMissing) ? (
                 <button type="button" disabled={starting} onClick={() => void action('start')}>
                   {starting
