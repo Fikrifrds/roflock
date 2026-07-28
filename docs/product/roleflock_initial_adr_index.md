@@ -16,3 +16,5 @@ Create these records in `docs/adr/`.
 | ADR-010 | Unknown billable invocation outcome |
 | ADR-011 | Context disclosure manifest |
 | ADR-012 | Cursor writer permission envelope and sandbox |
+| ADR-013 | Unattended execution over interactive iteration |
+| ADR-014 | Independent delivery-assurance boundary |
