@@ -16,9 +16,14 @@ import {
   type RoleId,
 } from '@roleflock/context-compiler';
 import {
+  assertExecutorChangedPaths,
   compilePlannerPlanProposal,
+  executorInstructionBlock,
+  executorPermissionEnvelope,
+  parseApprovedExecutionPlan,
   plannerStructuredOutputPrompt,
   type ChangeContract,
+  type ExecutionPlan,
 } from '@roleflock/change-contracts';
 import {
   ActiveExecutionRepository,
@@ -95,6 +100,27 @@ export function verificationTimeoutMs(): number {
     process.env.ROLEFLOCK_VERIFICATION_TIMEOUT_MS ?? DEFAULT_VERIFICATION_TIMEOUT_MS,
   );
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_VERIFICATION_TIMEOUT_MS;
+}
+
+function approvedPlanFromCompleted(
+  completed: readonly { output?: unknown }[],
+): ExecutionPlan | undefined {
+  for (const result of [...completed].reverse()) {
+    const wrapper =
+      typeof result.output === 'object' && result.output !== null
+        ? (result.output as { output?: unknown })
+        : undefined;
+    for (const candidate of [wrapper?.output, result.output]) {
+      try {
+        const value = typeof candidate === 'string' ? JSON.parse(candidate) : candidate;
+        return parseApprovedExecutionPlan(value);
+      } catch {
+        // Other node outputs are intentionally ignored; only a verified
+        // approved Execution Plan can become the executor's authority.
+      }
+    }
+  }
+  return undefined;
 }
 
 export interface IdleWatchdog {
@@ -723,6 +749,11 @@ export class Orchestrator {
     }> => {
       openRuns.delete(node.id);
       const role = node.role;
+      const pinnedPlan =
+        node.authorityRole === 'executor' ? approvedPlanFromCompleted(completed) : undefined;
+      if (node.authorityRole === 'executor' && pinnedPlan === undefined) {
+        throw new Error('Executor cannot start without one current approved Execution Plan');
+      }
       let nodeOutput: string | undefined;
       const producedArtifacts: Array<{
         id: string;
@@ -781,26 +812,38 @@ export class Orchestrator {
         startedAt: now(),
       });
 
-      const workflowContext = completed.flatMap((result) => {
-        const resultOutput = result.output as { output?: unknown } | undefined;
-        const output =
-          typeof resultOutput?.output === 'string' ? resultOutput.output.trim() : undefined;
-        if (!output) return [];
-        return [
-          {
-            id: `workflow:${result.nodeId}`,
-            content: [
-              `Completed graph node: ${result.nodeId} (${result.role})`,
-              output.slice(0, 12_000),
-            ].join('\n'),
-            source: `workflow:${result.nodeId}`,
-            sensitivity: 'internal' as const,
-            priority: 85,
-          },
-        ];
-      });
+      const workflowContext = (node.authorityRole === 'executor' ? [] : completed).flatMap(
+        (result) => {
+          const resultOutput = result.output as { output?: unknown } | undefined;
+          const output =
+            typeof resultOutput?.output === 'string' ? resultOutput.output.trim() : undefined;
+          if (!output) return [];
+          return [
+            {
+              id: `workflow:${result.nodeId}`,
+              content: [
+                `Completed graph node: ${result.nodeId} (${result.role})`,
+                output.slice(0, 12_000),
+              ].join('\n'),
+              source: `workflow:${result.nodeId}`,
+              sensitivity: 'internal' as const,
+              priority: 85,
+            },
+          ];
+        },
+      );
       const contract = this.currentContract(task.id);
       const disclosureEntries = [
+        ...(pinnedPlan === undefined
+          ? []
+          : [
+              buildPinnedArtifactContext({
+                kind: 'execution_plan',
+                id: pinnedPlan.id,
+                hash: pinnedPlan.hash,
+                content: JSON.stringify(pinnedPlan),
+              }),
+            ]),
         ...(role === 'planner' && contract !== undefined
           ? [
               buildPinnedArtifactContext({
@@ -1114,17 +1157,19 @@ export class Orchestrator {
           }
 
           const envelope =
-            directWriter || patchWriter
-              ? {
-                  worktree: worktreePath,
-                  allowedPaths: ['**'],
-                  allowCommands: true,
-                }
-              : {
-                  worktree: worktreePath,
-                  allowedPaths: [relativeTarget],
-                  allowCommands: false,
-                };
+            pinnedPlan !== undefined
+              ? executorPermissionEnvelope(pinnedPlan, worktreePath)
+              : directWriter || patchWriter
+                ? {
+                    worktree: worktreePath,
+                    allowedPaths: ['**'],
+                    allowCommands: true,
+                  }
+                : {
+                    worktree: worktreePath,
+                    allowedPaths: [relativeTarget],
+                    allowCommands: false,
+                  };
 
           if (directWriter || patchWriter) {
             // Build once, but only send it to API-only patch providers. Direct
@@ -1133,7 +1178,9 @@ export class Orchestrator {
             const patchContext = await buildPatchWriterContext(worktreePath, task.brief);
             const prompt = (activeRoute: RoleRoute) =>
               [
-                'Implement the smallest sufficient bug fix in this repository worktree.',
+                pinnedPlan !== undefined
+                  ? executorInstructionBlock(pinnedPlan)
+                  : 'Implement the smallest sufficient bug fix in this repository worktree.',
                 `Title: ${task.title}`,
                 `Brief: ${task.brief}`,
                 `Expected: ${task.expectedBehaviour ?? 'n/a'}`,
@@ -1187,6 +1234,9 @@ export class Orchestrator {
 
           const diff = await captureDiff(worktreePath);
           assertChangedPathsAllowed(envelope, diff.changedFiles);
+          if (pinnedPlan !== undefined) {
+            assertExecutorChangedPaths(pinnedPlan, diff.changedFiles);
+          }
           if (!diff.changedFiles.length) {
             throw new Error('Writer completed without changing any files in the leased worktree.');
           }
