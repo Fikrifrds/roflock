@@ -110,6 +110,35 @@ describe('repository-runtime', () => {
     expect(b.acquire()).toBe(true);
   });
 
+  it('defaults new tasks to an external worktree without touching a dirty primary checkout', async () => {
+    const root = tempRepo();
+    const base = mkdtempSync(join(tmpdir(), 'rf-default-wt-'));
+    dirs.push(base);
+    writeFileSync(join(root, 'local-wip.txt'), 'keep this local work\n');
+    const branchBefore = execFileSync('git', ['-C', root, 'branch', '--show-current'], {
+      encoding: 'utf8',
+    }).trim();
+    const statusBefore = execFileSync('git', ['-C', root, 'status', '--porcelain'], {
+      encoding: 'utf8',
+    });
+
+    const workspace = await prepareTaskWorkspace(await registerRepository(root), 'task-external', {
+      worktreeBaseDir: base,
+    });
+
+    expect(workspace.mode).toBe('external');
+    expect(workspace.path).toBe(realpathSync(join(base, 'task-external')));
+    expect(workspace.path).not.toBe(realpathSync(root));
+    expect(
+      execFileSync('git', ['-C', root, 'branch', '--show-current'], { encoding: 'utf8' }).trim(),
+    ).toBe(branchBefore);
+    expect(execFileSync('git', ['-C', root, 'status', '--porcelain'], { encoding: 'utf8' })).toBe(
+      statusBefore,
+    );
+    expect(existsSync(join(root, 'local-wip.txt'))).toBe(true);
+    expect(existsSync(join(workspace.path, 'local-wip.txt'))).toBe(false);
+  });
+
   it('prepares an in-place task branch inside the project folder', async () => {
     const root = mkdtempSync(join(tmpdir(), 'rf-inplace-'));
     dirs.push(root);

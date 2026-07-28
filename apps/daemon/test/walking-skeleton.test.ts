@@ -1,4 +1,5 @@
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -62,6 +63,10 @@ async function waitFor(
 describe('verified bug fix walking skeleton', () => {
   it('runs parallel planners→reviewer confirmation→writer→test→verifier→accept', async () => {
     const { app, repoDir, headers } = await boot();
+    const primaryBranch = execFileSync('git', ['branch', '--show-current'], {
+      cwd: repoDir,
+      encoding: 'utf8',
+    }).trim();
 
     const project = await app.inject({
       method: 'POST',
@@ -97,12 +102,30 @@ describe('verified bug fix walking skeleton', () => {
     });
     expect(started.statusCode).toBe(202);
 
-    const approvals = (await waitFor(
-      app,
-      headers,
-      '/api/approvals',
-      (body) => Array.isArray(body) && body.length > 0,
-    )) as Array<{ id: string }>;
+    let approvals: Array<{ id: string }>;
+    try {
+      approvals = (await waitFor(
+        app,
+        headers,
+        '/api/approvals',
+        (body) => Array.isArray(body) && body.length > 0,
+      )) as Array<{ id: string }>;
+    } catch (reason) {
+      const failedTask = await app.inject({
+        method: 'GET',
+        url: `/api/tasks/${taskBody.id}`,
+        headers,
+      });
+      const failedEvidence = await app.inject({
+        method: 'GET',
+        url: `/api/evidence/tasks/${taskBody.id}`,
+        headers,
+      });
+      throw new Error(
+        `${String(reason)}; task=${failedTask.body}; evidence=${failedEvidence.body}`,
+        { cause: reason },
+      );
+    }
 
     const planningGraph = (
       await app.inject({
@@ -227,6 +250,13 @@ describe('verified bug fix walking skeleton', () => {
     // The deterministic stand-in reports no tokens, so there is nothing to
     // price. Showing a shadow cost here would be a number RoleFlock invented.
     expect(usageBody.summary.shadowCostUsd).toBe(0);
+    expect(
+      execFileSync('git', ['branch', '--show-current'], {
+        cwd: repoDir,
+        encoding: 'utf8',
+      }).trim(),
+    ).toBe(primaryBranch);
+    expect(existsSync(join(repoDir, 'ROLEFLOCK_SIMULATION.md'))).toBe(false);
   }, 30_000);
 
   it('rejects non-local mutation origins', async () => {

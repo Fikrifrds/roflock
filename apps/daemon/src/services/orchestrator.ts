@@ -56,7 +56,6 @@ import {
 import { NodeFailure, runGraph, type NodeContext } from '@roleflock/graph-runtime';
 import {
   captureDiff,
-  DirtyWorkingTreeError,
   prepareTaskWorkspace,
   registerRepository,
   WriterLease,
@@ -473,17 +472,10 @@ export class Orchestrator {
       };
     } else {
       const repo = await registerRepository(repositoryPath);
-      // One in-place writer per project folder — a second task would checkout a
-      // different branch under the user's feet.
-      const conflicting = this.worktrees.findActiveByPath(repo.root, task.id);
-      if (conflicting) {
-        throw new Error(
-          `Project folder is already used by another RoleFlock task (${conflicting.taskId.slice(0, 8)}…). Finish or stop that task before starting another here.`,
-        );
-      }
       try {
-        // Prefer the existing external worktree when recovering an older task;
-        // new runs always work in the project folder itself.
+        // Recover an existing external workspace when possible. Every new run
+        // otherwise gets its own external worktree; the primary checkout and
+        // its current branch remain untouched.
         const prior = this.worktrees.getByTask(task.id);
         const reuseExternal =
           prior &&
@@ -498,13 +490,13 @@ export class Orchestrator {
               baseCommit: prior.baseCommit,
             }
           : await prepareTaskWorkspace(repo, task.id, {
-              mode: 'in_place',
+              mode: 'external',
               baseRef: baseBranch === 'HEAD' ? 'HEAD' : baseBranch,
+              worktreeBaseDir: this.worktreeBaseDir,
             });
       } catch (error) {
-        if (error instanceof DirtyWorkingTreeError) throw error;
         const detail = error instanceof Error ? error.message : String(error);
-        throw new Error(`Failed to prepare project workspace: ${detail}`, { cause: error });
+        throw new Error(`Failed to prepare external task workspace: ${detail}`, { cause: error });
       }
       this.worktrees.create({
         id: randomUUID(),

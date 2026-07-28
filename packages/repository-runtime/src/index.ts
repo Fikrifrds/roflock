@@ -220,9 +220,9 @@ async function gitStdout(repoRoot: string, args: string[]): Promise<string> {
 }
 
 /**
- * Prepares the task workspace. Default is in-place: checkout `roleflock/<taskId>`
- * inside the project folder so users see files where they expect them.
- * External worktrees remain available for recovery of older runs.
+ * Prepares the task workspace. New tasks default to an external worktree so
+ * RoleFlock never changes the branch or dirty state of the user's primary
+ * checkout. In-place mode remains an explicit compatibility path only.
  */
 export async function prepareTaskWorkspace(
   repo: Repository,
@@ -233,7 +233,7 @@ export async function prepareTaskWorkspace(
     worktreeBaseDir?: string;
   } = {},
 ): Promise<{ path: string; branchName: string; baseCommit: string; mode: TaskWorkspaceMode }> {
-  const mode = options.mode ?? 'in_place';
+  const mode = options.mode ?? 'external';
   if (mode === 'external') {
     if (!options.worktreeBaseDir) {
       throw new Error('worktreeBaseDir is required for external task workspaces');
