@@ -14,6 +14,7 @@ import {
   type SqliteDb,
 } from '@roleflock/database';
 import type { EventBus } from '../services/event-bus.js';
+import { findTaskPathCollisions } from '../services/path-collision.js';
 
 export function registerExecutionPlanRoutes(
   app: FastifyInstance,
@@ -65,6 +66,7 @@ export function registerExecutionPlanRoutes(
       ...current,
       snapshots: plans.listSnapshots(current.plan.id),
       deviations: plans.listDeviations(taskId),
+      collisions: findTaskPathCollisions(db, taskId),
     };
   });
 

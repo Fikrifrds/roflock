@@ -109,8 +109,19 @@ function response(value: ExecutionPlan, deviations: PlanDeviation[] = []): Execu
 describe('ExecutionPlanPanel', () => {
   it('shows sealed boundaries, steps, budget, lineage, and deviations', async () => {
     const value = plan('approved');
+    const planResponse = response(value, [deviation()]);
+    planResponse.collisions = [
+      {
+        taskId: 'task_parallel',
+        planId: 'plan_parallel',
+        planHash: 'e'.repeat(64),
+        path: 'src/checkout.ts',
+        conflictingPath: 'src/checkout.ts',
+        kind: 'exact',
+      },
+    ];
     stubApi({
-      '/api/tasks/t1/execution-plan': response(value, [deviation()]),
+      '/api/tasks/t1/execution-plan': planResponse,
     });
 
     renderApp(<ExecutionPlanPanel task={task} />);
@@ -123,7 +134,8 @@ describe('ExecutionPlanPanel', () => {
       screen.getByText(/STEP-1: Implement and verify checkout idempotency/),
     ).toBeInTheDocument();
     expect(screen.getByText('scope expansion')).toBeInTheDocument();
-    expect(screen.getByText('src/checkout.ts')).toBeInTheDocument();
+    expect(screen.getAllByText('src/checkout.ts').length).toBeGreaterThan(0);
+    expect(screen.getByText('Expected path overlap with active work')).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: 'Approve execution plan' }),
     ).not.toBeInTheDocument();

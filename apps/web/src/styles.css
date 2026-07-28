@@ -5167,6 +5167,26 @@ pre {
   color: var(--accent);
 }
 
+.plan-collision-warning {
+  padding: var(--space-4);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius);
+  background: var(--warn-wash);
+}
+
+.plan-collision-warning p {
+  margin: var(--space-2) 0;
+}
+
+.plan-collision-warning ul {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-5);
+}
+
+.plan-collision-warning li + li {
+  margin-top: var(--space-2);
+}
+
 .plan-summary p {
   margin: 0;
 }

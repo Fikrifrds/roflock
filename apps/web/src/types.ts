@@ -219,6 +219,14 @@ export type ExecutionPlanResponse = {
   plan: ExecutionPlan;
   snapshots?: ExecutionPlan[];
   deviations: PlanDeviation[];
+  collisions?: Array<{
+    taskId: string;
+    planId: string;
+    planHash: string;
+    path: string;
+    conflictingPath: string;
+    kind: 'exact' | 'ancestor' | 'pattern';
+  }>;
 };
 
 export type Project = {

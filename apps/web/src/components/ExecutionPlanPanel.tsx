@@ -97,6 +97,24 @@ export function ExecutionPlanPanel({ task }: { task: Task }) {
         </p>
       ) : null}
 
+      {response.collisions && response.collisions.length > 0 ? (
+        <div className="plan-collision-warning" role="alert">
+          <strong>Expected path overlap with active work</strong>
+          <p>
+            This is a conservative preflight warning, not proof of a merge conflict. Review the
+            overlapping plan hashes before running both writers.
+          </p>
+          <ul>
+            {response.collisions.map((collision) => (
+              <li key={`${collision.taskId}-${collision.path}-${collision.conflictingPath}`}>
+                <code>{collision.path}</code> overlaps <code>{collision.conflictingPath}</code> in
+                task {collision.taskId} · plan {shortHash(collision.planHash)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <div className="plan-seal">
         <div>
           <span className="eyebrow">PLAN HASH</span>

@@ -75,6 +75,7 @@ import { registerChangeContractRoutes } from './change-contracts.js';
 import { registerFeedbackRoutes } from './feedback.js';
 import { registerExecutionPlanRoutes } from './execution-plans.js';
 import { evaluateContractStartGate } from '../services/contract-start-gate.js';
+import { findTaskPathCollisions } from '../services/path-collision.js';
 
 export function registerApi(
   app: FastifyInstance,
@@ -957,6 +958,14 @@ export function registerApi(
     const project = projects.get(task.projectId);
     if (!project) return reply.code(400).send({ error: 'Task project missing' });
     try {
+      const collisionWarnings = findTaskPathCollisions(db, task.id);
+      if (collisionWarnings.length > 0) {
+        bus.publish('task.path_collision.predicted', {
+          taskId: task.id,
+          projectId: task.projectId,
+          collisions: collisionWarnings,
+        });
+      }
       // Show a terminal task as ready while its continuation is prepared.
       if (task.state === 'failed' || task.state === 'cancelled') {
         tasks.upsert({ ...task, state: 'ready', updatedAt: now() });
@@ -965,6 +974,7 @@ export function registerApi(
       return reply.code(202).send({
         accepted: true,
         graphRunId: started.graphRunId,
+        collisionWarnings,
         contract:
           contractGate.mode === 'authorised'
             ? contractGate.pin
