@@ -1,12 +1,6 @@
 import { sha256Canonical } from '@roleflock/contracts';
 
-export type RoleId =
-  | 'planner'
-  | 'reviewer'
-  | 'writer'
-  | 'test'
-  | 'verifier'
-  | 'accept';
+export type RoleId = 'planner' | 'reviewer' | 'writer' | 'test' | 'verifier' | 'accept';
 
 export type Sensitivity = 'public' | 'internal' | 'secret';
 
@@ -17,6 +11,8 @@ export interface ContextItem {
   sensitivity?: Sensitivity;
   priority?: number;
   path?: string;
+  /** Authority artifacts must never be silently dropped by ranking or budget. */
+  required?: boolean;
 }
 
 export interface RoleContract {
@@ -135,10 +131,16 @@ export function pathMatchesExclusion(path: string, pattern: string): boolean {
     .replace(/\*\*/g, '<<<GLOBSTAR>>>')
     .replace(/\*/g, '[^/]*')
     .replace(/<<<GLOBSTAR>>>/g, '.*');
-  return new RegExp(`^${escaped}$`, 'i').test(normalized) || normalized.includes(pattern.replace(/\*\*/g, '').replace(/\*/g, ''));
+  return (
+    new RegExp(`^${escaped}$`, 'i').test(normalized) ||
+    normalized.includes(pattern.replace(/\*\*/g, '').replace(/\*/g, ''))
+  );
 }
 
-export function isDeniedPath(path: string | undefined, exclusions: string[] = DEFAULT_EXCLUSIONS): boolean {
+export function isDeniedPath(
+  path: string | undefined,
+  exclusions: string[] = DEFAULT_EXCLUSIONS,
+): boolean {
   if (!path) return false;
   const normalized = path.replace(/\\/g, '/');
   const base = normalized.split('/').pop() ?? normalized;
@@ -190,7 +192,9 @@ export function buildDisclosureManifest(
 }
 
 function sourcePriority(item: ContextItem, preferred: string[]): number {
-  const matchIndex = preferred.findIndex((prefix) => item.source.startsWith(prefix) || item.id.startsWith(prefix));
+  const matchIndex = preferred.findIndex(
+    (prefix) => item.source.startsWith(prefix) || item.id.startsWith(prefix),
+  );
   const preferredBoost = matchIndex === -1 ? 0 : (preferred.length - matchIndex) * 10;
   return preferredBoost + (item.priority ?? 0);
 }
@@ -228,7 +232,9 @@ export function compileContext(input: {
   }
 
   eligible.sort(
-    (a, b) => sourcePriority(b, contract.preferredSources) - sourcePriority(a, contract.preferredSources),
+    (a, b) =>
+      Number(Boolean(b.required)) - Number(Boolean(a.required)) ||
+      sourcePriority(b, contract.preferredSources) - sourcePriority(a, contract.preferredSources),
   );
 
   const selected: ContextItem[] = [];
@@ -236,6 +242,11 @@ export function compileContext(input: {
   for (const item of eligible) {
     const tokens = estimateTokens(item.content);
     if (usedTokens + tokens > maxTokens) {
+      if (item.required) {
+        throw new Error(
+          `Required authority context ${item.id} exceeds the ${maxTokens}-token ${input.role} budget`,
+        );
+      }
       omitted.push({ id: item.id, reason: 'token_budget' });
       continue;
     }
@@ -258,7 +269,29 @@ export function compileContext(input: {
   };
 }
 
-export function buildRepositoryMap(paths: string[], exclusions: string[] = DEFAULT_EXCLUSIONS): ContextItem {
+export function buildPinnedArtifactContext(input: {
+  kind: string;
+  id: string;
+  hash: string;
+  content: string;
+}): ContextItem {
+  if (!/^[a-f0-9]{64}$/.test(input.hash)) {
+    throw new Error(`Pinned ${input.kind} requires a sha256 hash`);
+  }
+  return {
+    id: `artifact:${input.kind}:${input.id}`,
+    source: `artifact:${input.kind}:${input.hash}`,
+    content: input.content,
+    sensitivity: 'internal',
+    priority: 1_000,
+    required: true,
+  };
+}
+
+export function buildRepositoryMap(
+  paths: string[],
+  exclusions: string[] = DEFAULT_EXCLUSIONS,
+): ContextItem {
   const allowed = paths.filter((path) => !isDeniedPath(path, exclusions)).slice(0, 200);
   return {
     id: 'repo.map',

@@ -342,3 +342,4 @@ export function parseVerifiedChangeContract(input: unknown): ChangeContract {
 
 export * from './service.js';
 export * from './execution-artifacts.js';
+export * from './planner-output.js';

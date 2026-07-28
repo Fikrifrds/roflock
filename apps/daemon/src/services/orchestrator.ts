@@ -9,11 +9,22 @@ import type {
   UsageConfidence,
 } from '@roleflock/contracts';
 import { createConfirmationRequest, matchingGrant } from '@roleflock/approval-engine';
-import { buildRepositoryMap, compileContext, type RoleId } from '@roleflock/context-compiler';
+import {
+  buildPinnedArtifactContext,
+  buildRepositoryMap,
+  compileContext,
+  type RoleId,
+} from '@roleflock/context-compiler';
+import {
+  compilePlannerPlanProposal,
+  plannerStructuredOutputPrompt,
+  type ChangeContract,
+} from '@roleflock/change-contracts';
 import {
   ActiveExecutionRepository,
   ApprovalGrantRepository,
   AuditRepository,
+  ChangeContractRepository,
   ConfirmationRepository,
   ControlCommandRepository,
   EvidenceRepository,
@@ -216,6 +227,7 @@ export class Orchestrator {
   private readonly worktrees: WorktreeRepository;
   private readonly events: EventStore;
   private readonly confirmations: ConfirmationRepository;
+  private readonly changeContracts: ChangeContractRepository;
   private readonly invocations: InvocationRepository;
   private readonly leases: LeaseRepository;
   private readonly processHandles: ProcessHandleRepository;
@@ -241,6 +253,7 @@ export class Orchestrator {
     this.worktrees = new WorktreeRepository(db);
     this.events = new EventStore(db);
     this.confirmations = new ConfirmationRepository(db);
+    this.changeContracts = new ChangeContractRepository(db);
     this.invocations = new InvocationRepository(db);
     this.leases = new LeaseRepository(db);
     this.processHandles = new ProcessHandleRepository(db);
@@ -380,6 +393,20 @@ export class Orchestrator {
       this.resolveConfirmation(request.id, 'approved');
     }
     return pending.length;
+  }
+
+  private currentContract(taskId: string): ChangeContract | undefined {
+    const aggregate = this.changeContracts.getByTask(taskId);
+    if (aggregate === undefined) return undefined;
+    const stored = this.changeContracts.getCurrent(aggregate.id);
+    if (
+      stored === undefined ||
+      stored.contract.status !== 'authorised' ||
+      stored.contract.hash !== aggregate.currentHash
+    ) {
+      return undefined;
+    }
+    return stored.contract;
   }
 
   private async prepareRun(
@@ -633,10 +660,7 @@ export class Orchestrator {
    * Only nodes that still exist in the pinned graph are eligible, so a version
    * mismatch can never resurrect a node the current graph does not have.
    */
-  private resumableRun(
-    task: Task,
-    graph: WorkflowGraph,
-  ): { completed: string[] } | undefined {
+  private resumableRun(task: Task, graph: WorkflowGraph): { completed: string[] } | undefined {
     const resumableStates =
       task.state === 'cancelled' ? "('interrupted', 'failed', 'cancelled')" : "('interrupted')";
     const previous = this.db
@@ -663,8 +687,7 @@ export class Orchestrator {
       // Before a writer finishes, rerunning the planning context is safer than
       // skipping into a later role with no prior-turn output. Once code exists,
       // preserve it and continue at the first unfinished verification gate.
-      completed:
-        task.state === 'cancelled' && !completed.includes('writer') ? [] : completed,
+      completed: task.state === 'cancelled' && !completed.includes('writer') ? [] : completed,
     };
   }
 
@@ -685,10 +708,30 @@ export class Orchestrator {
     const executeNode = async ({
       node,
       completed,
-    }: NodeContext): Promise<{ role: string; nodeRunId: string; output?: string }> => {
+    }: NodeContext): Promise<{
+      role: string;
+      nodeRunId: string;
+      output?: string;
+      artifacts?: Array<{
+        id: string;
+        kind: 'execution_plan';
+        status: string;
+        hash: string;
+        valid: boolean;
+        current: boolean;
+      }>;
+    }> => {
       openRuns.delete(node.id);
       const role = node.role;
       let nodeOutput: string | undefined;
+      const producedArtifacts: Array<{
+        id: string;
+        kind: 'execution_plan';
+        status: string;
+        hash: string;
+        valid: boolean;
+        current: boolean;
+      }> = [];
       if (controller.signal.aborted) throw new Error('Cancelled by operator');
       // Honour a pause before spending anything on the next node.
       await this.waitWhilePaused(task.id, controller.signal);
@@ -756,7 +799,18 @@ export class Orchestrator {
           },
         ];
       });
+      const contract = this.currentContract(task.id);
       const disclosureEntries = [
+        ...(role === 'planner' && contract !== undefined
+          ? [
+              buildPinnedArtifactContext({
+                kind: 'change_contract',
+                id: contract.id,
+                hash: contract.hash,
+                content: JSON.stringify(contract),
+              }),
+            ]
+          : []),
         {
           id: `task:${task.id}`,
           content: [
@@ -842,6 +896,9 @@ export class Orchestrator {
                 `PLANNER for RoleFlock task "${task.title}" (read-only).`,
                 'Do not modify files.',
                 node.focus ? `Your independent swarm assignment: ${node.focus}` : '',
+                node.authorityRole === 'planner' && contract !== undefined
+                  ? plannerStructuredOutputPrompt(contract)
+                  : '',
                 '',
                 compiled.promptBlock,
               ]
@@ -864,6 +921,47 @@ export class Orchestrator {
         const output = invoked.output;
         nodeOutput = output;
         const served = invoked.route;
+
+        if (role === 'planner' && node.authorityRole === 'planner') {
+          if (contract === undefined) {
+            throw new Error('Assured planner requires the current authorised Change Contract');
+          }
+          const plan = compilePlannerPlanProposal({
+            output,
+            planId: randomUUID(),
+            version: 1,
+            contract,
+            proposedBy: {
+              invocationId,
+              role: 'planner',
+              providerId: served.providerId,
+              modelId: served.modelId,
+            },
+          });
+          nodeOutput = JSON.stringify(plan);
+          this.evidence.addArtefact({
+            id: plan.id,
+            taskId: task.id,
+            kind: 'execution_plan',
+            contentRef: nodeOutput,
+            metadata: {
+              hash: plan.hash,
+              status: plan.status,
+              contractHash: plan.contractHash,
+              version: plan.version,
+              nodeRunId,
+            },
+            createdAt: now(),
+          });
+          producedArtifacts.push({
+            id: plan.id,
+            kind: 'execution_plan',
+            status: plan.status,
+            hash: plan.hash,
+            valid: true,
+            current: true,
+          });
+        }
 
         const provenance = `${node.id} via ${served.providerDisplayName} / ${served.modelDisplayName}${
           served.effort ? ` (${served.effort})` : ''
@@ -1207,7 +1305,12 @@ export class Orchestrator {
         .run('completed', now(), 'success', nodeRunId);
       this.bus.publish('execution.updated', this.executions.getByTask(task.id));
       openRuns.delete(node.id);
-      return { role, nodeRunId, output: nodeOutput };
+      return {
+        role,
+        nodeRunId,
+        output: nodeOutput,
+        ...(producedArtifacts.length === 0 ? {} : { artifacts: producedArtifacts }),
+      };
     };
 
     const { results } = await runGraph(
@@ -1223,6 +1326,21 @@ export class Orchestrator {
       {
         signal: controller.signal,
         resumeCompleted,
+        initialArtifacts: (() => {
+          const current = this.currentContract(task.id);
+          return current === undefined
+            ? []
+            : [
+                {
+                  id: current.id,
+                  kind: 'change_contract' as const,
+                  status: current.status,
+                  hash: current.hash,
+                  valid: true,
+                  current: true,
+                },
+              ];
+        })(),
         onNodeState: (nodeId, state, attempt) => {
           this.appendEvent(task.id, 'node.state', { graphRunId, nodeId, state, attempt });
           this.bus.publish('graph.node.updated', { taskId: task.id, graphRunId, nodeId, state });
