@@ -33,6 +33,7 @@ import {
   AuditRepository,
   ChangeContractRepository,
   ConfirmationRepository,
+  ConcurrencyPolicyRepository,
   ControlCommandRepository,
   EvidenceRepository,
   EventStore,
@@ -183,6 +184,19 @@ export class ProviderIdleTimeoutError extends NodeFailure {
   }
 }
 
+export class ConcurrencyLimitError extends Error {
+  constructor(
+    readonly scope: 'global' | 'project',
+    readonly activeCount: number,
+    readonly limit: number,
+  ) {
+    super(
+      `${scope === 'global' ? 'Global' : 'Project'} concurrency limit reached (${activeCount}/${limit})`,
+    );
+    this.name = 'ConcurrencyLimitError';
+  }
+}
+
 interface PreparedRun {
   graphRunId: string;
   graph: WorkflowGraph;
@@ -254,6 +268,7 @@ export class Orchestrator {
   private readonly worktrees: WorktreeRepository;
   private readonly events: EventStore;
   private readonly confirmations: ConfirmationRepository;
+  private readonly concurrency: ConcurrencyPolicyRepository;
   private readonly changeContracts: ChangeContractRepository;
   private readonly invocations: InvocationRepository;
   private readonly leases: LeaseRepository;
@@ -280,6 +295,7 @@ export class Orchestrator {
     this.worktrees = new WorktreeRepository(db);
     this.events = new EventStore(db);
     this.confirmations = new ConfirmationRepository(db);
+    this.concurrency = new ConcurrencyPolicyRepository(db);
     this.changeContracts = new ChangeContractRepository(db);
     this.invocations = new InvocationRepository(db);
     this.leases = new LeaseRepository(db);
@@ -322,6 +338,10 @@ export class Orchestrator {
       return { graphRunId: running?.id ?? '' };
     }
 
+    const admission = this.concurrency.tryAcquire(task.id, task.projectId, now());
+    if (!admission.admitted) {
+      throw new ConcurrencyLimitError(admission.limitingScope, admission.active, admission.limit);
+    }
     const controller = new AbortController();
     this.active.set(task.id, controller);
 
@@ -343,10 +363,12 @@ export class Orchestrator {
         })
         .finally(() => {
           this.active.delete(task.id);
+          this.concurrency.release(task.id, now());
         });
       return { graphRunId: prepared.graphRunId };
     } catch (error) {
       this.active.delete(task.id);
+      this.concurrency.release(task.id, now());
       const message = error instanceof Error ? error.message : 'Task failed to start';
       this.recordFailure(task.id, 'Task failed to start', message);
       this.setTaskState(task.id, 'failed');

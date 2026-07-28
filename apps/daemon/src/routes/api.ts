@@ -8,6 +8,7 @@ import {
   ApprovalGrantRepository,
   ChangeContractRepository,
   ConfirmationRepository,
+  ConcurrencyPolicyRepository,
   DisclosureGrantRepository,
   EvidenceRepository,
   LocalKnowledgeRepository,
@@ -49,7 +50,7 @@ import {
   deleteLocalData,
 } from '../services/export-service.js';
 import { getProviderAccount } from '../services/cli-account.js';
-import { Orchestrator, resolveTaskGraph } from '../services/orchestrator.js';
+import { ConcurrencyLimitError, Orchestrator, resolveTaskGraph } from '../services/orchestrator.js';
 import {
   ROLE_DESCRIPTIONS,
   ROLE_LABELS,
@@ -97,11 +98,72 @@ export function registerApi(
     evidence = new EvidenceRepository(db),
     usage = new UsageRepository(db),
     providerConnections = new ProviderConnectionRepository(db),
+    concurrencyPolicies = new ConcurrencyPolicyRepository(db),
     worktrees = new WorktreeRepository(db),
     audit = new AuditRepository(db);
   registerChangeContractRoutes(app, db, bus);
   registerFeedbackRoutes(app, db, bus);
   registerExecutionPlanRoutes(app, db, bus);
+  app.get('/api/concurrency-policy', async (request) => {
+    const projectId = (request.query as { projectId?: string }).projectId;
+    return {
+      global: concurrencyPolicies.getGlobal(),
+      project: projectId ? concurrencyPolicies.getProject(projectId) : undefined,
+      activeTaskIds: concurrencyPolicies.activeTaskIds(projectId),
+    };
+  });
+  app.put('/api/concurrency-policy/global', async (request, reply) => {
+    const expectedRevision = parseIfMatch(request.headers['if-match']);
+    if (expectedRevision === undefined) {
+      return reply.code(428).send({ code: 'IF_MATCH_REQUIRED' });
+    }
+    try {
+      const maxActiveTasks = Number((request.body as { maxActiveTasks?: number }).maxActiveTasks);
+      const policy = concurrencyPolicies.set(
+        'global',
+        '*',
+        maxActiveTasks,
+        expectedRevision,
+        now(),
+      );
+      bus.publish('concurrency.policy.updated', policy);
+      reply.header('etag', `"${policy.revision}"`);
+      return policy;
+    } catch (error) {
+      return reply.code(409).send({
+        code: 'CONCURRENCY_POLICY_UPDATE_FAILED',
+        error: error instanceof Error ? error.message : 'Concurrency policy update failed',
+      });
+    }
+  });
+  app.put('/api/projects/:id/concurrency-policy', async (request, reply) => {
+    const projectId = (request.params as { id: string }).id;
+    if (projects.get(projectId) === undefined) {
+      return reply.code(404).send({ code: 'PROJECT_NOT_FOUND' });
+    }
+    const expectedRevision = parseIfMatch(request.headers['if-match']);
+    if (expectedRevision === undefined) {
+      return reply.code(428).send({ code: 'IF_MATCH_REQUIRED' });
+    }
+    try {
+      const maxActiveTasks = Number((request.body as { maxActiveTasks?: number }).maxActiveTasks);
+      const policy = concurrencyPolicies.set(
+        'project',
+        projectId,
+        maxActiveTasks,
+        expectedRevision,
+        now(),
+      );
+      bus.publish('concurrency.policy.updated', policy);
+      reply.header('etag', `"${policy.revision}"`);
+      return policy;
+    } catch (error) {
+      return reply.code(409).send({
+        code: 'CONCURRENCY_POLICY_UPDATE_FAILED',
+        error: error instanceof Error ? error.message : 'Concurrency policy update failed',
+      });
+    }
+  });
   app.get('/api/health', async () => ({
     ok: true,
     status: 'ok',
@@ -912,6 +974,15 @@ export function registerApi(
               },
       });
     } catch (error) {
+      if (error instanceof ConcurrencyLimitError) {
+        return reply.code(409).send({
+          code: 'CONCURRENCY_LIMIT_REACHED',
+          error: error.message,
+          scope: error.scope,
+          activeCount: error.activeCount,
+          limit: error.limit,
+        });
+      }
       if (error instanceof DirtyWorkingTreeError) {
         return reply.code(409).send({ error: error.message });
       }
@@ -1570,5 +1641,11 @@ export function registerApi(
       exclusions: compiled.disclosure.exclusions,
     };
   });
+}
+
+function parseIfMatch(value: string | string[] | undefined): number | undefined {
+  if (typeof value !== 'string') return undefined;
+  const revision = Number(value.replaceAll('"', ''));
+  return Number.isInteger(revision) && revision > 0 ? revision : undefined;
 }
 const now = () => new Date().toISOString();

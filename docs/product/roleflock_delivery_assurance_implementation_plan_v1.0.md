@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M3.2 complete; M3.3 is next
+**Execution progress:** M0 through M3.3 complete; M3.4 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1665,7 +1665,7 @@ later ticket merely to make the product appear complete sooner.
 | M2.9 ✅ | Plan/deviation UI and end-to-end tests              | M2.4–M2.8       | Full revision loop passes fixture test                    |
 | M3.1 ✅ | External worktree default for new tasks             | M2.5            | Primary checkout stays untouched                          |
 | M3.2 ✅ | Per-worktree writer lease concurrency               | M3.1            | Distinct worktrees write concurrently                     |
-| M3.3    | Global/project concurrency policy                   | M3.2            | Limits remain durable across restart                      |
+| M3.3 ✅ | Global/project concurrency policy                   | M3.2            | Limits remain durable across restart                      |
 | M3.4    | Expected-path collision analysis                    | M2.1, M3.1      | Overlap warning appears before start                      |
 | M3.5    | IDE/agent handoff commands                          | M3.1            | Handoff preserves contract/plan/task identity             |
 | M3.6    | Parallel crash-recovery test suite                  | M3.2–M3.5       | Forced daemon restart recovers safely                     |
