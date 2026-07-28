@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M3.4 complete; M3.5 is next
+**Execution progress:** M0 through M3.5 complete; M3.6 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1667,7 +1667,7 @@ later ticket merely to make the product appear complete sooner.
 | M3.2 ✅ | Per-worktree writer lease concurrency               | M3.1            | Distinct worktrees write concurrently                     |
 | M3.3 ✅ | Global/project concurrency policy                   | M3.2            | Limits remain durable across restart                      |
 | M3.4 ✅ | Expected-path collision analysis                    | M2.1, M3.1      | Overlap warning appears before start                      |
-| M3.5    | IDE/agent handoff commands                          | M3.1            | Handoff preserves contract/plan/task identity             |
+| M3.5 ✅ | IDE/agent handoff commands                          | M3.1            | Handoff preserves contract/plan/task identity             |
 | M3.6    | Parallel crash-recovery test suite                  | M3.2–M3.5       | Forced daemon restart recovers safely                     |
 | M4.1    | Verification Specification schema and freeze gate   | M2.1            | Executor cannot mutate verification input                 |
 | M4.2    | Clean verifier worktree lifecycle                   | M3.1, M4.1      | Verification runs from result commit                      |

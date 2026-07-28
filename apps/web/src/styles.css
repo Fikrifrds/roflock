@@ -5319,6 +5319,69 @@ pre {
   margin-top: var(--space-2);
 }
 
+.task-handoff-panel {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.handoff-identity {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.handoff-identity > div {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+}
+
+.handoff-identity .eyebrow {
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.handoff-identity code {
+  display: block;
+  overflow: hidden;
+  color: var(--accent);
+  text-overflow: ellipsis;
+}
+
+.handoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.handoff-command-details summary {
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.handoff-command-details > div {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.handoff-command-details code {
+  display: block;
+  overflow-x: auto;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  white-space: nowrap;
+}
+
 @media (max-width: 760px) {
   .contract-panel {
     padding: var(--space-4);
@@ -5359,7 +5422,8 @@ pre {
   .plan-seal,
   .plan-grid,
   .plan-actions,
-  .plan-deviation {
+  .plan-deviation,
+  .handoff-identity {
     grid-template-columns: 1fr;
   }
 

@@ -229,6 +229,33 @@ export type ExecutionPlanResponse = {
   }>;
 };
 
+export type TaskHandoff = {
+  manifest: {
+    schemaVersion: 1;
+    task: { id: string; title: string; projectId: string };
+    authority: {
+      contractId: string;
+      contractHash: string;
+      planId: string;
+      planHash: string;
+      planVersion: number;
+    };
+    workspace: {
+      path: string;
+      branchName: string;
+      baseCommit: string;
+    };
+    issuedAt: string;
+    hashAlgorithm: 'sha256';
+    hash: string;
+  };
+  commands: Array<{
+    id: 'codex' | 'claude' | 'cursor' | 'folder';
+    label: string;
+    command: string;
+  }>;
+};
+
 export type Project = {
   id: string;
   name: string;

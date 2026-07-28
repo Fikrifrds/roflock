@@ -5,6 +5,7 @@ import { Field, FileDrop } from '../components/Field.js';
 import { BlockedBanner } from '../components/BlockedBanner.js';
 import { ChangeContractPanel } from '../components/ChangeContractPanel.js';
 import { ExecutionPlanPanel } from '../components/ExecutionPlanPanel.js';
+import { TaskHandoffPanel } from '../components/TaskHandoffPanel.js';
 import { GraphRunView } from '../components/GraphRunView.js';
 import { LiveTurn } from '../components/LiveTurn.js';
 import { TaskWorkspaceHeader } from '../components/TaskWorkspaceHeader.js';
@@ -187,6 +188,7 @@ export function TaskDetail() {
       />
       <ChangeContractPanel task={task} />
       <ExecutionPlanPanel task={task} />
+      <TaskHandoffPanel task={task} />
       <ReviewApp taskId={task.id} />
       {workspaceView === 'changes' ? (
         <WorkspaceChanges task={task} />

@@ -76,6 +76,7 @@ import { registerFeedbackRoutes } from './feedback.js';
 import { registerExecutionPlanRoutes } from './execution-plans.js';
 import { evaluateContractStartGate } from '../services/contract-start-gate.js';
 import { findTaskPathCollisions } from '../services/path-collision.js';
+import { buildTaskHandoff } from '../services/task-handoff.js';
 
 export function registerApi(
   app: FastifyInstance,
@@ -654,6 +655,37 @@ export function registerApi(
   app.get('/api/tasks/:id', async (request, reply) => {
     const task = tasks.get((request.params as { id: string }).id);
     return task ?? reply.code(404).send({ error: 'Task not found' });
+  });
+  app.get('/api/tasks/:id/handoff', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    try {
+      return buildTaskHandoff(db, taskId, now());
+    } catch (error) {
+      return reply.code(409).send({
+        code: 'TASK_HANDOFF_NOT_READY',
+        error: error instanceof Error ? error.message : 'Task handoff is not ready',
+      });
+    }
+  });
+  app.post('/api/tasks/:id/handoff/open-folder', async (request, reply) => {
+    const taskId = (request.params as { id: string }).id;
+    try {
+      const handoff = buildTaskHandoff(db, taskId, now());
+      await openDirectory(handoff.manifest.workspace.path);
+      bus.publish('task.handoff.opened', {
+        taskId,
+        tool: 'folder',
+        handoffHash: handoff.manifest.hash,
+        contractHash: handoff.manifest.authority.contractHash,
+        planHash: handoff.manifest.authority.planHash,
+      });
+      return { opened: true, handoffHash: handoff.manifest.hash };
+    } catch (error) {
+      return reply.code(409).send({
+        code: 'TASK_HANDOFF_FAILED',
+        error: error instanceof Error ? error.message : 'Task handoff failed',
+      });
+    }
   });
   app.get('/api/tasks/:id/workspace', async (request, reply) => {
     const taskId = (request.params as { id: string }).id;
