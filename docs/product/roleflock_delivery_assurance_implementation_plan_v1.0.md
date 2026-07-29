@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M4.3 complete; M4.4 is next
+**Execution progress:** M0 through M4.4 complete; M4.5 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1672,7 +1672,7 @@ later ticket merely to make the product appear complete sooner.
 | M4.1 ✅ | Verification Specification schema and freeze gate   | M2.1            | Executor cannot mutate verification input                 |
 | M4.2 ✅ | Clean verifier worktree lifecycle                   | M3.1, M4.1      | Verification runs from result commit                      |
 | M4.3 ✅ | Restricted deterministic verifier runner            | M4.2            | Exact argv and credential isolation tests pass            |
-| M4.4    | Test-mutation and command-drift detection           | M4.3            | Weakened tests/scripts are detected                       |
+| M4.4 ✅ | Test-mutation and command-drift detection           | M4.3            | Weakened tests/scripts are detected                       |
 | M4.5    | Verification attestation schema/capture             | M4.3            | Attestation binds all required digests                    |
 | M4.6    | Criterion verdict UI and adversarial suite          | M4.4–M4.5       | False writer PASS cannot satisfy criterion                |
 | M5.1    | Change Passport schema and compatibility policy     | M0.5, M4.5      | Golden fixtures validate                                  |
