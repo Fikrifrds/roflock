@@ -1639,80 +1639,80 @@ Each ticket is intended to be one reviewable implementation unit. A ticket may b
 further when its diff becomes difficult to review, but it must not be combined with a
 later ticket merely to make the product appear complete sooner.
 
-| Ticket  | Scope                                               | Depends on      | Done when                                                 |
-| ------- | --------------------------------------------------- | --------------- | --------------------------------------------------------- |
-| M0.1 ✅ | ADR-014 delivery-assurance boundary                 | Plan acceptance | Authority vs agent boundary is frozen                     |
-| M0.2 ✅ | ADR-015 Change Contract and Execution Plan          | M0.1            | Versioning and immutability rules are frozen              |
-| M0.3 ✅ | ADR-016 role authority and feedback routing         | M0.2            | Planner-owned revision protocol is frozen                 |
-| M0.4 ✅ | ADR-017 independent verification                    | M0.2            | Writer/verifier trust boundary is frozen                  |
-| M0.5 ✅ | ADR-018 Change Passport and signing                 | M0.4            | Attestation/trust levels are frozen                       |
-| M0.6 ✅ | ADR-019 role recommendation                         | M0.3            | Constraint/scoring/learning rules are frozen              |
-| M0.7 ✅ | README, positioning, threat-model alignment         | M0.1–M0.6       | Product docs have no conflicting primary position         |
-| M1.1 ✅ | Change Contract TypeScript schemas                  | M0.2            | Canonical validation and hash tests pass                  |
-| M1.2 ✅ | Contract database migrations/repository             | M1.1            | Versions persist and authorised rows are immutable        |
-| M1.3 ✅ | Contract domain service and events                  | M1.2            | Draft/revise/authorise state tests pass                   |
-| M1.4 ✅ | Contract API with idempotency/version checks        | M1.3            | API integration tests pass                                |
-| M1.5 ✅ | Contract intake and authorisation UI                | M1.4            | User can resolve and authorise criteria                   |
-| M1.6 ✅ | Start gate and legacy-task compatibility            | M1.3            | New uncontracted task is blocked; legacy task is labelled |
-| M2.1 ✅ | Execution Plan, critique, deviation, report schemas | M1.1            | Artifact semantic-validation tests pass                   |
-| M2.2 ✅ | Role Protocol package and authority matrix          | M2.1            | Invalid role actions are rejected deterministically       |
-| M2.3 ✅ | Artifact-gated graph node contracts                 | M2.2            | Executor cannot schedule without approved plan hash       |
-| M2.4 ✅ | Planner context and structured plan output          | M2.3            | Planner produces schema-valid plans                       |
-| M2.5 ✅ | Executor context pinning and path enforcement       | M2.3            | Executor sees one plan version and cannot leave its paths |
-| M2.6 ✅ | Feedback classifier and planner routing             | M2.2            | Raw feedback never targets executor                       |
-| M2.7 ✅ | Verifier-to-planner graph migration                 | M2.3            | All non-mechanical findings route through planner         |
-| M2.8 ✅ | Repair-envelope classifier                          | M2.7            | Only approved mechanical repairs bypass planner           |
-| M2.9 ✅ | Plan/deviation UI and end-to-end tests              | M2.4–M2.8       | Full revision loop passes fixture test                    |
-| M3.1 ✅ | External worktree default for new tasks             | M2.5            | Primary checkout stays untouched                          |
-| M3.2 ✅ | Per-worktree writer lease concurrency               | M3.1            | Distinct worktrees write concurrently                     |
-| M3.3 ✅ | Global/project concurrency policy                   | M3.2            | Limits remain durable across restart                      |
-| M3.4 ✅ | Expected-path collision analysis                    | M2.1, M3.1      | Overlap warning appears before start                      |
-| M3.5 ✅ | IDE/agent handoff commands                          | M3.1            | Handoff preserves contract/plan/task identity             |
-| M3.6 ✅ | Parallel crash-recovery test suite                  | M3.2–M3.5       | Forced daemon restart recovers safely                     |
-| M4.1 ✅ | Verification Specification schema and freeze gate   | M2.1            | Executor cannot mutate verification input                 |
-| M4.2 ✅ | Clean verifier worktree lifecycle                   | M3.1, M4.1      | Verification runs from result commit                      |
-| M4.3 ✅ | Restricted deterministic verifier runner            | M4.2            | Exact argv and credential isolation tests pass            |
-| M4.4 ✅ | Test-mutation and command-drift detection           | M4.3            | Weakened tests/scripts are detected                       |
-| M4.5 ✅ | Verification attestation schema/capture             | M4.3            | Attestation binds all required digests                    |
-| M4.6 ✅ | Criterion verdict UI and adversarial suite          | M4.4–M4.5       | False writer PASS cannot satisfy criterion                |
-| M5.1 ✅ | Change Passport schema and compatibility policy     | M0.5, M4.5      | Golden fixtures validate                                  |
-| M5.2 ✅ | Local runner identity and keychain signing          | M5.1            | Key never persists in plaintext DB                        |
-| M5.3 ✅ | Passport issue/verify/revoke service                | M5.2            | Tamper, mismatch, and revocation tests pass               |
-| M5.4 ✅ | Standalone passport verification CLI                | M5.3            | Offline verification succeeds                             |
-| M5.5 ✅ | Review packet and assurance-level UI                | M5.3            | Local vs organisation trust is explicit                   |
-| M6.1 ✅ | Model Capability Profile schema/source policy       | M0.6            | Unknown and confidence semantics are tested               |
-| M6.2 ✅ | Provider catalogue capability extensions            | M6.1            | Required metadata is normalised                           |
-| M6.3 ✅ | Role hard-constraint engine                         | M6.2            | Ineligible models are excluded                            |
-| M6.4 ✅ | Independence policy engine                          | M6.3            | Risk-specific separation is enforced                      |
-| M6.5 ✅ | Deterministic role scorer and rationale             | M6.3–M6.4       | Identical inputs produce identical ranking                |
-| M6.6 ✅ | Curated profile bundle/versioning                   | M6.1            | Cold-start recommendations cite profile version           |
-| M6.7 ✅ | Recommendation persistence/API                      | M6.5–M6.6       | Applied and overridden rosters are audited                |
-| M6.8 ✅ | Role recommendation UI                              | M6.7            | Apply-all and per-role override work                      |
-| M6.9 ✅ | Recommendation integration/adversarial tests        | M6.8            | Fallbacks cannot weaken hard constraints                  |
-| M7.1 ✅ | Normalised external agent event schema              | M2.2            | Source identity and ordering rules are frozen             |
-| M7.2 ✅ | Generic JSONL/HTTP ingest and correlation           | M7.1            | Replay and cross-task claims are rejected                 |
-| M7.3    | Codex adapter/hook ingestion                        | M7.2            | Codex session maps to plan and worktree                   |
-| M7.4    | Claude Code adapter/hook ingestion                  | M7.2            | Claude session maps to plan and worktree                  |
-| M7.5    | Cursor adapter/API ingestion                        | M7.2            | Cursor session maps to plan and worktree                  |
-| M7.6    | Handoff re-entry and assurance-gap calculation      | M7.3–M7.5       | Missing telemetry lowers assurance visibly                |
-| M8.1    | GitHub identity/repository integration              | M5.3            | Repo and actor mapping are durable                        |
-| M8.2    | Issue/PR to contract linkage                        | M8.1            | Authority source is traceable                             |
-| M8.3    | Commit-bound RoleFlock status check                 | M8.1, M5.3      | New commit invalidates old PASS                           |
-| M8.4    | PR review packet/passport publication               | M8.3            | Reviewer can inspect assurance from PR                    |
-| M8.5    | Comment feedback classification to planner          | M8.2, M2.6      | Comments never bypass planner                             |
-| M8.6    | Required-check and revocation tests                 | M8.3–M8.5       | Protected branch blocks invalid passport                  |
-| M9.1    | Organisation/actor/RBAC schema                      | M0.5            | Authority checks have durable identities                  |
-| M9.2    | Trusted runner registration and rotation            | M9.1            | Revoked runner cannot issue trusted passport              |
-| M9.3    | Shared policy bundles and scoped credentials        | M9.1            | Cross-agent policy is enforced                            |
-| M9.4    | Multi-party approval and transparency log           | M9.2–M9.3       | Approval/signature chain is verifiable                    |
-| M9.5    | Hosted/self-hosted metadata sync                    | M9.2            | Source upload is not required                             |
-| M9.6    | SIEM/OTel and optional OPA adapter                  | M9.3            | Structured events and decisions export                    |
-| M10.1   | Outcome Observation schema and ingestion            | M5.3, M6.1      | Role outcomes retain task/profile versions                |
-| M10.2   | Task-class normalisation and confidence             | M10.1           | Incompatible samples are not pooled                       |
-| M10.3   | Role performance analytics                          | M10.2           | Quality/cost/intervention metrics are inspectable         |
-| M10.4   | Observed-outcome recommendation input               | M10.2, M6.5     | Thresholded evidence can affect future ranking            |
-| M10.5   | Rollback/escaped-defect feedback                    | M10.1           | Post-merge outcomes update observations                   |
-| M10.6   | Adaptive-routing explanation and controls           | M10.3–M10.5     | User can explain, exclude, or override changes            |
+| Ticket   | Scope                                               | Depends on      | Done when                                                 |
+| -------- | --------------------------------------------------- | --------------- | --------------------------------------------------------- |
+| M0.1 ✅  | ADR-014 delivery-assurance boundary                 | Plan acceptance | Authority vs agent boundary is frozen                     |
+| M0.2 ✅  | ADR-015 Change Contract and Execution Plan          | M0.1            | Versioning and immutability rules are frozen              |
+| M0.3 ✅  | ADR-016 role authority and feedback routing         | M0.2            | Planner-owned revision protocol is frozen                 |
+| M0.4 ✅  | ADR-017 independent verification                    | M0.2            | Writer/verifier trust boundary is frozen                  |
+| M0.5 ✅  | ADR-018 Change Passport and signing                 | M0.4            | Attestation/trust levels are frozen                       |
+| M0.6 ✅  | ADR-019 role recommendation                         | M0.3            | Constraint/scoring/learning rules are frozen              |
+| M0.7 ✅  | README, positioning, threat-model alignment         | M0.1–M0.6       | Product docs have no conflicting primary position         |
+| M1.1 ✅  | Change Contract TypeScript schemas                  | M0.2            | Canonical validation and hash tests pass                  |
+| M1.2 ✅  | Contract database migrations/repository             | M1.1            | Versions persist and authorised rows are immutable        |
+| M1.3 ✅  | Contract domain service and events                  | M1.2            | Draft/revise/authorise state tests pass                   |
+| M1.4 ✅  | Contract API with idempotency/version checks        | M1.3            | API integration tests pass                                |
+| M1.5 ✅  | Contract intake and authorisation UI                | M1.4            | User can resolve and authorise criteria                   |
+| M1.6 ✅  | Start gate and legacy-task compatibility            | M1.3            | New uncontracted task is blocked; legacy task is labelled |
+| M2.1 ✅  | Execution Plan, critique, deviation, report schemas | M1.1            | Artifact semantic-validation tests pass                   |
+| M2.2 ✅  | Role Protocol package and authority matrix          | M2.1            | Invalid role actions are rejected deterministically       |
+| M2.3 ✅  | Artifact-gated graph node contracts                 | M2.2            | Executor cannot schedule without approved plan hash       |
+| M2.4 ✅  | Planner context and structured plan output          | M2.3            | Planner produces schema-valid plans                       |
+| M2.5 ✅  | Executor context pinning and path enforcement       | M2.3            | Executor sees one plan version and cannot leave its paths |
+| M2.6 ✅  | Feedback classifier and planner routing             | M2.2            | Raw feedback never targets executor                       |
+| M2.7 ✅  | Verifier-to-planner graph migration                 | M2.3            | All non-mechanical findings route through planner         |
+| M2.8 ✅  | Repair-envelope classifier                          | M2.7            | Only approved mechanical repairs bypass planner           |
+| M2.9 ✅  | Plan/deviation UI and end-to-end tests              | M2.4–M2.8       | Full revision loop passes fixture test                    |
+| M3.1 ✅  | External worktree default for new tasks             | M2.5            | Primary checkout stays untouched                          |
+| M3.2 ✅  | Per-worktree writer lease concurrency               | M3.1            | Distinct worktrees write concurrently                     |
+| M3.3 ✅  | Global/project concurrency policy                   | M3.2            | Limits remain durable across restart                      |
+| M3.4 ✅  | Expected-path collision analysis                    | M2.1, M3.1      | Overlap warning appears before start                      |
+| M3.5 ✅  | IDE/agent handoff commands                          | M3.1            | Handoff preserves contract/plan/task identity             |
+| M3.6 ✅  | Parallel crash-recovery test suite                  | M3.2–M3.5       | Forced daemon restart recovers safely                     |
+| M4.1 ✅  | Verification Specification schema and freeze gate   | M2.1            | Executor cannot mutate verification input                 |
+| M4.2 ✅  | Clean verifier worktree lifecycle                   | M3.1, M4.1      | Verification runs from result commit                      |
+| M4.3 ✅  | Restricted deterministic verifier runner            | M4.2            | Exact argv and credential isolation tests pass            |
+| M4.4 ✅  | Test-mutation and command-drift detection           | M4.3            | Weakened tests/scripts are detected                       |
+| M4.5 ✅  | Verification attestation schema/capture             | M4.3            | Attestation binds all required digests                    |
+| M4.6 ✅  | Criterion verdict UI and adversarial suite          | M4.4–M4.5       | False writer PASS cannot satisfy criterion                |
+| M5.1 ✅  | Change Passport schema and compatibility policy     | M0.5, M4.5      | Golden fixtures validate                                  |
+| M5.2 ✅  | Local runner identity and keychain signing          | M5.1            | Key never persists in plaintext DB                        |
+| M5.3 ✅  | Passport issue/verify/revoke service                | M5.2            | Tamper, mismatch, and revocation tests pass               |
+| M5.4 ✅  | Standalone passport verification CLI                | M5.3            | Offline verification succeeds                             |
+| M5.5 ✅  | Review packet and assurance-level UI                | M5.3            | Local vs organisation trust is explicit                   |
+| M6.1 ✅  | Model Capability Profile schema/source policy       | M0.6            | Unknown and confidence semantics are tested               |
+| M6.2 ✅  | Provider catalogue capability extensions            | M6.1            | Required metadata is normalised                           |
+| M6.3 ✅  | Role hard-constraint engine                         | M6.2            | Ineligible models are excluded                            |
+| M6.4 ✅  | Independence policy engine                          | M6.3            | Risk-specific separation is enforced                      |
+| M6.5 ✅  | Deterministic role scorer and rationale             | M6.3–M6.4       | Identical inputs produce identical ranking                |
+| M6.6 ✅  | Curated profile bundle/versioning                   | M6.1            | Cold-start recommendations cite profile version           |
+| M6.7 ✅  | Recommendation persistence/API                      | M6.5–M6.6       | Applied and overridden rosters are audited                |
+| M6.8 ✅  | Role recommendation UI                              | M6.7            | Apply-all and per-role override work                      |
+| M6.9 ✅  | Recommendation integration/adversarial tests        | M6.8            | Fallbacks cannot weaken hard constraints                  |
+| M7.1 ✅  | Normalised external agent event schema              | M2.2            | Source identity and ordering rules are frozen             |
+| M7.2 ✅  | Generic JSONL/HTTP ingest and correlation           | M7.1            | Replay and cross-task claims are rejected                 |
+| M7.3 ✅  | Codex adapter/hook ingestion                        | M7.2            | Codex session maps to plan and worktree                   |
+| M7.4 ✅  | Claude Code adapter/hook ingestion                  | M7.2            | Claude session maps to plan and worktree                  |
+| M7.5 ✅  | Cursor adapter/API ingestion                        | M7.2            | Cursor session maps to plan and worktree                  |
+| M7.6 ✅  | Handoff re-entry and assurance-gap calculation      | M7.3–M7.5       | Missing telemetry lowers assurance visibly                |
+| M8.1 ✅  | GitHub identity/repository integration              | M5.3            | Repo and actor mapping are durable                        |
+| M8.2 ✅  | Issue/PR to contract linkage                        | M8.1            | Authority source is traceable                             |
+| M8.3 ✅  | Commit-bound RoleFlock status check                 | M8.1, M5.3      | New commit invalidates old PASS                           |
+| M8.4 ✅  | PR review packet/passport publication               | M8.3            | Reviewer can inspect assurance from PR                    |
+| M8.5 ✅  | Comment feedback classification to planner          | M8.2, M2.6      | Comments never bypass planner                             |
+| M8.6 ✅  | Required-check and revocation tests                 | M8.3–M8.5       | Protected branch blocks invalid passport                  |
+| M9.1 ✅  | Organisation/actor/RBAC schema                      | M0.5            | Authority checks have durable identities                  |
+| M9.2 ✅  | Trusted runner registration and rotation            | M9.1            | Revoked runner cannot issue trusted passport              |
+| M9.3 ✅  | Shared policy bundles and scoped credentials        | M9.1            | Cross-agent policy is enforced                            |
+| M9.4 ✅  | Multi-party approval and transparency log           | M9.2–M9.3       | Approval/signature chain is verifiable                    |
+| M9.5 ✅  | Hosted/self-hosted metadata sync                    | M9.2            | Source upload is not required                             |
+| M9.6 ✅  | SIEM/OTel and optional OPA adapter                  | M9.3            | Structured events and decisions export                    |
+| M10.1 ✅ | Outcome Observation schema and ingestion            | M5.3, M6.1      | Role outcomes retain task/profile versions                |
+| M10.2 ✅ | Task-class normalisation and confidence             | M10.1           | Incompatible samples are not pooled                       |
+| M10.3 ✅ | Role performance analytics                          | M10.2           | Quality/cost/intervention metrics are inspectable         |
+| M10.4 ✅ | Observed-outcome recommendation input               | M10.2, M6.5     | Thresholded evidence can affect future ranking            |
+| M10.5 ✅ | Rollback/escaped-defect feedback                    | M10.1           | Post-merge outcomes update observations                   |
+| M10.6 ✅ | Adaptive-routing explanation and controls           | M10.3–M10.5     | User can explain, exclude, or override changes            |
 
 ---
 
