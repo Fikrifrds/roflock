@@ -138,6 +138,15 @@ export function NewTask() {
                   body: JSON.stringify(doc),
                 });
               }
+              try {
+                await api.request(`/api/tasks/${task.id}/role-recommendations`, {
+                  method: 'POST',
+                  headers: { 'idempotency-key': `task-created-${task.id}` },
+                });
+              } catch {
+                // Task creation remains successful when providers cannot be
+                // inspected yet; Task Detail offers an explicit retry.
+              }
               navigate(`/tasks/${task.id}`);
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Failed to create task');

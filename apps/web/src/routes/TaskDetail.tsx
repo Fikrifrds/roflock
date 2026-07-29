@@ -13,6 +13,7 @@ import { LiveTurn } from '../components/LiveTurn.js';
 import { TaskWorkspaceHeader } from '../components/TaskWorkspaceHeader.js';
 import { WorkspaceChanges } from '../components/WorkspaceChanges.js';
 import { ReviewApp } from '../components/ReviewApp.js';
+import { RoleRecommendationPanel } from '../components/RoleRecommendationPanel.js';
 import { Select } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
 import { Empty, Section } from '../components/primitives.js';
@@ -188,6 +189,7 @@ export function TaskDetail() {
         onDelete={() => void deleteTask()}
         deleting={deleting}
       />
+      <RoleRecommendationPanel task={task} />
       <ChangeContractPanel task={task} />
       <ExecutionPlanPanel task={task} />
       <VerificationVerdictPanel task={task} />

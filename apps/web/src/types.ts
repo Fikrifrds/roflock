@@ -606,3 +606,61 @@ export type RolesResponse = {
     until: string;
   }>;
 };
+
+export type RecommendedRoleView = 'planner' | 'plan_critic' | 'executor' | 'verifier';
+
+export type RoleRecommendationCandidateView = {
+  role: RecommendedRoleView;
+  providerId: string;
+  modelId: string;
+  modelFamily?: string;
+  effort: string;
+  rank?: number;
+  selected: boolean;
+  fallback: boolean;
+  eligible: boolean;
+  score?: number;
+  confidence?: number;
+  profileVersion: string;
+  rationale: string[];
+  knownGaps: string[];
+  violations: Array<{ code: string; field: string; reason: string }>;
+};
+
+export type StoredRoleRecommendationView = {
+  recommendation: {
+    id: string;
+    taskId: string;
+    risk: 'low' | 'medium' | 'high' | 'critical';
+    recommendationVersion: string;
+    profileBundleVersion: string;
+    profileBundleDigest: string;
+    scoringVersion: string;
+    inputHash: string;
+    complete: boolean;
+    requiredRoles: RecommendedRoleView[];
+    candidates: RoleRecommendationCandidateView[];
+    independence: Array<{
+      leftRole: string;
+      rightRole: string;
+      property: string;
+      level: 'required' | 'preferred';
+      satisfied: boolean;
+      known: boolean;
+      reason: string;
+    }>;
+    gaps: string[];
+    generatedAt: string;
+  };
+  actions: Array<{
+    id: string;
+    revision: number;
+    action: 'applied' | 'overridden';
+    role?: RecommendedRoleView;
+    providerId?: string;
+    modelId?: string;
+    reason?: string;
+    createdAt: string;
+  }>;
+  revision: number;
+};

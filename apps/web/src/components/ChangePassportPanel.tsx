@@ -8,7 +8,7 @@ export function ChangePassportPanel({ task }: { task: Task }) {
     `/api/tasks/${task.id}/change-passport`,
   );
   const response = query.data;
-  if (!response) {
+  if (!response?.reviewPacket || !response.passport) {
     return (
       <Section
         title="Change Passport"

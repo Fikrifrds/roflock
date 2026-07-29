@@ -4783,6 +4783,144 @@ pre {
   overflow-wrap: anywhere;
 }
 
+.recommendation-empty,
+.recommendation-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunken);
+}
+
+.recommendation-empty h3,
+.recommendation-summary h3,
+.recommendation-role-card h3 {
+  margin: var(--space-1) 0;
+  font-family: var(--font-display);
+}
+
+.recommendation-summary .actions {
+  justify-content: flex-end;
+}
+
+.recommendation-gaps {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-4) var(--space-5) var(--space-4) calc(var(--space-5) + 18px);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--radius);
+  background: var(--warn-wash);
+  color: var(--text-body);
+}
+
+.recommendation-role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.recommendation-role-card {
+  min-width: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.recommendation-role-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.recommendation-role-head .eyebrow {
+  margin: 0;
+}
+
+.role-boundary {
+  min-height: 42px;
+  margin: var(--space-3) 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.recommendation-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
+}
+
+.recommendation-metrics div {
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.recommendation-metrics dt {
+  color: var(--text-faint);
+  font-size: var(--text-2xs);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.recommendation-metrics dd {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.recommendation-reasons {
+  min-height: 62px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-body);
+  font-size: var(--text-sm);
+}
+
+.recommendation-fallback,
+.recommendation-independence {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.recommendation-override {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.recommendation-override summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.recommendation-override .stack {
+  margin-top: var(--space-4);
+}
+
+@media (max-width: 800px) {
+  .recommendation-empty,
+  .recommendation-summary {
+    flex-direction: column;
+  }
+
+  .recommendation-role-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 620px) {
   .graph-overview {
     align-items: flex-start;

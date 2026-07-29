@@ -8,7 +8,7 @@ export function VerificationVerdictPanel({ task }: { task: Task }) {
     `/api/tasks/${task.id}/verification-result`,
   );
   const result = query.data;
-  if (!result) {
+  if (!result?.decision || !Array.isArray(result.attestations)) {
     return (
       <Section
         title="Independent verification"
