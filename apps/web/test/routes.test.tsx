@@ -372,7 +372,7 @@ describe('Evidence', () => {
       expect(summary).toHaveTextContent('$0.0200');
     });
     expect(screen.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: 'Workflow' })).toHaveAttribute('href', '/tasks/t1');
+    expect(screen.getByRole('tab', { name: 'Review' })).toHaveAttribute('href', '/tasks/t1');
     expect(screen.getByRole('heading', { name: 'Review this' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Verification risks' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Recommended action' })).toBeInTheDocument();

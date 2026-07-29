@@ -3,7 +3,19 @@ import { formatTaskState, isTerminalState, taskStateTone } from '../lib/format.j
 import type { Task } from '../types.js';
 import { StatusPill } from './primitives.js';
 
-export type TaskWorkspaceView = 'workflow' | 'changes' | 'evidence';
+export type TaskWorkspaceView = 'review' | 'authority' | 'workflow' | 'changes' | 'evidence';
+
+/**
+ * Ordered by how often someone needs them, not by how the pipeline runs.
+ * Review is first because the common visit is "should this ship?", and that
+ * question should never require scrolling past setup surfaces to answer.
+ */
+const TABS: Array<{ view: TaskWorkspaceView; label: string; search: string }> = [
+  { view: 'review', label: 'Review', search: '' },
+  { view: 'authority', label: 'Authority', search: '?view=authority' },
+  { view: 'workflow', label: 'Activity', search: '?view=workflow' },
+  { view: 'changes', label: 'Changes & Git', search: '?view=changes' },
+];
 
 function canDeleteTask(state: string) {
   return state === 'ready' || isTerminalState(state);
@@ -42,22 +54,17 @@ export function TaskWorkspaceHeader({
       </div>
       <div className="task-workspace-actions">
         <div className="workspace-tabs" role="tablist" aria-label="Task workspace">
-          <Link
-            role="tab"
-            aria-selected={activeView === 'workflow'}
-            className={`workspace-tab-link${activeView === 'workflow' ? ' active' : ''}`}
-            to={`/tasks/${task.id}`}
-          >
-            Workflow
-          </Link>
-          <Link
-            role="tab"
-            aria-selected={activeView === 'changes'}
-            className={`workspace-tab-link${activeView === 'changes' ? ' active' : ''}`}
-            to={`/tasks/${task.id}?view=changes`}
-          >
-            Changes &amp; Git
-          </Link>
+          {TABS.map((tab) => (
+            <Link
+              key={tab.view}
+              role="tab"
+              aria-selected={activeView === tab.view}
+              className={`workspace-tab-link${activeView === tab.view ? ' active' : ''}`}
+              to={`/tasks/${task.id}${tab.search}`}
+            >
+              {tab.label}
+            </Link>
+          ))}
           <Link
             role="tab"
             aria-selected={activeView === 'evidence'}

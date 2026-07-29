@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Field, FileDrop } from '../components/Field.js';
+import { AssuranceSummary } from '../components/AssuranceSummary.js';
 import { BlockedBanner } from '../components/BlockedBanner.js';
 import { ChangeContractPanel } from '../components/ChangeContractPanel.js';
 import { ExecutionPlanPanel } from '../components/ExecutionPlanPanel.js';
@@ -17,6 +18,7 @@ import { RoleRecommendationPanel } from '../components/RoleRecommendationPanel.j
 import { Select } from '../components/Select.js';
 import { Shell } from '../components/Shell.js';
 import { Empty, Section } from '../components/primitives.js';
+import type { TaskWorkspaceView } from '../components/TaskWorkspaceHeader.js';
 import { api, useData } from '../lib/client.js';
 import { DOCUMENT_AUTHORITIES, DOCUMENT_KINDS } from '../lib/choices.js';
 import { formatPhase, isTerminalState } from '../lib/format.js';
@@ -40,7 +42,15 @@ export function TaskDetail() {
   const [savingVerification, setSavingVerification] = useState(false);
   const [docDraft, setDocDraft] = useState({ kind: 'prd', authority: 'reference' });
   const [searchParams] = useSearchParams();
-  const workspaceView = searchParams.get('view') === 'changes' ? 'changes' : 'workflow';
+  const requestedView = searchParams.get('view');
+  const workspaceView: TaskWorkspaceView =
+    requestedView === 'changes'
+      ? 'changes'
+      : requestedView === 'authority'
+        ? 'authority'
+        : requestedView === 'workflow'
+          ? 'workflow'
+          : 'review';
 
   const { data: task } = useData<Task>(['task', id], `/api/tasks/${id}`, Boolean(id));
   const { data: execution } = useData<ActiveExecution | null>(
@@ -189,17 +199,28 @@ export function TaskDetail() {
         onDelete={() => void deleteTask()}
         deleting={deleting}
       />
-      <RoleRecommendationPanel task={task} />
-      <ChangeContractPanel task={task} />
-      <ExecutionPlanPanel task={task} />
-      <VerificationVerdictPanel task={task} />
-      <ChangePassportPanel task={task} />
-      <TaskHandoffPanel task={task} />
-      <ReviewApp taskId={task.id} />
-      {workspaceView === 'changes' ? (
-        <WorkspaceChanges task={task} />
-      ) : (
-        <Section title="Current state" className="task-control-section">
+      {workspaceView === 'authority' ? (
+        <>
+          <ChangeContractPanel task={task} />
+          <ExecutionPlanPanel task={task} />
+          <RoleRecommendationPanel task={task} />
+        </>
+      ) : null}
+
+      {workspaceView === 'review' ? <AssuranceSummary task={task} /> : null}
+
+      {workspaceView === 'changes' ? <WorkspaceChanges task={task} /> : null}
+
+      {workspaceView === 'review' || workspaceView === 'workflow' ? (
+        <Section
+          title={workspaceView === 'review' ? 'Your decision' : 'Run control'}
+          description={
+            workspaceView === 'review'
+              ? 'What this task is waiting on, and the evidence behind the choice.'
+              : undefined
+          }
+          className="task-control-section"
+        >
           {actionError || (latestError && !blocked && !verificationMissing) ? (
             <p className="error" role="alert">
               {actionError || latestError?.details || latestError?.summary}
@@ -378,150 +399,169 @@ export function TaskDetail() {
             </div>
           </article>
 
-          <details className="task-run-details">
-            <summary>
-              <span>Run details</span>
-              <small>
-                Attempt {execution?.attempt ?? 0}/{task.maxAttempts} · {task.workflowGraphVersionId}
-              </small>
-            </summary>
-            <div className="task-run-details-body">
-              <dl>
-                {(
-                  [
-                    ['Activity', finished ? 'Finished' : (execution?.currentActivity ?? 'Idle')],
-                    ['Model', execution?.configuredModelDisplayName ?? '—'],
-                    ['Effort', execution?.effort ?? 'standard'],
-                    ['Permission', execution?.permissionProfileId ?? '—'],
-                    ['Command', execution?.activeCommandPreview ?? '—'],
-                    ['Heartbeat', execution?.lastHeartbeatAt ?? '—'],
-                    [
-                      'Tokens',
-                      `${(execution?.inputTokens ?? 0).toLocaleString()} input · ${(execution?.outputTokens ?? 0).toLocaleString()} output`,
-                    ],
-                    ['Usage confidence', execution?.usageConfidence ?? 'exact'],
-                  ] as const
-                ).map(([label, value]) => (
-                  <div key={label}>
-                    <dt>{label}</dt>
-                    <dd>{value}</dd>
+          {workspaceView === 'workflow' ? (
+            <>
+              <details className="task-run-details">
+                <summary>
+                  <span>Run details</span>
+                  <small>
+                    Attempt {execution?.attempt ?? 0}/{task.maxAttempts} ·{' '}
+                    {task.workflowGraphVersionId}
+                  </small>
+                </summary>
+                <div className="task-run-details-body">
+                  <dl>
+                    {(
+                      [
+                        [
+                          'Activity',
+                          finished ? 'Finished' : (execution?.currentActivity ?? 'Idle'),
+                        ],
+                        ['Model', execution?.configuredModelDisplayName ?? '—'],
+                        ['Effort', execution?.effort ?? 'standard'],
+                        ['Permission', execution?.permissionProfileId ?? '—'],
+                        ['Command', execution?.activeCommandPreview ?? '—'],
+                        ['Heartbeat', execution?.lastHeartbeatAt ?? '—'],
+                        [
+                          'Tokens',
+                          `${(execution?.inputTokens ?? 0).toLocaleString()} input · ${(execution?.outputTokens ?? 0).toLocaleString()} output`,
+                        ],
+                        ['Usage confidence', execution?.usageConfidence ?? 'exact'],
+                      ] as const
+                    ).map(([label, value]) => (
+                      <div key={label}>
+                        <dt>{label}</dt>
+                        <dd>{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              </details>
+
+              <details className="workflow-map-panel" open>
+                <summary>
+                  <div>
+                    <span className="eyebrow">Workflow map</span>
+                    <strong>
+                      {runViewLoading
+                        ? 'Loading workflow…'
+                        : activeGraphNode
+                          ? `${activeGraphNode.id.replaceAll('_', ' ')} in progress`
+                          : graphNodes.length
+                            ? `${completedGraphNodes} of ${graphNodes.length} steps complete`
+                            : 'No workflow run yet'}
+                    </strong>
                   </div>
-                ))}
-              </dl>
-            </div>
-          </details>
+                </summary>
+                <GraphRunView taskId={id} execution={execution} />
+              </details>
 
-          <details className="workflow-map-panel" open>
-            <summary>
-              <div>
-                <span className="eyebrow">Workflow map</span>
-                <strong>
-                  {runViewLoading
-                    ? 'Loading workflow…'
-                    : activeGraphNode
-                      ? `${activeGraphNode.id.replaceAll('_', ' ')} in progress`
-                      : graphNodes.length
-                        ? `${completedGraphNodes} of ${graphNodes.length} steps complete`
-                        : 'No workflow run yet'}
-                </strong>
-              </div>
-            </summary>
-            <GraphRunView taskId={id} execution={execution} />
-          </details>
+              <LiveTurn
+                execution={execution}
+                finished={finished}
+                awaitingDecision={waiting}
+                visible={task.state === 'running' || waiting}
+              />
 
-          <LiveTurn
-            execution={execution}
-            finished={finished}
-            awaitingDecision={waiting}
-            visible={task.state === 'running' || waiting}
-          />
+              {waiting ? (
+                <aside className="approval-dock" role="status" aria-live="polite">
+                  <span className="approval-dock-dot" aria-hidden="true" />
+                  <div>
+                    <strong>Action required</strong>
+                    <small>
+                      {pending.length
+                        ? `${pending.length} approval${pending.length === 1 ? '' : 's'} waiting for you.`
+                        : 'Review the verified result and decide whether to accept it.'}
+                    </small>
+                  </div>
+                  <a className="buttonish" href="#approval-required">
+                    Review now
+                  </a>
+                </aside>
+              ) : null}
 
-          {waiting ? (
-            <aside className="approval-dock" role="status" aria-live="polite">
-              <span className="approval-dock-dot" aria-hidden="true" />
-              <div>
-                <strong>Action required</strong>
-                <small>
-                  {pending.length
-                    ? `${pending.length} approval${pending.length === 1 ? '' : 's'} waiting for you.`
-                    : 'Review the verified result and decide whether to accept it.'}
-                </small>
-              </div>
-              <a className="buttonish" href="#approval-required">
-                Review now
-              </a>
-            </aside>
+              <details className="documents-panel">
+                <summary className="eyebrow">Supporting documents ({taskDocuments.length})</summary>
+                {taskDocuments.length ? (
+                  <ul className="doc-list">
+                    {taskDocuments.map((doc) => (
+                      <li key={doc.id}>
+                        <div>
+                          <b>{doc.fileName}</b>
+                          <small>
+                            {doc.kind} · {doc.authority}
+                          </small>
+                          {doc.extractedTextPreview ? (
+                            <small>{doc.extractedTextPreview}</small>
+                          ) : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="hint">Optional. Attach notes that should inform planning.</p>
+                )}
+                <div className="two-col">
+                  <Field label="Kind" htmlFor="detail-doc-kind">
+                    {({ id: fieldId }) => (
+                      <Select
+                        id={fieldId}
+                        labelledBy={`${fieldId}-label`}
+                        value={docDraft.kind}
+                        options={DOCUMENT_KINDS}
+                        onChange={(kind) => setDocDraft({ ...docDraft, kind })}
+                      />
+                    )}
+                  </Field>
+                  <Field label="Authority" htmlFor="detail-doc-authority">
+                    {({ id: fieldId }) => (
+                      <Select
+                        id={fieldId}
+                        labelledBy={`${fieldId}-label`}
+                        value={docDraft.authority}
+                        options={DOCUMENT_AUTHORITIES}
+                        onChange={(authority) => setDocDraft({ ...docDraft, authority })}
+                      />
+                    )}
+                  </Field>
+                </div>
+                <FileDrop
+                  id="detail-doc-file"
+                  accept=".md,.txt,.json,.yaml,.yml,.csv"
+                  label="Attach a text file"
+                  hint="drag it here or click to browse"
+                  onFile={async (file) => {
+                    try {
+                      await api.request(`/api/tasks/${id}/documents`, {
+                        method: 'POST',
+                        body: JSON.stringify({
+                          fileName: file.name,
+                          kind: docDraft.kind,
+                          authority: docDraft.authority,
+                          content: await file.text(),
+                          mimeType: file.type || 'text/plain',
+                        }),
+                      });
+                      refresh();
+                    } catch (error) {
+                      setActionError(error instanceof Error ? error.message : 'Upload failed');
+                    }
+                  }}
+                />
+              </details>
+            </>
           ) : null}
-
-          <details className="documents-panel">
-            <summary className="eyebrow">Supporting documents ({taskDocuments.length})</summary>
-            {taskDocuments.length ? (
-              <ul className="doc-list">
-                {taskDocuments.map((doc) => (
-                  <li key={doc.id}>
-                    <div>
-                      <b>{doc.fileName}</b>
-                      <small>
-                        {doc.kind} · {doc.authority}
-                      </small>
-                      {doc.extractedTextPreview ? <small>{doc.extractedTextPreview}</small> : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="hint">Optional. Attach notes that should inform planning.</p>
-            )}
-            <div className="two-col">
-              <Field label="Kind" htmlFor="detail-doc-kind">
-                {({ id: fieldId }) => (
-                  <Select
-                    id={fieldId}
-                    labelledBy={`${fieldId}-label`}
-                    value={docDraft.kind}
-                    options={DOCUMENT_KINDS}
-                    onChange={(kind) => setDocDraft({ ...docDraft, kind })}
-                  />
-                )}
-              </Field>
-              <Field label="Authority" htmlFor="detail-doc-authority">
-                {({ id: fieldId }) => (
-                  <Select
-                    id={fieldId}
-                    labelledBy={`${fieldId}-label`}
-                    value={docDraft.authority}
-                    options={DOCUMENT_AUTHORITIES}
-                    onChange={(authority) => setDocDraft({ ...docDraft, authority })}
-                  />
-                )}
-              </Field>
-            </div>
-            <FileDrop
-              id="detail-doc-file"
-              accept=".md,.txt,.json,.yaml,.yml,.csv"
-              label="Attach a text file"
-              hint="drag it here or click to browse"
-              onFile={async (file) => {
-                try {
-                  await api.request(`/api/tasks/${id}/documents`, {
-                    method: 'POST',
-                    body: JSON.stringify({
-                      fileName: file.name,
-                      kind: docDraft.kind,
-                      authority: docDraft.authority,
-                      content: await file.text(),
-                      mimeType: file.type || 'text/plain',
-                    }),
-                  });
-                  refresh();
-                } catch (error) {
-                  setActionError(error instanceof Error ? error.message : 'Upload failed');
-                }
-              }}
-            />
-          </details>
         </Section>
-      )}
+      ) : null}
+
+      {workspaceView === 'review' ? (
+        <>
+          <VerificationVerdictPanel task={task} />
+          <ChangePassportPanel task={task} />
+          <TaskHandoffPanel task={task} />
+          <ReviewApp taskId={task.id} />
+        </>
+      ) : null}
     </Shell>
   );
 }
