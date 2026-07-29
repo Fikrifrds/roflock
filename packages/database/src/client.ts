@@ -25,6 +25,7 @@ import { MIGRATION_021 } from './migrations/021_github_authority_links.js';
 import { MIGRATION_022 } from './migrations/022_github_status_checks.js';
 import { MIGRATION_023 } from './migrations/023_github_review_publications.js';
 import { MIGRATION_024 } from './migrations/024_github_comment_feedback.js';
+import { MIGRATION_025 } from './migrations/025_organisation_rbac.js';
 
 export type SqliteDb = Database.Database;
 
@@ -86,6 +87,7 @@ export function migrate(db: SqliteDb): void {
     MIGRATION_022,
     MIGRATION_023,
     MIGRATION_024,
+    MIGRATION_025,
   ];
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;

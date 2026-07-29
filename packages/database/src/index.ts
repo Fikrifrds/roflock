@@ -107,6 +107,14 @@ export { GitHubReviewPublicationRepository } from './repositories/github-review-
 export type { GitHubReviewPublication } from './repositories/github-review-publication-repository.js';
 export { GitHubCommentFeedbackRepository } from './repositories/github-comment-feedback-repository.js';
 export type { GitHubCommentFeedbackReceipt } from './repositories/github-comment-feedback-repository.js';
+export { OrganisationRepository } from './repositories/organisation-repository.js';
+export type {
+  Actor,
+  Organisation,
+  OrganisationAction,
+  OrganisationMembership,
+  OrganisationRole,
+} from './repositories/organisation-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,
