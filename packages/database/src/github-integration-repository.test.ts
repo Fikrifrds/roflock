@@ -4,6 +4,8 @@ import { GitHubIntegrationRepository } from './repositories/github-integration-r
 import { GitHubAuthorityLinkRepository } from './repositories/github-authority-link-repository.js';
 import { GitHubStatusCheckRepository } from './repositories/github-status-check-repository.js';
 import { GitHubReviewPublicationRepository } from './repositories/github-review-publication-repository.js';
+import { GitHubCommentFeedbackRepository } from './repositories/github-comment-feedback-repository.js';
+import { FeedbackRepository } from './repositories/feedback-repository.js';
 
 let db: SqliteDb | undefined;
 afterEach(() => db?.close());
@@ -120,6 +122,35 @@ describe('GitHub identity and repository mapping', () => {
         packetBodyDigest: '3'.repeat(64),
       },
     ]);
+    new FeedbackRepository(db).create({
+      id: 'feedback_1',
+      taskId: 'task_1',
+      sourceActorId: 'actor_local_1',
+      text: 'Please change the color.',
+      classification: 'interactive_cosmetic_change',
+      status: 'routed',
+      routedRole: 'planner',
+      idempotencyKey: 'github-comment:comment_1',
+      requestHash: '4'.repeat(64),
+      createdAt: at,
+      updatedAt: at,
+    });
+    const commentReceipts = new GitHubCommentFeedbackRepository(db);
+    commentReceipts.create({
+      id: 'comment_feedback_1',
+      githubRepositoryMappingId: 'github_repository_1',
+      githubCommentId: 'comment_1',
+      subjectType: 'issue',
+      subjectNumber: 42,
+      githubActorMappingId: 'github_actor_1',
+      bodyDigest: '5'.repeat(64),
+      feedbackId: 'feedback_1',
+      receivedAt: at,
+    });
+    expect(commentReceipts.getByCommentId('comment_1')).toMatchObject({
+      feedbackId: 'feedback_1',
+      bodyDigest: '5'.repeat(64),
+    });
   });
 });
 

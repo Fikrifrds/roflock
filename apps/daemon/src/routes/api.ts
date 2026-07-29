@@ -117,7 +117,7 @@ export function registerApi(
   registerChangePassportRoutes(app, db);
   registerRoleRecommendationRoutes(app, db, providers, orchestrator.router);
   registerAgentEventRoutes(app, db);
-  registerGitHubRoutes(app, db);
+  registerGitHubRoutes(app, db, bus);
   app.get('/api/concurrency-policy', async (request) => {
     const projectId = (request.query as { projectId?: string }).projectId;
     return {

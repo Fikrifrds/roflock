@@ -6,11 +6,15 @@ import {
   renderGitHubReviewPacket,
 } from '@roleflock/change-passport';
 import { sha256Canonical } from '@roleflock/contracts';
+import { classifyFeedbackText } from '@roleflock/role-protocol';
 import {
   AuditRepository,
   ChangePassportRepository,
+  ExecutionPlanRepository,
+  FeedbackRepository,
   ChangeContractRepository,
   GitHubAuthorityLinkRepository,
+  GitHubCommentFeedbackRepository,
   GitHubIntegrationRepository,
   GitHubReviewPublicationRepository,
   GitHubStatusCheckRepository,
@@ -19,8 +23,9 @@ import {
   TaskRepository,
   type SqliteDb,
 } from '@roleflock/database';
+import type { EventBus } from '../services/event-bus.js';
 
-export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb): void {
+export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb, bus: EventBus): void {
   const github = new GitHubIntegrationRepository(db);
   const projects = new ProjectRepository(db);
   const audit = new AuditRepository(db);
@@ -31,6 +36,9 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb): void {
   const tasks = new TaskRepository(db);
   const publications = new GitHubReviewPublicationRepository(db);
   const runnerIdentities = new RunnerIdentityRepository(db);
+  const commentFeedback = new GitHubCommentFeedbackRepository(db);
+  const feedback = new FeedbackRepository(db);
+  const executionPlans = new ExecutionPlanRepository(db);
 
   app.post('/api/integrations/github/installations', async (request) => {
     const body = request.body as Record<string, unknown>;
@@ -235,6 +243,81 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb): void {
   app.get('/api/tasks/:taskId/github-review-publications', async (request) => {
     const taskId = (request.params as { taskId: string }).taskId;
     return publications.listByTask(taskId);
+  });
+
+  app.post('/api/integrations/github/comments', async (request, reply) => {
+    const body = request.body as Record<string, unknown>;
+    const githubCommentId = required(body.githubCommentId, 'githubCommentId');
+    const replay = commentFeedback.getByCommentId(githubCommentId);
+    if (replay) return { receipt: replay, replayed: true };
+    const repository = github.getRepositoryByGitHubId(
+      required(body.githubRepositoryId, 'githubRepositoryId'),
+    );
+    if (!repository) return reply.code(404).send({ code: 'GITHUB_REPOSITORY_NOT_FOUND' });
+    const subjectType = enumValue(
+      body.subjectType,
+      ['issue', 'pull_request'],
+      'subjectType',
+    );
+    const subjectNumber = Number(body.subjectNumber);
+    if (!Number.isInteger(subjectNumber) || subjectNumber <= 0) {
+      throw new Error('subjectNumber must be a positive integer');
+    }
+    const link = links.findForSubject(repository.id, subjectType, subjectNumber);
+    if (!link) return reply.code(404).send({ code: 'GITHUB_SUBJECT_NOT_LINKED' });
+    const text = required(body.body, 'body');
+    const actor = github.getActorByGitHubId(required(body.githubUserId, 'githubUserId'));
+    const plan = executionPlans.getByTask(link.taskId)?.plan;
+    const timestamp = new Date().toISOString();
+    const classification = classifyFeedbackText(text);
+    const itemId = `feedback_${randomUUID()}`;
+    const requestHash = sha256Canonical({
+      githubCommentId,
+      text,
+      classification,
+      contractHash: link.contractHash,
+      planHash: plan?.hash ?? null,
+      commit: optional(body.commitSha) ?? null,
+    });
+    const result = db.transaction(() => {
+      const item = feedback.create({
+        id: itemId,
+        taskId: link.taskId,
+        sourceActorId: actor?.roleflockActorId ?? `github:${required(body.githubUserId, 'githubUserId')}`,
+        text,
+        classification,
+        targetContractHash: link.contractHash,
+        targetPlanHash: plan?.hash,
+        targetCommit: optional(body.commitSha),
+        status: 'routed',
+        routedRole: 'planner',
+        idempotencyKey: `github-comment:${githubCommentId}`,
+        requestHash,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      const receipt = commentFeedback.create({
+        id: `github_comment_feedback_${randomUUID()}`,
+        githubRepositoryMappingId: repository.id,
+        githubCommentId,
+        subjectType,
+        subjectNumber,
+        githubActorMappingId: actor?.id,
+        bodyDigest: sha256Canonical(text),
+        feedbackId: item.id,
+        receivedAt: timestamp,
+      });
+      return { item, receipt };
+    })();
+    bus.publish('feedback.routed', {
+      taskId: link.taskId,
+      feedbackId: result.item.id,
+      classification,
+      routedRole: 'planner',
+      source: 'github_comment',
+    });
+    record(audit, 'github.comment_routed_to_planner', result.receipt.id, result.receipt, timestamp);
+    return reply.code(201).send({ feedback: result.item, receipt: result.receipt, replayed: false });
   });
 }
 

@@ -105,6 +105,8 @@ export type {
 } from './repositories/github-status-check-repository.js';
 export { GitHubReviewPublicationRepository } from './repositories/github-review-publication-repository.js';
 export type { GitHubReviewPublication } from './repositories/github-review-publication-repository.js';
+export { GitHubCommentFeedbackRepository } from './repositories/github-comment-feedback-repository.js';
+export type { GitHubCommentFeedbackReceipt } from './repositories/github-comment-feedback-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,

@@ -54,6 +54,25 @@ export class GitHubAuthorityLinkRepository {
         .all(taskId) as Array<Record<string, unknown>>
     ).map(mapLink);
   }
+
+  findForSubject(
+    githubRepositoryMappingId: string,
+    subjectType: GitHubAuthorityLink['subjectType'],
+    subjectNumber: number,
+  ): GitHubAuthorityLink | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT * FROM github_authority_links
+         WHERE github_repository_mapping_id = ?
+           AND subject_type = ?
+           AND subject_number = ?
+         ORDER BY linked_at DESC, id DESC LIMIT 1`,
+      )
+      .get(githubRepositoryMappingId, subjectType, subjectNumber) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? mapLink(row) : undefined;
+  }
 }
 
 function mapLink(row: Record<string, unknown>): GitHubAuthorityLink {
