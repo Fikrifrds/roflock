@@ -54,8 +54,7 @@ export function calculateTelemetryAssurance(
     return report('unobserved', events.length, gaps);
   }
   const terminal = events.some(
-    (event) =>
-      event.payload.type === 'session.ended' || event.payload.type === 'agent.completed',
+    (event) => event.payload.type === 'session.ended' || event.payload.type === 'agent.completed',
   );
   if (expectation.requireTerminalEvent && !terminal) {
     gaps.push({

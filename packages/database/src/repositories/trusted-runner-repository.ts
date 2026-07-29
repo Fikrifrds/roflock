@@ -112,8 +112,7 @@ export class TrustedRunnerRepository {
 
   get(id: string): TrustedRunner | undefined {
     const row = this.db.prepare(`SELECT * FROM trusted_runners WHERE id = ?`).get(id) as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     return row ? mapRunner(row) : undefined;
   }
 

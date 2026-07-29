@@ -155,8 +155,7 @@ export class GitHubIntegrationRepository {
 
   private getInstallation(id: string): GitHubInstallation | undefined {
     const row = this.db.prepare(`SELECT * FROM github_installations WHERE id = ?`).get(id) as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     return row ? mapInstallation(row) : undefined;
   }
 }

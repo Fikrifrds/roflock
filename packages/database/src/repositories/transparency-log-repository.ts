@@ -156,10 +156,7 @@ export class TransparencyLogRepository {
     return value;
   }
 
-  decide(
-    organisationId: string,
-    value: StoredPartyApprovalDecision,
-  ): StoredPartyApprovalDecision {
+  decide(organisationId: string, value: StoredPartyApprovalDecision): StoredPartyApprovalDecision {
     return this.db.transaction(() => {
       this.db
         .prepare(

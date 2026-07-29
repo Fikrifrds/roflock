@@ -41,11 +41,7 @@ describe('external handoff assurance gaps', () => {
   });
 });
 
-function event(
-  sequence: number,
-  payload: AgentEventPayload,
-  previousEventHash?: string,
-) {
+function event(sequence: number, payload: AgentEventPayload, previousEventHash?: string) {
   return sealAgentEvent({
     schemaVersion: 'agent-event-1.0.0',
     eventId: `event_${sequence}`,

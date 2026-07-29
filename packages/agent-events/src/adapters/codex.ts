@@ -80,10 +80,7 @@ export interface CodexAdapterContext {
   installationId: string;
 }
 
-export function adaptCodexHook(
-  raw: unknown,
-  context: CodexAdapterContext,
-): NormalizedAgentEvent {
+export function adaptCodexHook(raw: unknown, context: CodexAdapterContext): NormalizedAgentEvent {
   const input = CodexHookInputSchema.parse(raw);
   if (normalizePath(input.cwd) !== normalizePath(context.workspacePath)) {
     throw new Error(
@@ -188,15 +185,13 @@ function capabilityFor(
   | 'network_access'
   | 'credential_access'
   | 'external_side_effect' {
-  return (
-    toolName === 'Bash'
-      ? 'command_execute'
-      : toolName === 'apply_patch'
-        ? 'repository_write'
-        : toolName.startsWith('mcp__')
-          ? 'external_side_effect'
-          : 'repository_write'
-  );
+  return toolName === 'Bash'
+    ? 'command_execute'
+    : toolName === 'apply_patch'
+      ? 'repository_write'
+      : toolName.startsWith('mcp__')
+        ? 'external_side_effect'
+        : 'repository_write';
 }
 
 function toolOutcome(response: unknown): 'succeeded' | 'failed' {

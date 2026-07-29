@@ -18,39 +18,49 @@ const ClaudeCommon = {
 } as const;
 
 export const ClaudeCodeHookInputSchema = z.discriminatedUnion('hook_event_name', [
-  z.object({
-    ...ClaudeCommon,
-    hook_event_name: z.literal('SessionStart'),
-    source: z.enum(['startup', 'resume', 'clear']),
-  }).passthrough(),
-  z.object({
-    ...ClaudeCommon,
-    hook_event_name: z.literal('PreToolUse'),
-    tool_name: z.string().min(1),
-    tool_use_id: z.string().min(1),
-    tool_input: z.unknown(),
-  }).passthrough(),
-  z.object({
-    ...ClaudeCommon,
-    hook_event_name: z.literal('PermissionRequest'),
-    tool_name: z.string().min(1),
-    tool_use_id: z.string().optional(),
-    tool_input: z.unknown(),
-  }).passthrough(),
-  z.object({
-    ...ClaudeCommon,
-    hook_event_name: z.literal('PostToolUse'),
-    tool_name: z.string().min(1),
-    tool_use_id: z.string().min(1),
-    tool_input: z.unknown(),
-    tool_response: z.unknown(),
-  }).passthrough(),
-  z.object({
-    ...ClaudeCommon,
-    hook_event_name: z.literal('Stop'),
-    stop_hook_active: z.boolean(),
-    last_assistant_message: z.string().optional(),
-  }).passthrough(),
+  z
+    .object({
+      ...ClaudeCommon,
+      hook_event_name: z.literal('SessionStart'),
+      source: z.enum(['startup', 'resume', 'clear']),
+    })
+    .passthrough(),
+  z
+    .object({
+      ...ClaudeCommon,
+      hook_event_name: z.literal('PreToolUse'),
+      tool_name: z.string().min(1),
+      tool_use_id: z.string().min(1),
+      tool_input: z.unknown(),
+    })
+    .passthrough(),
+  z
+    .object({
+      ...ClaudeCommon,
+      hook_event_name: z.literal('PermissionRequest'),
+      tool_name: z.string().min(1),
+      tool_use_id: z.string().optional(),
+      tool_input: z.unknown(),
+    })
+    .passthrough(),
+  z
+    .object({
+      ...ClaudeCommon,
+      hook_event_name: z.literal('PostToolUse'),
+      tool_name: z.string().min(1),
+      tool_use_id: z.string().min(1),
+      tool_input: z.unknown(),
+      tool_response: z.unknown(),
+    })
+    .passthrough(),
+  z
+    .object({
+      ...ClaudeCommon,
+      hook_event_name: z.literal('Stop'),
+      stop_hook_active: z.boolean(),
+      last_assistant_message: z.string().optional(),
+    })
+    .passthrough(),
 ]);
 export type ClaudeCodeHookInput = z.infer<typeof ClaudeCodeHookInputSchema>;
 
@@ -99,10 +109,7 @@ export function adaptClaudeCodeHook(
   });
 }
 
-function payload(
-  input: ClaudeCodeHookInput,
-  context: ClaudeCodeAdapterContext,
-): AgentEventPayload {
+function payload(input: ClaudeCodeHookInput, context: ClaudeCodeAdapterContext): AgentEventPayload {
   switch (input.hook_event_name) {
     case 'SessionStart':
       return context.sequence === 0

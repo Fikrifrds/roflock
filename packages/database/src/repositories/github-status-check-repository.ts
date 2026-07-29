@@ -45,10 +45,7 @@ export class GitHubStatusCheckRepository {
     return value;
   }
 
-  evaluateCommit(
-    githubRepositoryMappingId: string,
-    commitSha: string,
-  ): CommitStatusDecision {
+  evaluateCommit(githubRepositoryMappingId: string, commitSha: string): CommitStatusDecision {
     const current = this.latest(githubRepositoryMappingId, commitSha);
     if (current) return { state: 'current', check: current };
     const lastSuccess = this.db

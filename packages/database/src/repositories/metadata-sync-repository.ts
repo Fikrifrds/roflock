@@ -59,11 +59,7 @@ export class MetadataSyncRepository {
     return value;
   }
 
-  acknowledge(
-    id: string,
-    remoteCursor: string,
-    syncedAt: string,
-  ): MetadataSyncBatch | undefined {
+  acknowledge(id: string, remoteCursor: string, syncedAt: string): MetadataSyncBatch | undefined {
     return this.db.transaction(() => {
       const batch = this.get(id);
       if (!batch) return undefined;
@@ -97,8 +93,7 @@ export class MetadataSyncRepository {
 
   get(id: string): MetadataSyncBatch | undefined {
     const row = this.db.prepare(`SELECT * FROM metadata_sync_batches WHERE id = ?`).get(id) as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     return row ? mapBatch(row) : undefined;
   }
 }

@@ -77,6 +77,8 @@ export function ChangeContractPanel({ task }: { task: Task }) {
 
   useEffect(() => {
     if (contract !== undefined && contract.hash !== loadedHash) {
+      // The contract query is the authoritative external source for the editor.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDraft(draftFromContract(contract));
       setLoadedHash(contract.hash);
       setQuestionAnswers({});
@@ -248,7 +250,7 @@ export function ChangeContractPanel({ task }: { task: Task }) {
             <legend>Acceptance criteria</legend>
             <p className="hint">Every criterion must name how RoleFlock will verify it.</p>
             <div className="contract-list">
-              {draft.criteria.map((criterion, index) => (
+              {draft.criteria.map((criterion) => (
                 <article className="criterion-card" key={criterion.id}>
                   <div className="criterion-heading">
                     <strong>{criterion.id}</strong>

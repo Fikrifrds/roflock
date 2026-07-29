@@ -64,10 +64,9 @@ describe('organisation transparency log', () => {
     expect(log.verify('org_1')).toBe(true);
     expect(log.listDecisions('policy_1', 'd'.repeat(64))).toHaveLength(1);
     expect(() =>
-      db!.prepare(`UPDATE transparency_log_entries SET payload_digest = ? WHERE id = ?`).run(
-        'c'.repeat(64),
-        'entry_2',
-      ),
+      db!
+        .prepare(`UPDATE transparency_log_entries SET payload_digest = ? WHERE id = ?`)
+        .run('c'.repeat(64), 'entry_2'),
     ).toThrow(/immutable/);
   });
 });

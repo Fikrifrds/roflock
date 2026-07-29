@@ -133,19 +133,11 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb, bus: Ev
       contractId: contract.id,
       contractHash: contract.hash,
       githubRepositoryMappingId: repository.id,
-      subjectType: enumValue(
-        body.subjectType,
-        ['issue', 'pull_request'],
-        'subjectType',
-      ),
+      subjectType: enumValue(body.subjectType, ['issue', 'pull_request'], 'subjectType'),
       subjectNumber,
       subjectNodeId: optional(body.subjectNodeId),
       subjectUrl: required(body.subjectUrl, 'subjectUrl'),
-      linkType: enumValue(
-        body.linkType,
-        ['authority_source', 'delivery_target'],
-        'linkType',
-      ),
+      linkType: enumValue(body.linkType, ['authority_source', 'delivery_target'], 'linkType'),
       linkedBy: required(body.linkedBy, 'linkedBy'),
       linkedAt: timestamp,
     });
@@ -255,11 +247,7 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb, bus: Ev
       required(body.githubRepositoryId, 'githubRepositoryId'),
     );
     if (!repository) return reply.code(404).send({ code: 'GITHUB_REPOSITORY_NOT_FOUND' });
-    const subjectType = enumValue(
-      body.subjectType,
-      ['issue', 'pull_request'],
-      'subjectType',
-    );
+    const subjectType = enumValue(body.subjectType, ['issue', 'pull_request'], 'subjectType');
     const subjectNumber = Number(body.subjectNumber);
     if (!Number.isInteger(subjectNumber) || subjectNumber <= 0) {
       throw new Error('subjectNumber must be a positive integer');
@@ -284,7 +272,8 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb, bus: Ev
       const item = feedback.create({
         id: itemId,
         taskId: link.taskId,
-        sourceActorId: actor?.roleflockActorId ?? `github:${required(body.githubUserId, 'githubUserId')}`,
+        sourceActorId:
+          actor?.roleflockActorId ?? `github:${required(body.githubUserId, 'githubUserId')}`,
         text,
         classification,
         targetContractHash: link.contractHash,
@@ -318,7 +307,9 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb, bus: Ev
       source: 'github_comment',
     });
     record(audit, 'github.comment_routed_to_planner', result.receipt.id, result.receipt, timestamp);
-    return reply.code(201).send({ feedback: result.item, receipt: result.receipt, replayed: false });
+    return reply
+      .code(201)
+      .send({ feedback: result.item, receipt: result.receipt, replayed: false });
   });
 
   app.get('/api/projects/:projectId/github-protection-gate', async (request, reply) => {
@@ -330,9 +321,7 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb, bus: Ev
     const passportId = status.state === 'current' ? status.check.passportId : undefined;
     return evaluateGitHubProtectionGate({
       status,
-      passportRevoked: passportId
-        ? passports.getRevocation(passportId) !== undefined
-        : false,
+      passportRevoked: passportId ? passports.getRevocation(passportId) !== undefined : false,
     });
   });
 }

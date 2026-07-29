@@ -68,18 +68,12 @@ export function checkCommand(
   args: string[] = [],
 ): { allowed: boolean; reason?: string } {
   const actual = [command, ...args].join(' ');
-  if (
-    policy.deniedCommands?.some(
-      (pattern) => glob(actual, pattern) || glob(command, pattern),
-    )
-  ) {
+  if (policy.deniedCommands?.some((pattern) => glob(actual, pattern) || glob(command, pattern))) {
     return { allowed: false, reason: 'denied command pattern' };
   }
   if (
     policy.allowedCommands &&
-    !policy.allowedCommands.some(
-      (pattern) => glob(actual, pattern) || glob(command, pattern),
-    )
+    !policy.allowedCommands.some((pattern) => glob(actual, pattern) || glob(command, pattern))
   ) {
     return { allowed: false, reason: 'not an allowed command pattern' };
   }

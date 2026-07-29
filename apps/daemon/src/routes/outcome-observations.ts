@@ -15,10 +15,7 @@ import {
   type SealedOutcomeObservation,
 } from '@roleflock/role-recommender';
 
-export function registerOutcomeObservationRoutes(
-  app: FastifyInstance,
-  db: SqliteDb,
-): void {
+export function registerOutcomeObservationRoutes(app: FastifyInstance, db: SqliteDb): void {
   const tasks = new TaskRepository(db);
   const observations = new OutcomeObservationRepository(db);
   const controls = new AdaptiveRoutingControlRepository(db);

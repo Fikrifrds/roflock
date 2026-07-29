@@ -83,9 +83,7 @@ export interface SealedOutcomeObservation extends OutcomeObservation {
   observationDigest: string;
 }
 
-export function sealOutcomeObservation(
-  input: OutcomeObservation,
-): SealedOutcomeObservation {
+export function sealOutcomeObservation(input: OutcomeObservation): SealedOutcomeObservation {
   const observation = OutcomeObservationSchema.parse(input);
   return {
     ...observation,
@@ -96,10 +94,7 @@ export function sealOutcomeObservation(
 
 export function verifyOutcomeObservation(value: SealedOutcomeObservation): boolean {
   const { observationDigest, digestAlgorithm: _algorithm, ...observation } = value;
-  return (
-    observationDigest ===
-    sha256Canonical(OutcomeObservationSchema.parse(observation))
-  );
+  return observationDigest === sha256Canonical(OutcomeObservationSchema.parse(observation));
 }
 
 export interface NormalizedTaskClass {
@@ -116,9 +111,7 @@ export interface NormalizedTaskClass {
   unknownDimensions: string[];
 }
 
-export function normalizeTaskClass(
-  input: OutcomeObservation['taskClass'],
-): NormalizedTaskClass {
+export function normalizeTaskClass(input: OutcomeObservation['taskClass']): NormalizedTaskClass {
   const dimensions = {
     taskType: input.taskType.trim().toLowerCase(),
     risk: input.risk,
@@ -149,19 +142,18 @@ export function taskClassCompatibility(
   if (left.dimensions.repositorySizeBucket !== right.dimensions.repositorySizeBucket) {
     reasons.push('repository_size');
   }
-  const languageScore = jaccard(
-    left.dimensions.languageMix,
-    right.dimensions.languageMix,
-  );
+  const languageScore = jaccard(left.dimensions.languageMix, right.dimensions.languageMix);
   const signalScore = jaccard(left.dimensions.signals, right.dimensions.signals);
   if (languageScore < 0.5) reasons.push('language_mix');
   if (signalScore < 0.5) reasons.push('domain_signals');
-  const exactScore = 1 - Math.min(3, reasons.filter((reason) =>
-    ['task_type', 'risk', 'repository_size'].includes(reason),
-  ).length) / 3;
-  const score = Number(
-    (exactScore * 0.6 + languageScore * 0.2 + signalScore * 0.2).toFixed(6),
-  );
+  const exactScore =
+    1 -
+    Math.min(
+      3,
+      reasons.filter((reason) => ['task_type', 'risk', 'repository_size'].includes(reason)).length,
+    ) /
+      3;
+  const score = Number((exactScore * 0.6 + languageScore * 0.2 + signalScore * 0.2).toFixed(6));
   return {
     compatible: reasons.length === 0 && Math.min(left.confidence, right.confidence) >= 0.8,
     score,
@@ -217,9 +209,11 @@ export function sealPostMergeOutcome(input: PostMergeOutcome): SealedPostMergeOu
   };
 }
 
-export function postMergeFailurePenalty(
-  outcomes: readonly PostMergeOutcome[],
-): { penalty: number; failures: number; reason: string } {
+export function postMergeFailurePenalty(outcomes: readonly PostMergeOutcome[]): {
+  penalty: number;
+  failures: number;
+  reason: string;
+} {
   const weights = { none: 0, low: 0.1, medium: 0.25, high: 0.5, critical: 1 };
   const failures = outcomes.filter((outcome) => outcome.outcomeType !== 'healthy');
   const penalty = Math.min(
@@ -238,7 +232,10 @@ export function postMergeFailurePenalty(
 }
 
 function normalizeLabel(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9.+#_-]+/g, '_');
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9.+#_-]+/g, '_');
 }
 
 function jaccard(left: readonly string[], right: readonly string[]): number {

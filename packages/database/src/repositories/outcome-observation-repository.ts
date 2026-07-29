@@ -73,7 +73,8 @@ export class OutcomeObservationRepository {
     classification: NormalizedTaskClass,
     createdAt = new Date().toISOString(),
   ): NormalizedTaskClass {
-    if (!this.get(observationId)) throw new Error(`Outcome observation not found: ${observationId}`);
+    if (!this.get(observationId))
+      throw new Error(`Outcome observation not found: ${observationId}`);
     this.db
       .prepare(
         `INSERT INTO outcome_task_classes (

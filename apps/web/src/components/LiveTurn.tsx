@@ -1,16 +1,9 @@
 import { Fragment, useEffect, useRef, type RefObject } from 'react';
 import type { ActiveExecution } from '../types.js';
 import { Empty } from './primitives.js';
+import { normalizeLiveOutput } from '../lib/live-output.js';
 
-function DiffStats({
-  added,
-  removed,
-  files,
-}: {
-  added: number;
-  removed: number;
-  files: string[];
-}) {
+function DiffStats({ added, removed, files }: { added: number; removed: number; files: string[] }) {
   return (
     <p className="live-diff-meta">
       <span className="diff-add">+{added}</span>
@@ -23,23 +16,6 @@ function DiffStats({
       ) : null}
     </p>
   );
-}
-
-/**
- * Cursor write events are one giant NDJSON line. When a partial line was once
- * dumped into liveOutput, the pane showed literal `\n` instead of newlines.
- * Decode that shape so the readable view stays usable for older streams too.
- */
-export function normalizeLiveOutput(output: string): string {
-  const escapedNewlines = (output.match(/\\n/g) ?? []).length;
-  const realNewlines = (output.match(/\n/g) ?? []).length;
-  if (escapedNewlines < 3 || escapedNewlines <= realNewlines * 2) return output;
-  return output
-    .replace(/\\n/g, '\n')
-    .replace(/\\t/g, '\t')
-    .replace(/\\r/g, '\r')
-    .replace(/\\"/g, '"')
-    .replace(/\\\\/g, '\\');
 }
 
 function looksLikeUnifiedDiff(value: string): boolean {
@@ -81,18 +57,35 @@ type DiagramStep = { from: string; to: string; label?: string };
 
 function MermaidDiagram({ source }: { source: string }) {
   const steps: DiagramStep[] = [];
-  for (const line of source.split('\n').map((item) => item.trim()).filter((item) => item.includes('-->'))) {
-      const match = line.match(/^([\w*]+)(?:\[([^\]]+)\]|\{([^}]+)\}|\(([^)]+)\))?\s*-->(?:\|([^|]+)\|)?\s*([\w*]+)(?:\[([^\]]+)\]|\{([^}]+)\}|\(([^)]+)\))?(?::\s*(.*))?$/);
-      if (!match) continue;
-      const [, fromId, fromSquare, fromDiamond, fromRound, edgeLabel, toId, toSquare, toDiamond, toRound, stateLabel] = match;
-      const from = fromSquare ?? fromDiamond ?? fromRound ?? fromId;
-      const to = toSquare ?? toDiamond ?? toRound ?? toId;
-      if (!from || !to) continue;
-      steps.push({
-        from,
-        to,
-        label: edgeLabel ?? stateLabel,
-      });
+  for (const line of source
+    .split('\n')
+    .map((item) => item.trim())
+    .filter((item) => item.includes('-->'))) {
+    const match = line.match(
+      /^([\w*]+)(?:\[([^\]]+)\]|\{([^}]+)\}|\(([^)]+)\))?\s*-->(?:\|([^|]+)\|)?\s*([\w*]+)(?:\[([^\]]+)\]|\{([^}]+)\}|\(([^)]+)\))?(?::\s*(.*))?$/,
+    );
+    if (!match) continue;
+    const [
+      ,
+      fromId,
+      fromSquare,
+      fromDiamond,
+      fromRound,
+      edgeLabel,
+      toId,
+      toSquare,
+      toDiamond,
+      toRound,
+      stateLabel,
+    ] = match;
+    const from = fromSquare ?? fromDiamond ?? fromRound ?? fromId;
+    const to = toSquare ?? toDiamond ?? toRound ?? toId;
+    if (!from || !to) continue;
+    steps.push({
+      from,
+      to,
+      label: edgeLabel ?? stateLabel,
+    });
   }
 
   return (
@@ -105,7 +98,10 @@ function MermaidDiagram({ source }: { source: string }) {
           {steps.map((step, index) => (
             <li key={`${step.from}-${step.to}-${index}`}>
               <span className="diagram-node">{step.from}</span>
-              <span className="diagram-arrow" aria-label={step.label ? `then: ${step.label}` : 'then'}>
+              <span
+                className="diagram-arrow"
+                aria-label={step.label ? `then: ${step.label}` : 'then'}
+              >
                 <i />
                 {step.label ? <small>{step.label}</small> : null}
               </span>
@@ -135,7 +131,12 @@ function HumanReadableText({ value }: { value: string }) {
         if (/^###\s+/.test(line)) return <h5 key={index}>{line.replace(/^###\s+/, '')}</h5>;
         if (/^##\s+/.test(line)) return <h4 key={index}>{line.replace(/^##\s+/, '')}</h4>;
         if (/^#\s+/.test(line)) return <h3 key={index}>{line.replace(/^#\s+/, '')}</h3>;
-        if (/^[-*]\s+/.test(line)) return <p className="live-document-item" key={index}>{line.replace(/^[-*]\s+/, '')}</p>;
+        if (/^[-*]\s+/.test(line))
+          return (
+            <p className="live-document-item" key={index}>
+              {line.replace(/^[-*]\s+/, '')}
+            </p>
+          );
         if (!line.trim()) return <br key={index} />;
         return <p key={index}>{line}</p>;
       })}
@@ -143,7 +144,13 @@ function HumanReadableText({ value }: { value: string }) {
   );
 }
 
-function ReadableOutput({ output, outputRef }: { output: string; outputRef: RefObject<HTMLPreElement | null> }) {
+function ReadableOutput({
+  output,
+  outputRef,
+}: {
+  output: string;
+  outputRef: RefObject<HTMLPreElement | null>;
+}) {
   const blocks = outputBlocks(output);
   return (
     <div className="live-readable-output">
@@ -162,7 +169,9 @@ function ReadableOutput({ output, outputRef }: { output: string; outputRef: RefO
       ))}
       <details className="live-raw-output">
         <summary>View raw output</summary>
-        <pre ref={outputRef} className="output-pane" tabIndex={0}>{output}</pre>
+        <pre ref={outputRef} className="output-pane" tabIndex={0}>
+          {output}
+        </pre>
       </details>
     </div>
   );
@@ -210,7 +219,11 @@ export function LiveTurn({
         <div>
           <p className="eyebrow">Live turn</p>
           <h3>
-            {awaitingDecision ? 'Your approval is required' : finished ? 'Turn complete' : 'Work in progress'}
+            {awaitingDecision
+              ? 'Your approval is required'
+              : finished
+                ? 'Turn complete'
+                : 'Work in progress'}
           </h3>
         </div>
         <span
@@ -224,7 +237,9 @@ export function LiveTurn({
       <div className="live-context" aria-label="Active model">
         <span className="live-context-label">Provider</span>
         <strong>{provider}</strong>
-        <span className="live-context-divider" aria-hidden="true">/</span>
+        <span className="live-context-divider" aria-hidden="true">
+          /
+        </span>
         <span className="live-context-label">Model</span>
         <code>{model}</code>
         {execution?.effort ? <span className="live-effort">{execution.effort} effort</span> : null}
@@ -239,8 +254,8 @@ export function LiveTurn({
               {reasoningChars > 0 && !output
                 ? `Provider reasoning is streaming (${reasoningChars.toLocaleString()} characters received); implementation output will follow.`
                 : output
-                ? 'The model or command is still streaming output.'
-                : 'Waiting for the first response from the model or command.'}
+                  ? 'The model or command is still streaming output.'
+                  : 'Waiting for the first response from the model or command.'}
             </small>
           </div>
         </div>
@@ -263,10 +278,14 @@ export function LiveTurn({
       <article className="live-output">
         <div className="live-output-head">
           <div>
-            <span className="live-terminal-mark" aria-hidden="true">›_</span>
+            <span className="live-terminal-mark" aria-hidden="true">
+              ›_
+            </span>
             <h4>{finished || awaitingDecision ? 'Final output' : 'Model & command output'}</h4>
           </div>
-          {output ? <small>{readableOutput.split('\n').length.toLocaleString()} lines</small> : null}
+          {output ? (
+            <small>{readableOutput.split('\n').length.toLocaleString()} lines</small>
+          ) : null}
         </div>
         {output ? (
           <ReadableOutput output={output} outputRef={outputRef} />

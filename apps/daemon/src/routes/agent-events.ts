@@ -95,8 +95,7 @@ export function registerAgentEventRoutes(app: FastifyInstance, db: SqliteDb): vo
         headers['x-roleflock-installation-id'],
         'x-roleflock-installation-id',
       );
-      const declaredRole =
-        optionalHeader(headers['x-roleflock-declared-role']) ?? 'executor';
+      const declaredRole = optionalHeader(headers['x-roleflock-declared-role']) ?? 'executor';
       const input = CodexHookInputSchema.parse(request.body);
       const prior = events
         .listSessionsByTask(taskId)
@@ -168,8 +167,7 @@ export function registerAgentEventRoutes(app: FastifyInstance, db: SqliteDb): vo
       const event = adaptClaudeCodeHook(input, {
         binding: currentAgentEventBinding(db, taskId, actorId),
         workspacePath: worktree.path,
-        declaredRole:
-          optionalHeader(request.headers['x-roleflock-declared-role']) ?? 'executor',
+        declaredRole: optionalHeader(request.headers['x-roleflock-declared-role']) ?? 'executor',
         sequence: prior ? prior.lastSequence + 1 : 0,
         previousEventHash: prior?.lastEventHash,
         occurredAt: timestamp,
@@ -229,8 +227,7 @@ export function registerAgentEventRoutes(app: FastifyInstance, db: SqliteDb): vo
       const batch = adaptCursorStream(request.body, {
         binding: currentAgentEventBinding(db, taskId, actorId),
         workspacePath: worktree.path,
-        declaredRole:
-          optionalHeader(request.headers['x-roleflock-declared-role']) ?? 'executor',
+        declaredRole: optionalHeader(request.headers['x-roleflock-declared-role']) ?? 'executor',
         installationId,
         firstSequence: prior ? prior.lastSequence + 1 : 0,
         previousEventHash: prior?.lastEventHash,
@@ -287,10 +284,7 @@ export function registerAgentEventRoutes(app: FastifyInstance, db: SqliteDb): vo
     return {
       taskId,
       level,
-      observedEventCount: reports.reduce(
-        (total, report) => total + report.observedEventCount,
-        0,
-      ),
+      observedEventCount: reports.reduce((total, report) => total + report.observedEventCount, 0),
       gaps,
       reentry: {
         required: gaps.length > 0,

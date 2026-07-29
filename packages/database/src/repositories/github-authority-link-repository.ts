@@ -69,8 +69,7 @@ export class GitHubAuthorityLinkRepository {
          ORDER BY linked_at DESC, id DESC LIMIT 1`,
       )
       .get(githubRepositoryMappingId, subjectType, subjectNumber) as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     return row ? mapLink(row) : undefined;
   }
 }

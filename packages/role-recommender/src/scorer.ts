@@ -116,9 +116,7 @@ function scoreCandidate(
     observed !== undefined &&
     observed.sampleSize >= config.minimumObservedSamples &&
     observed.confidence >= config.minimumObservedConfidence;
-  const verifiedSuccess = observedEvidenceApplied
-    ? observed!.score * observed!.confidence
-    : 0;
+  const verifiedSuccess = observedEvidenceApplied ? observed!.score * observed!.confidence : 0;
   if (candidate.observedVerifiedSuccess) {
     assertUnit(candidate.observedVerifiedSuccess.score, 'observedVerifiedSuccess.score');
     assertUnit(candidate.observedVerifiedSuccess.confidence, 'observedVerifiedSuccess.confidence');

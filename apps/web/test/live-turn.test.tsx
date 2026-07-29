@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeLiveOutput } from '../src/components/LiveTurn.js';
+import { normalizeLiveOutput } from '../src/lib/live-output.js';
 
 describe('normalizeLiveOutput', () => {
   it('turns JSON-style escape dumps into real newlines', () => {

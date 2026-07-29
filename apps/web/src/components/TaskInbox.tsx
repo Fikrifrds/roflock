@@ -113,7 +113,6 @@ export function TaskInbox() {
   useEffect(() => {
     if (!projectId) return;
     if (projectsById.has(projectId)) return;
-    setProjectId(null);
     try {
       localStorage.removeItem(WORKSPACE_KEY);
     } catch {
@@ -137,7 +136,8 @@ export function TaskInbox() {
     };
   }, [pickerOpen]);
 
-  const activeProject = projectId ? projectsById.get(projectId) : undefined;
+  const effectiveProjectId = projectId && projectsById.has(projectId) ? projectId : null;
+  const activeProject = effectiveProjectId ? projectsById.get(effectiveProjectId) : undefined;
   const pickerLabel = activeProject?.name ?? (projects.length ? 'All projects' : 'No projects');
 
   const selectProject = (next: string | null) => {
@@ -158,7 +158,7 @@ export function TaskInbox() {
   };
 
   const filtered = tasks.filter((task) => {
-    if (projectId && task.projectId !== projectId) return false;
+    if (effectiveProjectId && task.projectId !== effectiveProjectId) return false;
     const text =
       `${task.title} ${projectsById.get(task.projectId ?? '')?.name ?? ''}`.toLowerCase();
     return text.includes(query.toLowerCase());

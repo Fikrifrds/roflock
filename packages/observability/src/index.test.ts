@@ -40,11 +40,15 @@ describe('redact', () => {
     const unavailable = async () => {
       throw new Error('offline');
     };
-    await expect(new OpaPolicyAdapter(unavailable, true).evaluate({ action: 'push' })).resolves.toMatchObject({
+    await expect(
+      new OpaPolicyAdapter(unavailable, true).evaluate({ action: 'push' }),
+    ).resolves.toMatchObject({
       allowed: false,
       source: 'fallback',
     });
-    await expect(new OpaPolicyAdapter(unavailable, false).evaluate({ action: 'read' })).resolves.toMatchObject({
+    await expect(
+      new OpaPolicyAdapter(unavailable, false).evaluate({ action: 'read' }),
+    ).resolves.toMatchObject({
       allowed: true,
       source: 'fallback',
     });

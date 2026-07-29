@@ -43,9 +43,7 @@ export function adaptCursorStream(
 ): NormalizedAgentEvent[] {
   const rawEvents = typeof input === 'string' ? parseLines(input) : [...input];
   const nativeEvents = rawEvents.map((event) => CursorStreamEventSchema.parse(event));
-  const init = nativeEvents.find(
-    (event) => event.type === 'system' && event.subtype === 'init',
-  );
+  const init = nativeEvents.find((event) => event.type === 'system' && event.subtype === 'init');
   if (!init?.cwd) throw new Error('Cursor stream requires a system/init event with cwd');
   if (normalizePath(init.cwd) !== normalizePath(context.workspacePath)) {
     throw new Error(

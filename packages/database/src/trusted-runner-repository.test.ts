@@ -28,12 +28,7 @@ describe('trusted runner registration and rotation', () => {
     expect(repository.canIssue('org_1', 'runner_identity_2')).toMatchObject({
       allowed: true,
     });
-    repository.revoke(
-      'trusted_2',
-      'actor_1',
-      'Runner compromised',
-      '2026-07-28T14:00:00.000Z',
-    );
+    repository.revoke('trusted_2', 'actor_1', 'Runner compromised', '2026-07-28T14:00:00.000Z');
     expect(repository.canIssue('org_1', 'runner_identity_2')).toMatchObject({
       allowed: false,
       reason: 'Runner trust or signing identity is not active.',

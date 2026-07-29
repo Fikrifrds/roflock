@@ -139,8 +139,7 @@ export class OrganisationRepository {
       return { allowed: false, reason: 'Organisation is unavailable or suspended.' };
     }
     const actor = this.db.prepare(`SELECT status FROM actors WHERE id = ?`).get(input.actorId) as
-      | { status: string }
-      | undefined;
+      { status: string } | undefined;
     if (!actor || actor.status !== 'active') {
       return { allowed: false, reason: 'Actor is unavailable, suspended, or revoked.' };
     }
@@ -165,10 +164,7 @@ export class OrganisationRepository {
     };
   }
 
-  getMembership(
-    organisationId: string,
-    actorId: string,
-  ): OrganisationMembership | undefined {
+  getMembership(organisationId: string, actorId: string): OrganisationMembership | undefined {
     const row = this.db
       .prepare(
         `SELECT * FROM organisation_memberships

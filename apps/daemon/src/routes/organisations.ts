@@ -10,14 +10,7 @@ import {
   type SqliteDb,
 } from '@roleflock/database';
 
-const ROLES: OrganisationRole[] = [
-  'owner',
-  'admin',
-  'planner',
-  'executor',
-  'verifier',
-  'viewer',
-];
+const ROLES: OrganisationRole[] = ['owner', 'admin', 'planner', 'executor', 'verifier', 'viewer'];
 const ACTIONS: OrganisationAction[] = [
   'organisation_manage',
   'policy_manage',
@@ -73,11 +66,7 @@ export function registerOrganisationRoutes(app: FastifyInstance, db: SqliteDb): 
       organisationId,
       actorId,
       role: enumValue(body.role, ROLES, 'role'),
-      status: enumValue(
-        body.status ?? 'active',
-        ['active', 'suspended', 'revoked'],
-        'status',
-      ),
+      status: enumValue(body.status ?? 'active', ['active', 'suspended', 'revoked'], 'status'),
       createdAt: at,
       updatedAt: at,
     });

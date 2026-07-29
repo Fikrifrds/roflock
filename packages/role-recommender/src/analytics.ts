@@ -46,15 +46,11 @@ export function calculateRolePerformance(
     .map((observation) => observation.outcome.actualCostUsd)
     .filter((value): value is number => value !== undefined);
   const deviations = included.map((observation) => observation.outcome.deviationCount);
-  const interventions = included.map(
-    (observation) => observation.outcome.interventionCount,
-  );
+  const interventions = included.map((observation) => observation.outcome.interventionCount);
   const latency = included
     .map((observation) => observation.outcome.latencyMs)
     .sort((left, right) => left - right);
-  const caveats = [
-    'Observed association only; task assignment was not a controlled experiment.',
-  ];
+  const caveats = ['Observed association only; task assignment was not a controlled experiment.'];
   if (included.length < 5) caveats.push('Sample size is below the learning threshold of 5.');
   if (costs.length !== included.length) caveats.push('Cost is missing for some observations.');
   return {
@@ -149,11 +145,10 @@ export function explainAdaptiveRouting(input: {
   const control = input.control ?? 'default';
   const blocked = control === 'excluded' || control === 'frozen';
   const observedContribution =
-    signal.eligible && !blocked
-      ? Number((signal.score * signal.confidence * 0.15).toFixed(6))
-      : 0;
-  const postMergeContribution =
-    !blocked ? -Number(Math.min(1, Math.max(0, input.postMergePenalty)).toFixed(6)) : 0;
+    signal.eligible && !blocked ? Number((signal.score * signal.confidence * 0.15).toFixed(6)) : 0;
+  const postMergeContribution = !blocked
+    ? -Number(Math.min(1, Math.max(0, input.postMergePenalty)).toFixed(6))
+    : 0;
   const factors: AdaptiveRoutingExplanation['factors'] = [
     {
       name: 'observed_success',
