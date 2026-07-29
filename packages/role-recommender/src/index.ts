@@ -227,3 +227,4 @@ export * from './independence.js';
 export * from './recommendation.js';
 export * from './scorer.js';
 export * from './outcomes.js';
+export * from './analytics.js';
