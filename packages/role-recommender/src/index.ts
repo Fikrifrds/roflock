@@ -226,3 +226,4 @@ export * from './hard-constraints.js';
 export * from './independence.js';
 export * from './recommendation.js';
 export * from './scorer.js';
+export * from './outcomes.js';

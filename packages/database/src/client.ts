@@ -30,6 +30,7 @@ import { MIGRATION_026 } from './migrations/026_trusted_runners.js';
 import { MIGRATION_027 } from './migrations/027_shared_policies_credentials.js';
 import { MIGRATION_028 } from './migrations/028_multi_party_transparency.js';
 import { MIGRATION_029 } from './migrations/029_metadata_sync.js';
+import { MIGRATION_030 } from './migrations/030_outcome_observations.js';
 
 export type SqliteDb = Database.Database;
 
@@ -96,6 +97,7 @@ export function migrate(db: SqliteDb): void {
     MIGRATION_027,
     MIGRATION_028,
     MIGRATION_029,
+    MIGRATION_030,
   ];
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;
