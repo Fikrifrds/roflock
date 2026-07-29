@@ -10,7 +10,9 @@ import {
   type SqliteDb,
 } from '@roleflock/database';
 import {
+  adaptClaudeCodeHook,
   adaptCodexHook,
+  ClaudeCodeHookInputSchema,
   CodexHookInputSchema,
   NormalizedAgentEventSchema,
   parseAgentEventJsonl,
@@ -121,6 +123,64 @@ export function registerAgentEventRoutes(app: FastifyInstance, db: SqliteDb): vo
         id: randomUUID(),
         actor: actorId,
         action: 'external_agent.codex_hook_ingested',
+        targetType: 'task',
+        targetId: taskId,
+        details: {
+          hookEventName: input.hook_event_name,
+          nativeSessionId: input.session_id,
+          eventHash: event.eventHash,
+          status: result.status,
+        },
+        createdAt: timestamp,
+      });
+      return result;
+    } catch (error) {
+      return ingestError(reply, error);
+    }
+  });
+
+  app.post('/api/tasks/:taskId/agent-hooks/claude-code', async (request, reply) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    if (!tasks.get(taskId)) return reply.code(404).send({ code: 'TASK_NOT_FOUND' });
+    try {
+      const actorId = requiredHeader(
+        request.headers['x-roleflock-actor-id'],
+        'x-roleflock-actor-id',
+      );
+      const installationId = requiredHeader(
+        request.headers['x-roleflock-installation-id'],
+        'x-roleflock-installation-id',
+      );
+      const input = ClaudeCodeHookInputSchema.parse(request.body);
+      const prior = events
+        .listSessionsByTask(taskId)
+        .find(
+          (session) =>
+            session.agentFamily === 'claude_code' &&
+            session.nativeSessionId === input.session_id &&
+            session.installationId === installationId,
+        );
+      const worktree = new WorktreeRepository(db).getByTask(taskId);
+      if (!worktree) throw new Error(`Task worktree is unavailable: ${taskId}`);
+      const timestamp = new Date().toISOString();
+      const event = adaptClaudeCodeHook(input, {
+        binding: currentAgentEventBinding(db, taskId, actorId),
+        workspacePath: worktree.path,
+        declaredRole:
+          optionalHeader(request.headers['x-roleflock-declared-role']) ?? 'executor',
+        sequence: prior ? prior.lastSequence + 1 : 0,
+        previousEventHash: prior?.lastEventHash,
+        occurredAt: timestamp,
+        receivedAt: timestamp,
+        installationId,
+        modelId: optionalHeader(request.headers['x-roleflock-model-id']),
+      });
+      assertAgentEventCorrelation(db, taskId, event);
+      const result = events.ingest(event);
+      audit.append({
+        id: randomUUID(),
+        actor: actorId,
+        action: 'external_agent.claude_code_hook_ingested',
         targetType: 'task',
         targetId: taskId,
         details: {

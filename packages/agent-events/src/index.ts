@@ -393,3 +393,4 @@ function violation(
 
 export * from './jsonl.js';
 export * from './adapters/codex.js';
+export * from './adapters/claude-code.js';

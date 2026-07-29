@@ -128,6 +128,32 @@ describe('generic external agent event API', () => {
         binding: { taskId: task.id, worktreeId: 'worktree_agent_events' },
       },
     });
+    const claudeHook = await server.app.inject({
+      method: 'POST',
+      url: `/api/tasks/${task.id}/agent-hooks/claude-code`,
+      headers: {
+        ...headers,
+        'x-roleflock-actor-id': 'claude_actor_1',
+        'x-roleflock-installation-id': 'claude_installation_1',
+        'x-roleflock-declared-role': 'executor',
+        'x-roleflock-model-id': 'claude-opus-4-1',
+      },
+      payload: {
+        session_id: 'claude_session_1',
+        cwd: repositoryDir,
+        permission_mode: 'default',
+        hook_event_name: 'SessionStart',
+        source: 'startup',
+      },
+    });
+    expect(claudeHook.statusCode).toBe(200);
+    expect(claudeHook.json()).toMatchObject({
+      status: 'accepted',
+      event: {
+        source: { agentFamily: 'claude_code', nativeSessionId: 'claude_session_1' },
+        binding: { taskId: task.id, worktreeId: 'worktree_agent_events' },
+      },
+    });
     const started = sealAgentEvent(sourceEvent(binding, 0));
     const accepted = await server.app.inject({
       method: 'POST',
