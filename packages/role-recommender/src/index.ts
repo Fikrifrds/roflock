@@ -224,3 +224,4 @@ export function effectiveTraitScore(trait: ScoredTrait | undefined): number | un
 
 export * from './hard-constraints.js';
 export * from './independence.js';
+export * from './scorer.js';
