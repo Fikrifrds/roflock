@@ -51,6 +51,8 @@ export interface DeterministicVerifierInput {
   infrastructureEnvironment?: NodeJS.ProcessEnv;
   credentialEnvironment?: CredentialEnvironmentProvider;
   writerCredentialProfileId?: string;
+  resolvedToolVersions?: Record<string, string>;
+  now?: () => Date;
 }
 
 export interface VerificationCommandResult {
@@ -64,7 +66,21 @@ export interface VerificationCommandResult {
   timedOut: boolean;
   stdoutDigest: string;
   stderrDigest: string;
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
   failureReason?: string;
+}
+
+export interface VerificationEnvironmentCapture {
+  platform: string;
+  architecture: string;
+  toolVersions: Record<string, string>;
+  environmentVariableDigests: Array<{ name: string; valueDigest: string }>;
+  credentialProfileId: string;
+  networkPolicyDigest: string;
+  isolationProvider: string;
+  cleanWorktree: true;
 }
 
 export interface DeterministicVerificationRun {
@@ -72,6 +88,8 @@ export interface DeterministicVerificationRun {
   resultCommit: string;
   credentialProfileId: string;
   networkIsolation: NetworkIsolationReceipt;
+  environment: VerificationEnvironmentCapture;
+  environmentDigest: string;
   results: VerificationCommandResult[];
   passed: boolean;
 }
@@ -90,10 +108,11 @@ export async function runDeterministicVerification(
   }
 
   const env = await buildRestrictedEnvironment(input);
+  const environment = captureEnvironment(input, env, isolation);
   const results: VerificationCommandResult[] = [];
   for (const check of input.specification.checks) {
     if (!isCommandCheck(check)) continue;
-    results.push(await executeCheck(check, input.worktree, env));
+    results.push(await executeCheck(check, input.worktree, env, input.now ?? (() => new Date())));
   }
 
   return {
@@ -101,6 +120,8 @@ export async function runDeterministicVerification(
     resultCommit: input.worktree.resultCommit,
     credentialProfileId: input.specification.environment.credentialProfileId,
     networkIsolation: isolation,
+    environment,
+    environmentDigest: sha256Canonical(environment),
     results,
     passed: results.every((result) => result.status === 'passed' || !result.required),
   };
@@ -169,9 +190,11 @@ async function executeCheck(
   check: Extract<VerificationCheck, { kind: 'command' | 'static_analysis' | 'security_scan' }>,
   worktree: CleanVerifierWorktree,
   env: NodeJS.ProcessEnv,
+  now: () => Date,
 ): Promise<VerificationCommandResult> {
   const [command, ...args] = check.argv;
   const cwd = check.cwd ? resolve(worktree.path, check.cwd) : worktree.path;
+  const started = now();
   try {
     const result = await runCommand({
       command: command!,
@@ -191,6 +214,8 @@ async function executeCheck(
       result.stdout,
       result.stderr,
       passed,
+      started,
+      now(),
     );
   } catch (error) {
     if (error instanceof CommandError) {
@@ -206,10 +231,23 @@ async function executeCheck(
         error.result.stdout,
         error.result.stderr,
         passed,
+        started,
+        now(),
         passed ? undefined : error.message,
       );
     }
-    return resultFor(check, cwd, null, false, '', String(error), false, errorMessage(error));
+    return resultFor(
+      check,
+      cwd,
+      null,
+      false,
+      '',
+      String(error),
+      false,
+      started,
+      now(),
+      errorMessage(error),
+    );
   }
 }
 
@@ -221,6 +259,8 @@ function resultFor(
   stdout: string,
   stderr: string,
   passed: boolean,
+  started: Date,
+  completed: Date,
   failureReason?: string,
 ): VerificationCommandResult {
   return {
@@ -234,7 +274,42 @@ function resultFor(
     timedOut,
     stdoutDigest: digest(stdout),
     stderrDigest: digest(stderr),
+    startedAt: started.toISOString(),
+    completedAt: completed.toISOString(),
+    durationMs: Math.max(0, completed.getTime() - started.getTime()),
     ...(failureReason ? { failureReason } : {}),
+  };
+}
+
+function captureEnvironment(
+  input: DeterministicVerifierInput,
+  env: NodeJS.ProcessEnv,
+  isolation: NetworkIsolationReceipt,
+): VerificationEnvironmentCapture {
+  const suppliedVersions = input.resolvedToolVersions ?? {};
+  const toolVersions = Object.fromEntries(
+    input.specification.environment.requiredTools
+      .map(({ name }) => {
+        const version =
+          suppliedVersions[name] ?? (name.toLowerCase() === 'node' ? process.version : undefined);
+        if (!version) throw new Error(`Required tool version was not resolved: ${name}`);
+        return [name, version] as const;
+      })
+      .sort(([left], [right]) => left.localeCompare(right)),
+  );
+  const environmentVariableDigests = Object.entries(env)
+    .filter((entry): entry is [string, string] => entry[1] !== undefined)
+    .map(([name, value]) => ({ name, valueDigest: digest(value) }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+  return {
+    platform: process.platform,
+    architecture: process.arch,
+    toolVersions,
+    environmentVariableDigests,
+    credentialProfileId: input.specification.environment.credentialProfileId,
+    networkPolicyDigest: isolation.policyDigest,
+    isolationProvider: isolation.provider,
+    cleanWorktree: true,
   };
 }
 

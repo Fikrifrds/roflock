@@ -269,3 +269,4 @@ function deepFreeze<T>(value: T): T {
 export * from './verifier-worktree.js';
 export * from './deterministic-runner.js';
 export * from './mutation-detector.js';
+export * from './attestation.js';
