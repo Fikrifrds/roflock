@@ -115,6 +115,8 @@ export type {
   OrganisationMembership,
   OrganisationRole,
 } from './repositories/organisation-repository.js';
+export { TrustedRunnerRepository } from './repositories/trusted-runner-repository.js';
+export type { TrustedRunner } from './repositories/trusted-runner-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,
