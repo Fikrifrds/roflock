@@ -117,6 +117,11 @@ export type {
 } from './repositories/organisation-repository.js';
 export { TrustedRunnerRepository } from './repositories/trusted-runner-repository.js';
 export type { TrustedRunner } from './repositories/trusted-runner-repository.js';
+export { SharedPolicyRepository } from './repositories/shared-policy-repository.js';
+export type {
+  ScopedCredentialGrant,
+  StoredSharedPolicyBundle,
+} from './repositories/shared-policy-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,
