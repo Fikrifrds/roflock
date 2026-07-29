@@ -122,6 +122,12 @@ export type {
   ScopedCredentialGrant,
   StoredSharedPolicyBundle,
 } from './repositories/shared-policy-repository.js';
+export { TransparencyLogRepository } from './repositories/transparency-log-repository.js';
+export type {
+  StoredMultiPartyApprovalPolicy,
+  StoredPartyApprovalDecision,
+  StoredTransparencyEntry,
+} from './repositories/transparency-log-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,

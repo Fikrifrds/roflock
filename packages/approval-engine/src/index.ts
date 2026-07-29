@@ -26,3 +26,101 @@ export function matchingGrant(request: Pick<ConfirmationRequest, 'requestType' |
   return grants.find((grant) => mayReuseApproval(request, grant, now) && riskRank(request.riskClass) <= riskRank(grant.maximumRisk));
 }
 function riskRank(risk: string) { return ['low', 'medium', 'high', 'critical'].indexOf(risk); }
+
+export interface MultiPartyApprovalPolicy {
+  id: string;
+  artifactDigest: string;
+  quorum: number;
+  requiredRoles: string[];
+  vetoRoles: string[];
+}
+
+export interface PartyApprovalDecision {
+  actorId: string;
+  role: string;
+  decision: 'approved' | 'rejected';
+  artifactDigest: string;
+  signatureDigest: string;
+}
+
+export function evaluateMultiPartyApproval(
+  policy: MultiPartyApprovalPolicy,
+  decisions: readonly PartyApprovalDecision[],
+): {
+  outcome: 'approved' | 'rejected' | 'pending';
+  approvals: number;
+  missingRoles: string[];
+  reason: string;
+} {
+  const relevant = decisions.filter(
+    (decision) => decision.artifactDigest === policy.artifactDigest,
+  );
+  const unique = new Map(relevant.map((decision) => [decision.actorId, decision]));
+  const values = [...unique.values()];
+  const veto = values.find(
+    (decision) =>
+      decision.decision === 'rejected' && policy.vetoRoles.includes(decision.role),
+  );
+  if (veto) {
+    return {
+      outcome: 'rejected',
+      approvals: values.filter((decision) => decision.decision === 'approved').length,
+      missingRoles: [],
+      reason: `Veto by ${veto.role} actor ${veto.actorId}.`,
+    };
+  }
+  const approvals = values.filter((decision) => decision.decision === 'approved');
+  const approvedRoles = new Set(approvals.map((decision) => decision.role));
+  const missingRoles = policy.requiredRoles.filter((role) => !approvedRoles.has(role));
+  if (approvals.length >= policy.quorum && missingRoles.length === 0) {
+    return {
+      outcome: 'approved',
+      approvals: approvals.length,
+      missingRoles,
+      reason: 'Quorum and all required roles are satisfied.',
+    };
+  }
+  return {
+    outcome: 'pending',
+    approvals: approvals.length,
+    missingRoles,
+    reason: 'Approval quorum or required role coverage is incomplete.',
+  };
+}
+
+export interface TransparencyEntry {
+  sequence: number;
+  previousHash?: string;
+  entryType: string;
+  subjectId: string;
+  payloadDigest: string;
+  occurredAt: string;
+  hash: string;
+}
+
+export function appendTransparencyEntry(
+  previous: TransparencyEntry | undefined,
+  input: Omit<TransparencyEntry, 'sequence' | 'previousHash' | 'hash'>,
+): TransparencyEntry {
+  const unsigned = {
+    sequence: previous ? previous.sequence + 1 : 0,
+    ...(previous ? { previousHash: previous.hash } : {}),
+    ...input,
+  };
+  return { ...unsigned, hash: sha256Canonical(unsigned) };
+}
+
+export function verifyTransparencyLog(entries: readonly TransparencyEntry[]): boolean {
+  let previous: TransparencyEntry | undefined;
+  for (const entry of entries) {
+    const expected = appendTransparencyEntry(previous, {
+      entryType: entry.entryType,
+      subjectId: entry.subjectId,
+      payloadDigest: entry.payloadDigest,
+      occurredAt: entry.occurredAt,
+    });
+    if (sha256Canonical(entry) !== sha256Canonical(expected)) return false;
+    previous = entry;
+  }
+  return true;
+}
