@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@roleflock/contracts": "workspace:*",
+    "@roleflock/secret-store": "workspace:*",
     "zod": "^3.25.76"
   },
   "devDependencies": {

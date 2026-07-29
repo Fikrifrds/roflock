@@ -260,3 +260,5 @@ function isCanonicalBase64(value: string): boolean {
     return false;
   }
 }
+
+export * from './signing.js';

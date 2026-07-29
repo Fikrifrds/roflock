@@ -8,6 +8,7 @@
   "include": ["src/**/*"],
   "references": [
     { "path": "../contracts" },
+    { "path": "../change-passport" },
     { "path": "../change-contracts" },
     { "path": "../verification-runner" }
   ]

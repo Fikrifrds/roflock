@@ -73,6 +73,7 @@ export type { ExecutionPlanAggregate } from './repositories/execution-plan-repos
 export { VerificationSpecificationRepository } from './repositories/verification-specification-repository.js';
 export { VerificationResultRepository } from './repositories/verification-result-repository.js';
 export type { StoredVerificationResult } from './repositories/verification-result-repository.js';
+export { RunnerIdentityRepository } from './repositories/runner-identity-repository.js';
 export type {
   ChangeContractAggregate,
   StoredChangeContractVersion,
