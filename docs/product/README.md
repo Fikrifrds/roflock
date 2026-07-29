@@ -15,3 +15,6 @@ Direction note:
 
 - The delivery-assurance plan supersedes orchestration-first positioning while preserving
   the existing safety, recovery, provider, approval, and local-first implementation work.
+- `roleflock_beyond_coding_verified_work_v1.0.md` records the broader domain thesis:
+  coding remains the first commercial wedge, while the assurance core can support verified
+  web intelligence and other evidence-backed agent work through domain packs.
