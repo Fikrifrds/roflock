@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M10 complete
+**Execution progress:** M0–M7 and M10 complete; M8 and M9 are local-only (see §12.2)
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1695,24 +1695,57 @@ later ticket merely to make the product appear complete sooner.
 | M7.4 ✅  | Claude Code adapter/hook ingestion                  | M7.2            | Claude session maps to plan and worktree                  |
 | M7.5 ✅  | Cursor adapter/API ingestion                        | M7.2            | Cursor session maps to plan and worktree                  |
 | M7.6 ✅  | Handoff re-entry and assurance-gap calculation      | M7.3–M7.5       | Missing telemetry lowers assurance visibly                |
-| M8.1 ✅  | GitHub identity/repository integration              | M5.3            | Repo and actor mapping are durable                        |
-| M8.2 ✅  | Issue/PR to contract linkage                        | M8.1            | Authority source is traceable                             |
-| M8.3 ✅  | Commit-bound RoleFlock status check                 | M8.1, M5.3      | New commit invalidates old PASS                           |
-| M8.4 ✅  | PR review packet/passport publication               | M8.3            | Reviewer can inspect assurance from PR                    |
-| M8.5 ✅  | Comment feedback classification to planner          | M8.2, M2.6      | Comments never bypass planner                             |
-| M8.6 ✅  | Required-check and revocation tests                 | M8.3–M8.5       | Protected branch blocks invalid passport                  |
+| M8.1 ◐   | GitHub identity/repository integration              | M5.3            | Repo and actor mapping are durable                        |
+| M8.2 ◐   | Issue/PR to contract linkage                        | M8.1            | Authority source is traceable                             |
+| M8.3 ◐   | Commit-bound RoleFlock status check                 | M8.1, M5.3      | New commit invalidates old PASS                           |
+| M8.4 ◐   | PR review packet/passport publication               | M8.3            | Reviewer can inspect assurance from PR                    |
+| M8.5 ◐   | Comment feedback classification to planner          | M8.2, M2.6      | Comments never bypass planner                             |
+| M8.6 ◐   | Required-check and revocation tests                 | M8.3–M8.5       | Protected branch blocks invalid passport                  |
 | M9.1 ✅  | Organisation/actor/RBAC schema                      | M0.5            | Authority checks have durable identities                  |
 | M9.2 ✅  | Trusted runner registration and rotation            | M9.1            | Revoked runner cannot issue trusted passport              |
 | M9.3 ✅  | Shared policy bundles and scoped credentials        | M9.1            | Cross-agent policy is enforced                            |
 | M9.4 ✅  | Multi-party approval and transparency log           | M9.2–M9.3       | Approval/signature chain is verifiable                    |
-| M9.5 ✅  | Hosted/self-hosted metadata sync                    | M9.2            | Source upload is not required                             |
+| M9.5 ◐   | Hosted/self-hosted metadata sync                    | M9.2            | Source upload is not required                             |
 | M9.6 ✅  | SIEM/OTel and optional OPA adapter                  | M9.3            | Structured events and decisions export                    |
+| M9.7 ☐   | SSO and organisation authentication                 | M9.1            | An organisation identity signs in once, centrally         |
 | M10.1 ✅ | Outcome Observation schema and ingestion            | M5.3, M6.1      | Role outcomes retain task/profile versions                |
 | M10.2 ✅ | Task-class normalisation and confidence             | M10.1           | Incompatible samples are not pooled                       |
 | M10.3 ✅ | Role performance analytics                          | M10.2           | Quality/cost/intervention metrics are inspectable         |
 | M10.4 ✅ | Observed-outcome recommendation input               | M10.2, M6.5     | Thresholded evidence can affect future ranking            |
 | M10.5 ✅ | Rollback/escaped-defect feedback                    | M10.1           | Post-merge outcomes update observations                   |
 | M10.6 ✅ | Adaptive-routing explanation and controls           | M10.3–M10.5     | User can explain, exclude, or override changes            |
+
+Legend: ✅ complete · ◐ local model complete, outbound integration missing · ☐ not started
+
+### 12.2 Known gaps behind the ticket marks
+
+Recorded here because §19.9 forbids presenting an unfinished capability as
+production assurance, and a ✅ that overstates reach does exactly that.
+
+**M8 — GitHub delivery gate.** The decision model, durable identity/authority
+mappings, commit-bound status records, review-packet publication records, and
+comment classification all exist and are tested. What does not exist is any
+outbound GitHub client: no GitHub App, no REST calls, no check-run publication.
+Consequently a protected branch cannot yet require a RoleFlock passport — the
+exit criterion is met in-model only. Closing M8 means adding an authenticated
+GitHub integration that publishes the check RoleFlock already decides.
+
+**M9.5 — metadata sync.** Envelopes and the outbox are built and allowlisted,
+but there is no transport and no hosted control plane to receive them. The
+"source upload is not required" property holds; the sync itself does not run.
+
+**M9.7 — SSO.** Listed in the M9 implementation bullets but never ticketed and
+never built. Organisation authentication is local-actor only today.
+
+**M5.2 — signing key storage.** `OsKeychainSecretStore` exists as an adapter,
+but the daemon wires an encrypted local file store whose key sits beside the
+ciphertext. §14's "never in SQLite plaintext" holds; "keychain" does not.
+
+**Graph authority roles.** No shipped workflow graph sets `authorityRole`, so
+the executor plan-pinning gate in the orchestrator is dormant for the five
+default graphs. Assurance activates per task once a contract, an approved plan,
+and a frozen verification specification exist; making it the default for every
+workflow is an open product decision, not an implementation gap.
 
 ---
 
