@@ -18,3 +18,6 @@ Direction note:
 - `roleflock_beyond_coding_verified_work_v1.0.md` records the broader domain thesis:
   coding remains the first commercial wedge, while the assurance core can support verified
   web intelligence and other evidence-backed agent work through domain packs.
+- `roleflock_release_readiness_and_gtm_v1.0.md` records the current release verdict,
+  non-payment blockers, permitted claims, staged launch strategy, metrics, and exit gates
+  from market entry through enterprise readiness.
