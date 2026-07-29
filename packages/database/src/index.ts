@@ -96,6 +96,8 @@ export type {
   GitHubInstallation,
   GitHubRepositoryMapping,
 } from './repositories/github-integration-repository.js';
+export { GitHubAuthorityLinkRepository } from './repositories/github-authority-link-repository.js';
+export type { GitHubAuthorityLink } from './repositories/github-authority-link-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,

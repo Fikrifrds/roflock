@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { openDatabase, migrate, type SqliteDb } from './client.js';
 import { GitHubIntegrationRepository } from './repositories/github-integration-repository.js';
+import { GitHubAuthorityLinkRepository } from './repositories/github-authority-link-repository.js';
 
 let db: SqliteDb | undefined;
 afterEach(() => db?.close());
@@ -52,6 +53,30 @@ describe('GitHub identity and repository mapping', () => {
       login: 'octocat',
       roleflockActorId: 'actor_local_1',
     });
+    const links = new GitHubAuthorityLinkRepository(db);
+    links.create({
+      id: 'github_link_1',
+      taskId: 'task_1',
+      contractId: 'contract_1',
+      contractHash: '1'.repeat(64),
+      githubRepositoryMappingId: 'github_repository_1',
+      subjectType: 'issue',
+      subjectNumber: 42,
+      subjectUrl: 'https://github.com/roleflock/core/issues/42',
+      linkType: 'authority_source',
+      linkedBy: 'actor_local_1',
+      linkedAt: at,
+    });
+    expect(links.listByTask('task_1')).toMatchObject([
+      {
+        contractHash: '1'.repeat(64),
+        subjectNumber: 42,
+        linkType: 'authority_source',
+      },
+    ]);
+    expect(() =>
+      db!.prepare(`UPDATE github_authority_links SET subject_number = 43`).run(),
+    ).toThrow(/immutable/);
   });
 });
 
@@ -71,6 +96,26 @@ function seedProject(database: SqliteDb): void {
       '/repo',
       'main',
       'active',
+      '2026-07-28T12:00:00.000Z',
+      '2026-07-28T12:00:00.000Z',
+    );
+  database
+    .prepare(
+      `INSERT INTO tasks (
+         id, project_id, type, title, brief, risk, state, workflow_graph_version_id,
+         budget_policy_id, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      'task_1',
+      'project_1',
+      'feature',
+      'GitHub link',
+      'Trace authority',
+      'medium',
+      'CONTRACT_AUTHORISED',
+      'graph_1',
+      'budget_1',
       '2026-07-28T12:00:00.000Z',
       '2026-07-28T12:00:00.000Z',
     );

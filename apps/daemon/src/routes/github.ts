@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import {
   AuditRepository,
+  ChangeContractRepository,
+  GitHubAuthorityLinkRepository,
   GitHubIntegrationRepository,
   ProjectRepository,
   type SqliteDb,
@@ -11,6 +13,8 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb): void {
   const github = new GitHubIntegrationRepository(db);
   const projects = new ProjectRepository(db);
   const audit = new AuditRepository(db);
+  const links = new GitHubAuthorityLinkRepository(db);
+  const contracts = new ChangeContractRepository(db);
 
   app.post('/api/integrations/github/installations', async (request) => {
     const body = request.body as Record<string, unknown>;
@@ -79,6 +83,54 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb): void {
     const projectId = (request.params as { projectId: string }).projectId;
     if (!projects.get(projectId)) return reply.code(404).send({ code: 'PROJECT_NOT_FOUND' });
     return github.getRepositoryByProject(projectId) ?? null;
+  });
+
+  app.post('/api/tasks/:taskId/github-links', async (request, reply) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    const body = request.body as Record<string, unknown>;
+    const aggregate = contracts.getByTask(taskId);
+    const contract = aggregate ? contracts.getCurrent(aggregate.id)?.contract : undefined;
+    if (!contract || contract.status !== 'authorised') {
+      return reply.code(409).send({ code: 'AUTHORISED_CONTRACT_REQUIRED' });
+    }
+    const repository = github.getRepositoryByGitHubId(
+      required(body.githubRepositoryId, 'githubRepositoryId'),
+    );
+    if (!repository) return reply.code(404).send({ code: 'GITHUB_REPOSITORY_NOT_FOUND' });
+    const subjectNumber = Number(body.subjectNumber);
+    if (!Number.isInteger(subjectNumber) || subjectNumber <= 0) {
+      throw new Error('subjectNumber must be a positive integer');
+    }
+    const timestamp = new Date().toISOString();
+    const link = links.create({
+      id: `github_link_${randomUUID()}`,
+      taskId,
+      contractId: contract.id,
+      contractHash: contract.hash,
+      githubRepositoryMappingId: repository.id,
+      subjectType: enumValue(
+        body.subjectType,
+        ['issue', 'pull_request'],
+        'subjectType',
+      ),
+      subjectNumber,
+      subjectNodeId: optional(body.subjectNodeId),
+      subjectUrl: required(body.subjectUrl, 'subjectUrl'),
+      linkType: enumValue(
+        body.linkType,
+        ['authority_source', 'delivery_target'],
+        'linkType',
+      ),
+      linkedBy: required(body.linkedBy, 'linkedBy'),
+      linkedAt: timestamp,
+    });
+    record(audit, 'github.authority_linked', link.id, link, timestamp);
+    return link;
+  });
+
+  app.get('/api/tasks/:taskId/github-links', async (request) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    return links.listByTask(taskId);
   });
 }
 

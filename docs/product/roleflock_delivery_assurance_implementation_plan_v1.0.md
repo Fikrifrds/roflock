@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M8.1 complete; M8.2 is next
+**Execution progress:** M0 through M8.2 complete; M8.3 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
