@@ -221,3 +221,5 @@ export function capabilityValue(
 export function effectiveTraitScore(trait: ScoredTrait | undefined): number | undefined {
   return trait === undefined ? undefined : trait.score * trait.confidence;
 }
+
+export * from './hard-constraints.js';

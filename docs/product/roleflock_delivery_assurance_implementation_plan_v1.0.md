@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M6.2 complete; M6.3 is next
+**Execution progress:** M0 through M6.3 complete; M6.4 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1682,7 +1682,7 @@ later ticket merely to make the product appear complete sooner.
 | M5.5 ✅ | Review packet and assurance-level UI                | M5.3            | Local vs organisation trust is explicit                   |
 | M6.1 ✅ | Model Capability Profile schema/source policy       | M0.6            | Unknown and confidence semantics are tested               |
 | M6.2 ✅ | Provider catalogue capability extensions            | M6.1            | Required metadata is normalised                           |
-| M6.3    | Role hard-constraint engine                         | M6.2            | Ineligible models are excluded                            |
+| M6.3 ✅ | Role hard-constraint engine                         | M6.2            | Ineligible models are excluded                            |
 | M6.4    | Independence policy engine                          | M6.3            | Risk-specific separation is enforced                      |
 | M6.5    | Deterministic role scorer and rationale             | M6.3–M6.4       | Identical inputs produce identical ranking                |
 | M6.6    | Curated profile bundle/versioning                   | M6.1            | Cold-start recommendations cite profile version           |
