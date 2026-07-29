@@ -6,5 +6,9 @@
     "composite": true
   },
   "include": ["src/**/*"],
-  "references": [{ "path": "../provider-core" }, { "path": "../role-protocol" }]
+  "references": [
+    { "path": "../contracts" },
+    { "path": "../provider-core" },
+    { "path": "../role-protocol" }
+  ]
 }

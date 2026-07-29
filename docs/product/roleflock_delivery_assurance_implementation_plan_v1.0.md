@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M6.5 complete; M6.6 is next
+**Execution progress:** M0 through M6.6 complete; M6.7 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1685,7 +1685,7 @@ later ticket merely to make the product appear complete sooner.
 | M6.3 ✅ | Role hard-constraint engine                         | M6.2            | Ineligible models are excluded                            |
 | M6.4 ✅ | Independence policy engine                          | M6.3            | Risk-specific separation is enforced                      |
 | M6.5 ✅ | Deterministic role scorer and rationale             | M6.3–M6.4       | Identical inputs produce identical ranking                |
-| M6.6    | Curated profile bundle/versioning                   | M6.1            | Cold-start recommendations cite profile version           |
+| M6.6 ✅ | Curated profile bundle/versioning                   | M6.1            | Cold-start recommendations cite profile version           |
 | M6.7    | Recommendation persistence/API                      | M6.5–M6.6       | Applied and overridden rosters are audited                |
 | M6.8    | Role recommendation UI                              | M6.7            | Apply-all and per-role override work                      |
 | M6.9    | Recommendation integration/adversarial tests        | M6.8            | Fallbacks cannot weaken hard constraints                  |

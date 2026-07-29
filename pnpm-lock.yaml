@@ -478,6 +478,9 @@ importers:
 
   packages/role-recommender:
     dependencies:
+      '@roleflock/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       '@roleflock/provider-core':
         specifier: workspace:*
         version: link:../provider-core

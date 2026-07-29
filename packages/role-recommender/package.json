@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./curated-bundle": {
+      "types": "./dist/curated-bundle.d.ts",
+      "import": "./dist/curated-bundle.js"
     }
   },
   "scripts": {
@@ -18,6 +22,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
+    "@roleflock/contracts": "workspace:*",
     "@roleflock/provider-core": "workspace:*",
     "@roleflock/role-protocol": "workspace:*",
     "zod": "^3.25.76"
