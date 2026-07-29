@@ -20,6 +20,7 @@ import { MIGRATION_016 } from './migrations/016_change_passports.js';
 import { MIGRATION_017 } from './migrations/017_role_recommendations.js';
 import { MIGRATION_018 } from './migrations/018_task_role_assignments.js';
 import { MIGRATION_019 } from './migrations/019_external_agent_events.js';
+import { MIGRATION_020 } from './migrations/020_github_identity.js';
 
 export type SqliteDb = Database.Database;
 
@@ -76,6 +77,7 @@ export function migrate(db: SqliteDb): void {
     MIGRATION_017,
     MIGRATION_018,
     MIGRATION_019,
+    MIGRATION_020,
   ];
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;

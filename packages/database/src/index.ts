@@ -90,6 +90,12 @@ export type {
   AgentEventIngestResult,
   ExternalAgentSession,
 } from './repositories/external-agent-event-repository.js';
+export { GitHubIntegrationRepository } from './repositories/github-integration-repository.js';
+export type {
+  GitHubActorMapping,
+  GitHubInstallation,
+  GitHubRepositoryMapping,
+} from './repositories/github-integration-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,
