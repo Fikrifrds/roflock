@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { sealOutcomeObservation, verifyOutcomeObservation } from './outcomes.js';
+import {
+  normalizeTaskClass,
+  sealOutcomeObservation,
+  taskClassCompatibility,
+  verifyOutcomeObservation,
+} from './outcomes.js';
 
 describe('outcome observations', () => {
   it('retains task, authority, routing, and profile versions immutably', () => {
@@ -46,5 +51,45 @@ describe('outcome observations', () => {
     expect(verifyOutcomeObservation(observation)).toBe(true);
     expect(observation.roleAssignment.profileVersion).toBe('2026.07');
     expect(verifyOutcomeObservation({ ...observation, taskId: 'task_2' })).toBe(false);
+  });
+
+  it('does not pool materially incompatible task classes', () => {
+    const feature = normalizeTaskClass({
+      taskType: 'feature',
+      risk: 'high',
+      repositorySizeBucket: 'large',
+      languageMix: ['TypeScript'],
+      signals: ['database', 'auth'],
+    });
+    const similar = normalizeTaskClass({
+      taskType: 'feature',
+      risk: 'high',
+      repositorySizeBucket: 'large',
+      languageMix: ['typescript'],
+      signals: ['auth', 'database'],
+    });
+    const cosmetic = normalizeTaskClass({
+      taskType: 'cosmetic',
+      risk: 'low',
+      repositorySizeBucket: 'small',
+      languageMix: ['css'],
+      signals: ['ui'],
+    });
+    expect(taskClassCompatibility(feature, similar)).toMatchObject({
+      compatible: true,
+      score: 1,
+    });
+    expect(taskClassCompatibility(feature, cosmetic)).toMatchObject({
+      compatible: false,
+    });
+    expect(
+      normalizeTaskClass({
+        taskType: 'feature',
+        risk: 'medium',
+        repositorySizeBucket: 'medium',
+        languageMix: [],
+        signals: [],
+      }),
+    ).toMatchObject({ confidence: 0.6, unknownDimensions: ['languageMix', 'signals'] });
   });
 });

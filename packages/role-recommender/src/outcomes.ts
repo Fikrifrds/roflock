@@ -101,3 +101,82 @@ export function verifyOutcomeObservation(value: SealedOutcomeObservation): boole
     sha256Canonical(OutcomeObservationSchema.parse(observation))
   );
 }
+
+export interface NormalizedTaskClass {
+  normalizerVersion: '1.0.0';
+  key: string;
+  dimensions: {
+    taskType: string;
+    risk: OutcomeObservation['taskClass']['risk'];
+    repositorySizeBucket: OutcomeObservation['taskClass']['repositorySizeBucket'];
+    languageMix: string[];
+    signals: string[];
+  };
+  confidence: number;
+  unknownDimensions: string[];
+}
+
+export function normalizeTaskClass(
+  input: OutcomeObservation['taskClass'],
+): NormalizedTaskClass {
+  const dimensions = {
+    taskType: input.taskType.trim().toLowerCase(),
+    risk: input.risk,
+    repositorySizeBucket: input.repositorySizeBucket,
+    languageMix: [...new Set(input.languageMix.map(normalizeLabel))].sort(),
+    signals: [...new Set(input.signals.map(normalizeLabel))].sort(),
+  };
+  const unknownDimensions: string[] = [];
+  if (dimensions.languageMix.length === 0) unknownDimensions.push('languageMix');
+  if (dimensions.signals.length === 0) unknownDimensions.push('signals');
+  const confidence = (5 - unknownDimensions.length) / 5;
+  return {
+    normalizerVersion: '1.0.0',
+    key: sha256Canonical(dimensions),
+    dimensions,
+    confidence,
+    unknownDimensions,
+  };
+}
+
+export function taskClassCompatibility(
+  left: NormalizedTaskClass,
+  right: NormalizedTaskClass,
+): { compatible: boolean; score: number; reasons: string[] } {
+  const reasons: string[] = [];
+  if (left.dimensions.taskType !== right.dimensions.taskType) reasons.push('task_type');
+  if (left.dimensions.risk !== right.dimensions.risk) reasons.push('risk');
+  if (left.dimensions.repositorySizeBucket !== right.dimensions.repositorySizeBucket) {
+    reasons.push('repository_size');
+  }
+  const languageScore = jaccard(
+    left.dimensions.languageMix,
+    right.dimensions.languageMix,
+  );
+  const signalScore = jaccard(left.dimensions.signals, right.dimensions.signals);
+  if (languageScore < 0.5) reasons.push('language_mix');
+  if (signalScore < 0.5) reasons.push('domain_signals');
+  const exactScore = 1 - Math.min(3, reasons.filter((reason) =>
+    ['task_type', 'risk', 'repository_size'].includes(reason),
+  ).length) / 3;
+  const score = Number(
+    (exactScore * 0.6 + languageScore * 0.2 + signalScore * 0.2).toFixed(6),
+  );
+  return {
+    compatible: reasons.length === 0 && Math.min(left.confidence, right.confidence) >= 0.8,
+    score,
+    reasons,
+  };
+}
+
+function normalizeLabel(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9.+#_-]+/g, '_');
+}
+
+function jaccard(left: readonly string[], right: readonly string[]): number {
+  if (left.length === 0 || right.length === 0) return 0;
+  const a = new Set(left);
+  const b = new Set(right);
+  const intersection = [...a].filter((value) => b.has(value)).length;
+  return intersection / new Set([...a, ...b]).size;
+}

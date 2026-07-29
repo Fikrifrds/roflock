@@ -4,7 +4,10 @@ import {
   TaskRepository,
   type SqliteDb,
 } from '@roleflock/database';
-import type { SealedOutcomeObservation } from '@roleflock/role-recommender';
+import {
+  normalizeTaskClass,
+  type SealedOutcomeObservation,
+} from '@roleflock/role-recommender';
 
 export function registerOutcomeObservationRoutes(
   app: FastifyInstance,
@@ -21,7 +24,12 @@ export function registerOutcomeObservationRoutes(
       return reply.code(409).send({ code: 'OUTCOME_TASK_MISMATCH' });
     }
     try {
-      return observations.ingest(observation);
+      const result = observations.ingest(observation);
+      const classification = normalizeTaskClass(observation.taskClass);
+      if (result.status === 'accepted') {
+        observations.classify(observation.observationId, classification);
+      }
+      return { ...result, classification };
     } catch (error) {
       return reply.code(400).send({
         code: 'OUTCOME_OBSERVATION_INVALID',

@@ -1,4 +1,5 @@
 import {
+  type NormalizedTaskClass,
   verifyOutcomeObservation,
   type SealedOutcomeObservation,
 } from '@roleflock/role-recommender';
@@ -61,6 +62,44 @@ export class OutcomeObservationRepository {
            WHERE task_id = ? ORDER BY observed_at ASC`,
         )
         .all(taskId) as Array<{ observation_json: string }>
+    ).map((row) => JSON.parse(row.observation_json) as SealedOutcomeObservation);
+  }
+
+  classify(
+    observationId: string,
+    classification: NormalizedTaskClass,
+    createdAt = new Date().toISOString(),
+  ): NormalizedTaskClass {
+    if (!this.get(observationId)) throw new Error(`Outcome observation not found: ${observationId}`);
+    this.db
+      .prepare(
+        `INSERT INTO outcome_task_classes (
+           observation_id, normalizer_version, class_key, confidence,
+           classification_json, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        observationId,
+        classification.normalizerVersion,
+        classification.key,
+        classification.confidence,
+        JSON.stringify(classification),
+        createdAt,
+      );
+    return classification;
+  }
+
+  listCohort(classKey: string, minimumConfidence = 0.8): SealedOutcomeObservation[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT o.observation_json
+           FROM outcome_observations o
+           JOIN outcome_task_classes c ON c.observation_id = o.observation_id
+           WHERE c.class_key = ? AND c.confidence >= ? AND o.excluded = 0
+           ORDER BY o.observed_at ASC`,
+        )
+        .all(classKey, minimumConfidence) as Array<{ observation_json: string }>
     ).map((row) => JSON.parse(row.observation_json) as SealedOutcomeObservation);
   }
 }
