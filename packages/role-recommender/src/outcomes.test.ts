@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   normalizeTaskClass,
+  postMergeFailurePenalty,
+  sealPostMergeOutcome,
   sealOutcomeObservation,
   taskClassCompatibility,
   verifyOutcomeObservation,
@@ -91,5 +93,25 @@ describe('outcome observations', () => {
         signals: [],
       }),
     ).toMatchObject({ confidence: 0.6, unknownDimensions: ['languageMix', 'signals'] });
+  });
+
+  it('records rollback and escaped-defect feedback without rewriting the observation', () => {
+    const escaped = sealPostMergeOutcome({
+      schemaVersion: 1,
+      postMergeOutcomeId: 'post_merge_1',
+      observationId: 'observation_1',
+      taskId: 'task_1',
+      passportId: 'passport_1',
+      resultCommit: '3'.repeat(40),
+      outcomeType: 'escaped_defect',
+      severity: 'high',
+      reportDigest: '5'.repeat(64),
+      reportedBy: 'actor_1',
+      detectedAt: '2026-07-29T12:00:00.000Z',
+    });
+    expect(postMergeFailurePenalty([escaped])).toMatchObject({
+      penalty: 0.5,
+      failures: 1,
+    });
   });
 });

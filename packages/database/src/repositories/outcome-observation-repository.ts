@@ -1,8 +1,11 @@
 import {
   type NormalizedTaskClass,
+  PostMergeOutcomeSchema,
+  type SealedPostMergeOutcome,
   verifyOutcomeObservation,
   type SealedOutcomeObservation,
 } from '@roleflock/role-recommender';
+import { sha256Canonical } from '@roleflock/contracts';
 import type { SqliteDb } from '../client.js';
 
 export class OutcomeObservationRepository {
@@ -101,5 +104,54 @@ export class OutcomeObservationRepository {
         )
         .all(classKey, minimumConfidence) as Array<{ observation_json: string }>
     ).map((row) => JSON.parse(row.observation_json) as SealedOutcomeObservation);
+  }
+
+  ingestPostMerge(
+    value: SealedPostMergeOutcome,
+    createdAt = new Date().toISOString(),
+  ): SealedPostMergeOutcome {
+    const { outcomeDigest, digestAlgorithm: _algorithm, ...raw } = value;
+    const outcome = PostMergeOutcomeSchema.parse(raw);
+    if (outcomeDigest !== sha256Canonical(outcome)) {
+      throw new Error('Post-merge outcome digest is invalid');
+    }
+    const observation = this.get(outcome.observationId);
+    if (!observation || observation.taskId !== outcome.taskId) {
+      throw new Error('Post-merge outcome does not match an observed task');
+    }
+    if (observation.authority.resultCommit !== outcome.resultCommit) {
+      throw new Error('Post-merge outcome commit does not match the observation result commit');
+    }
+    this.db
+      .prepare(
+        `INSERT INTO post_merge_outcomes (
+           post_merge_outcome_id, observation_id, task_id, result_commit,
+           outcome_type, severity, outcome_digest, outcome_json, detected_at, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        outcome.postMergeOutcomeId,
+        outcome.observationId,
+        outcome.taskId,
+        outcome.resultCommit,
+        outcome.outcomeType,
+        outcome.severity,
+        outcomeDigest,
+        JSON.stringify(value),
+        outcome.detectedAt,
+        createdAt,
+      );
+    return value;
+  }
+
+  listPostMerge(observationId: string): SealedPostMergeOutcome[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT outcome_json FROM post_merge_outcomes
+           WHERE observation_id = ? ORDER BY detected_at ASC`,
+        )
+        .all(observationId) as Array<{ outcome_json: string }>
+    ).map((row) => JSON.parse(row.outcome_json) as SealedPostMergeOutcome);
   }
 }

@@ -3,6 +3,8 @@ import { OutcomeObservationRepository, TaskRepository, type SqliteDb } from '@ro
 import {
   calculateRolePerformance,
   normalizeTaskClass,
+  postMergeFailurePenalty,
+  type SealedPostMergeOutcome,
   type SealedOutcomeObservation,
 } from '@roleflock/role-recommender';
 
@@ -60,6 +62,9 @@ export function registerOutcomeObservationRoutes(
           (!query.providerId || observation.roleAssignment.providerId === query.providerId) &&
           (!query.modelId || observation.roleAssignment.modelId === query.modelId),
       );
+    const postMerge = cohort.flatMap((observation) =>
+      observations.listPostMerge(observation.observationId),
+    );
     return {
       filters: {
         classKey: query.classKey,
@@ -68,6 +73,28 @@ export function registerOutcomeObservationRoutes(
         modelId: query.modelId,
       },
       analytics: calculateRolePerformance(cohort),
+      postMerge: postMergeFailurePenalty(postMerge),
     };
+  });
+
+  app.post('/api/outcome-observations/:observationId/post-merge', async (request, reply) => {
+    const observationId = (request.params as { observationId: string }).observationId;
+    const outcome = request.body as SealedPostMergeOutcome;
+    if (outcome.observationId !== observationId) {
+      return reply.code(409).send({ code: 'POST_MERGE_OBSERVATION_MISMATCH' });
+    }
+    try {
+      return observations.ingestPostMerge(outcome);
+    } catch (error) {
+      return reply.code(400).send({
+        code: 'POST_MERGE_OUTCOME_INVALID',
+        error: error instanceof Error ? error.message : 'Invalid post-merge outcome',
+      });
+    }
+  });
+
+  app.get('/api/outcome-observations/:observationId/post-merge', async (request) => {
+    const observationId = (request.params as { observationId: string }).observationId;
+    return observations.listPostMerge(observationId);
   });
 }

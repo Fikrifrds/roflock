@@ -169,6 +169,74 @@ export function taskClassCompatibility(
   };
 }
 
+export const PostMergeOutcomeSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    postMergeOutcomeId: Id,
+    observationId: Id,
+    taskId: Id,
+    passportId: Id.optional(),
+    resultCommit: Commit,
+    outcomeType: z.enum(['healthy', 'rollback', 'escaped_defect']),
+    severity: z.enum(['none', 'low', 'medium', 'high', 'critical']),
+    reportDigest: Digest,
+    sourceReferenceDigest: Digest.optional(),
+    reportedBy: Id,
+    detectedAt: Timestamp,
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.outcomeType === 'healthy' && value.severity !== 'none') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['severity'],
+        message: 'Healthy outcomes must have severity none',
+      });
+    }
+    if (value.outcomeType !== 'healthy' && value.severity === 'none') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['severity'],
+        message: 'Rollback and escaped defects require a non-none severity',
+      });
+    }
+  });
+export type PostMergeOutcome = z.infer<typeof PostMergeOutcomeSchema>;
+
+export interface SealedPostMergeOutcome extends PostMergeOutcome {
+  digestAlgorithm: 'sha256';
+  outcomeDigest: string;
+}
+
+export function sealPostMergeOutcome(input: PostMergeOutcome): SealedPostMergeOutcome {
+  const outcome = PostMergeOutcomeSchema.parse(input);
+  return {
+    ...outcome,
+    digestAlgorithm: 'sha256',
+    outcomeDigest: sha256Canonical(outcome),
+  };
+}
+
+export function postMergeFailurePenalty(
+  outcomes: readonly PostMergeOutcome[],
+): { penalty: number; failures: number; reason: string } {
+  const weights = { none: 0, low: 0.1, medium: 0.25, high: 0.5, critical: 1 };
+  const failures = outcomes.filter((outcome) => outcome.outcomeType !== 'healthy');
+  const penalty = Math.min(
+    1,
+    failures.reduce((total, outcome) => total + weights[outcome.severity], 0) /
+      Math.max(1, outcomes.length),
+  );
+  return {
+    penalty: Number(penalty.toFixed(6)),
+    failures: failures.length,
+    reason:
+      failures.length > 0
+        ? `${failures.length} rollback or escaped-defect event(s) observed post-merge.`
+        : 'No rollback or escaped defect has been reported.',
+  };
+}
+
 function normalizeLabel(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9.+#_-]+/g, '_');
 }
