@@ -270,3 +270,4 @@ export * from './verifier-worktree.js';
 export * from './deterministic-runner.js';
 export * from './mutation-detector.js';
 export * from './attestation.js';
+export * from './criterion-verdict.js';

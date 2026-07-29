@@ -229,6 +229,48 @@ export type ExecutionPlanResponse = {
   }>;
 };
 
+export type VerificationResultResponse = {
+  decision: {
+    id: string;
+    taskId: string;
+    subject: {
+      resultCommit: string;
+      contractHash: string;
+      planHash: string;
+      verificationSpecificationHash: string;
+    };
+    verdicts: Array<{
+      criterionId: string;
+      outcome: 'pass' | 'fail' | 'insufficient_evidence' | 'not_applicable';
+      evidenceRefs: string[];
+      findingIds: string[];
+      explanation: string;
+    }>;
+    findings: Array<{
+      id: string;
+      criterionIds: string[];
+      type: string;
+      summary: string;
+      evidenceRefs: string[];
+      routedTo: 'planner';
+    }>;
+    ignoredExecutorClaimIds: string[];
+    overallOutcome: 'pass' | 'fail' | 'insufficient_evidence';
+    createdAt: string;
+    hash: string;
+  };
+  attestations: Array<{
+    id: string;
+    checkId: string;
+    outcome: 'pass' | 'fail' | 'error' | 'timeout' | 'unknown';
+    runnerIdentity: {
+      runnerId: string;
+      trustLevel: 'clean_local_runner' | 'organisation_trusted_runner';
+    };
+    hash: string;
+  }>;
+};
+
 export type TaskHandoff = {
   manifest: {
     schemaVersion: 1;

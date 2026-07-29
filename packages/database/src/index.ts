@@ -71,6 +71,8 @@ export {
 } from './repositories/execution-plan-repository.js';
 export type { ExecutionPlanAggregate } from './repositories/execution-plan-repository.js';
 export { VerificationSpecificationRepository } from './repositories/verification-specification-repository.js';
+export { VerificationResultRepository } from './repositories/verification-result-repository.js';
+export type { StoredVerificationResult } from './repositories/verification-result-repository.js';
 export type {
   ChangeContractAggregate,
   StoredChangeContractVersion,

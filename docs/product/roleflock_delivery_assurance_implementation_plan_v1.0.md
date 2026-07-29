@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M4.5 complete; M4.6 is next
+**Execution progress:** M0 through M4 complete; M5.1 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1674,7 +1674,7 @@ later ticket merely to make the product appear complete sooner.
 | M4.3 ✅ | Restricted deterministic verifier runner            | M4.2            | Exact argv and credential isolation tests pass            |
 | M4.4 ✅ | Test-mutation and command-drift detection           | M4.3            | Weakened tests/scripts are detected                       |
 | M4.5 ✅ | Verification attestation schema/capture             | M4.3            | Attestation binds all required digests                    |
-| M4.6    | Criterion verdict UI and adversarial suite          | M4.4–M4.5       | False writer PASS cannot satisfy criterion                |
+| M4.6 ✅ | Criterion verdict UI and adversarial suite          | M4.4–M4.5       | False writer PASS cannot satisfy criterion                |
 | M5.1    | Change Passport schema and compatibility policy     | M0.5, M4.5      | Golden fixtures validate                                  |
 | M5.2    | Local runner identity and keychain signing          | M5.1            | Key never persists in plaintext DB                        |
 | M5.3    | Passport issue/verify/revoke service                | M5.2            | Tamper, mismatch, and revocation tests pass               |
