@@ -98,6 +98,11 @@ export type {
 } from './repositories/github-integration-repository.js';
 export { GitHubAuthorityLinkRepository } from './repositories/github-authority-link-repository.js';
 export type { GitHubAuthorityLink } from './repositories/github-authority-link-repository.js';
+export { GitHubStatusCheckRepository } from './repositories/github-status-check-repository.js';
+export type {
+  CommitStatusDecision,
+  GitHubStatusCheck,
+} from './repositories/github-status-check-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,

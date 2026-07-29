@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { openDatabase, migrate, type SqliteDb } from './client.js';
 import { GitHubIntegrationRepository } from './repositories/github-integration-repository.js';
 import { GitHubAuthorityLinkRepository } from './repositories/github-authority-link-repository.js';
+import { GitHubStatusCheckRepository } from './repositories/github-status-check-repository.js';
 
 let db: SqliteDb | undefined;
 afterEach(() => db?.close());
@@ -77,6 +78,26 @@ describe('GitHub identity and repository mapping', () => {
     expect(() =>
       db!.prepare(`UPDATE github_authority_links SET subject_number = 43`).run(),
     ).toThrow(/immutable/);
+    const checks = new GitHubStatusCheckRepository(db);
+    checks.create({
+      id: 'status_1',
+      githubRepositoryMappingId: 'github_repository_1',
+      taskId: 'task_1',
+      commitSha: 'a'.repeat(40),
+      passportId: 'passport_1',
+      passportPayloadDigest: '2'.repeat(64),
+      conclusion: 'success',
+      summary: 'PASS',
+      createdAt: at,
+    });
+    expect(checks.evaluateCommit('github_repository_1', 'a'.repeat(40))).toMatchObject({
+      state: 'current',
+      check: { conclusion: 'success' },
+    });
+    expect(checks.evaluateCommit('github_repository_1', 'b'.repeat(40))).toMatchObject({
+      state: 'missing',
+      invalidatedCheck: { id: 'status_1', commitSha: 'a'.repeat(40) },
+    });
   });
 });
 

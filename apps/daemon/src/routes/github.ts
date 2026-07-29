@@ -2,10 +2,13 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import {
   AuditRepository,
+  ChangePassportRepository,
   ChangeContractRepository,
   GitHubAuthorityLinkRepository,
   GitHubIntegrationRepository,
+  GitHubStatusCheckRepository,
   ProjectRepository,
+  TaskRepository,
   type SqliteDb,
 } from '@roleflock/database';
 
@@ -15,6 +18,9 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb): void {
   const audit = new AuditRepository(db);
   const links = new GitHubAuthorityLinkRepository(db);
   const contracts = new ChangeContractRepository(db);
+  const passports = new ChangePassportRepository(db);
+  const statusChecks = new GitHubStatusCheckRepository(db);
+  const tasks = new TaskRepository(db);
 
   app.post('/api/integrations/github/installations', async (request) => {
     const body = request.body as Record<string, unknown>;
@@ -131,6 +137,50 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb): void {
   app.get('/api/tasks/:taskId/github-links', async (request) => {
     const taskId = (request.params as { taskId: string }).taskId;
     return links.listByTask(taskId);
+  });
+
+  app.post('/api/tasks/:taskId/github-status-check', async (request, reply) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    const task = tasks.get(taskId);
+    if (!task) return reply.code(404).send({ code: 'TASK_NOT_FOUND' });
+    const repository = github.getRepositoryByProject(task.projectId);
+    if (!repository) return reply.code(409).send({ code: 'GITHUB_REPOSITORY_NOT_MAPPED' });
+    const body = request.body as Record<string, unknown>;
+    const commitSha = required(body.commitSha, 'commitSha');
+    if (!/^[a-f0-9]{40,64}$/.test(commitSha)) throw new Error('commitSha is invalid');
+    const passport = passports.getLatestByTask(taskId);
+    const valid =
+      passport?.verdict === 'pass' &&
+      passport.resultCommit === commitSha &&
+      passports.getRevocation(passport.passportId) === undefined;
+    const timestamp = new Date().toISOString();
+    const check = statusChecks.create({
+      id: `github_status_${randomUUID()}`,
+      githubRepositoryMappingId: repository.id,
+      taskId,
+      commitSha,
+      checkRunId: optional(body.checkRunId),
+      passportId: passport?.passportId,
+      passportPayloadDigest: passport?.payloadDigest,
+      conclusion: valid ? 'success' : 'failure',
+      summary: valid
+        ? 'RoleFlock PASS is bound to this exact commit.'
+        : passport
+          ? 'RoleFlock passport is missing, revoked, failing, or bound to another commit.'
+          : 'No RoleFlock Change Passport exists for this task.',
+      detailsUrl: optional(body.detailsUrl),
+      createdAt: timestamp,
+    });
+    record(audit, 'github.status_check_created', check.id, check, timestamp);
+    return check;
+  });
+
+  app.get('/api/projects/:projectId/github-status', async (request, reply) => {
+    const projectId = (request.params as { projectId: string }).projectId;
+    const repository = github.getRepositoryByProject(projectId);
+    if (!repository) return reply.code(404).send({ code: 'GITHUB_REPOSITORY_NOT_MAPPED' });
+    const commit = required((request.query as { commit?: string }).commit, 'commit');
+    return statusChecks.evaluateCommit(repository.id, commit);
   });
 }
 
