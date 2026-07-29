@@ -12,6 +12,7 @@ import {
 import {
   adaptClaudeCodeHook,
   adaptCodexHook,
+  adaptCursorStream,
   ClaudeCodeHookInputSchema,
   CodexHookInputSchema,
   NormalizedAgentEventSchema,
@@ -197,6 +198,64 @@ export function registerAgentEventRoutes(app: FastifyInstance, db: SqliteDb): vo
     }
   });
 
+  app.post('/api/tasks/:taskId/agent-streams/cursor', async (request, reply) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    if (!tasks.get(taskId)) return reply.code(404).send({ code: 'TASK_NOT_FOUND' });
+    try {
+      if (typeof request.body !== 'string') {
+        throw new Error('Cursor ingestion requires an application/x-ndjson body');
+      }
+      const actorId = requiredHeader(
+        request.headers['x-roleflock-actor-id'],
+        'x-roleflock-actor-id',
+      );
+      const installationId = requiredHeader(
+        request.headers['x-roleflock-installation-id'],
+        'x-roleflock-installation-id',
+      );
+      const nativeSessionId = cursorSessionId(request.body);
+      const prior = events
+        .listSessionsByTask(taskId)
+        .find(
+          (session) =>
+            session.agentFamily === 'cursor' &&
+            session.nativeSessionId === nativeSessionId &&
+            session.installationId === installationId,
+        );
+      const worktree = new WorktreeRepository(db).getByTask(taskId);
+      if (!worktree) throw new Error(`Task worktree is unavailable: ${taskId}`);
+      const timestamp = new Date().toISOString();
+      const batch = adaptCursorStream(request.body, {
+        binding: currentAgentEventBinding(db, taskId, actorId),
+        workspacePath: worktree.path,
+        declaredRole:
+          optionalHeader(request.headers['x-roleflock-declared-role']) ?? 'executor',
+        installationId,
+        firstSequence: prior ? prior.lastSequence + 1 : 0,
+        previousEventHash: prior?.lastEventHash,
+        receivedAt: timestamp,
+      });
+      for (const event of batch) assertAgentEventCorrelation(db, taskId, event);
+      const results = events.ingestBatch(batch);
+      audit.append({
+        id: randomUUID(),
+        actor: actorId,
+        action: 'external_agent.cursor_stream_ingested',
+        targetType: 'task',
+        targetId: taskId,
+        details: {
+          nativeSessionId,
+          eventHashes: batch.map((event) => event.eventHash),
+          accepted: results.filter((result) => result.status === 'accepted').length,
+        },
+        createdAt: timestamp,
+      });
+      return { accepted: results.length, results };
+    } catch (error) {
+      return ingestError(reply, error);
+    }
+  });
+
   app.get('/api/tasks/:taskId/agent-sessions', async (request, reply) => {
     const taskId = (request.params as { taskId: string }).taskId;
     if (!tasks.get(taskId)) return reply.code(404).send({ code: 'TASK_NOT_FOUND' });
@@ -219,6 +278,15 @@ function requiredHeader(value: string | string[] | undefined, name: string): str
 
 function optionalHeader(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function cursorSessionId(input: string): string {
+  for (const line of input.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const value = JSON.parse(line) as { session_id?: unknown };
+    if (typeof value.session_id === 'string' && value.session_id) return value.session_id;
+  }
+  throw new Error('Cursor stream does not contain a session_id');
 }
 
 function parseBatch(body: unknown): NormalizedAgentEvent[] {

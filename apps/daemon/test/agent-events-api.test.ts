@@ -154,6 +154,46 @@ describe('generic external agent event API', () => {
         binding: { taskId: task.id, worktreeId: 'worktree_agent_events' },
       },
     });
+    const cursorStream = [
+      {
+        type: 'system',
+        subtype: 'init',
+        cwd: repositoryDir,
+        session_id: 'cursor_session_1',
+        model: 'Claude 4 Sonnet',
+        permissionMode: 'default',
+      },
+      {
+        type: 'result',
+        subtype: 'success',
+        result: 'done',
+        session_id: 'cursor_session_1',
+        request_id: 'cursor_request_1',
+      },
+    ];
+    const cursorResponse = await server.app.inject({
+      method: 'POST',
+      url: `/api/tasks/${task.id}/agent-streams/cursor`,
+      headers: {
+        ...headers,
+        'content-type': 'application/x-ndjson',
+        'x-roleflock-actor-id': 'cursor_actor_1',
+        'x-roleflock-installation-id': 'cursor_installation_1',
+      },
+      payload: `${cursorStream.map((event) => JSON.stringify(event)).join('\n')}\n`,
+    });
+    expect(cursorResponse.statusCode).toBe(200);
+    const cursorResult = cursorResponse.json() as {
+      accepted: number;
+      results: Array<Record<string, unknown>>;
+    };
+    expect(cursorResult.accepted).toBe(2);
+    expect(cursorResult.results[0]).toMatchObject({
+      event: {
+        source: { agentFamily: 'cursor', nativeSessionId: 'cursor_session_1' },
+        binding: { taskId: task.id },
+      },
+    });
     const started = sealAgentEvent(sourceEvent(binding, 0));
     const accepted = await server.app.inject({
       method: 'POST',
