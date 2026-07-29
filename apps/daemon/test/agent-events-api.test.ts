@@ -102,6 +102,32 @@ describe('generic external agent event API', () => {
       ...bindingFields,
       actorId: 'external_actor_1',
     };
+    const codexHook = await server.app.inject({
+      method: 'POST',
+      url: `/api/tasks/${task.id}/agent-hooks/codex`,
+      headers: {
+        ...headers,
+        'x-roleflock-actor-id': 'codex_actor_1',
+        'x-roleflock-installation-id': 'codex_installation_1',
+        'x-roleflock-declared-role': 'executor',
+      },
+      payload: {
+        session_id: 'thr_123',
+        cwd: repositoryDir,
+        hook_event_name: 'SessionStart',
+        model: 'gpt-5.6-sol',
+        permission_mode: 'default',
+        source: 'startup',
+      },
+    });
+    expect(codexHook.statusCode).toBe(200);
+    expect(codexHook.json()).toMatchObject({
+      status: 'accepted',
+      event: {
+        source: { agentFamily: 'codex', nativeSessionId: 'thr_123' },
+        binding: { taskId: task.id, worktreeId: 'worktree_agent_events' },
+      },
+    });
     const started = sealAgentEvent(sourceEvent(binding, 0));
     const accepted = await server.app.inject({
       method: 'POST',

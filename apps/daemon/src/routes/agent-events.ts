@@ -6,9 +6,12 @@ import {
   AuditRepository,
   ExternalAgentEventRepository,
   TaskRepository,
+  WorktreeRepository,
   type SqliteDb,
 } from '@roleflock/database';
 import {
+  adaptCodexHook,
+  CodexHookInputSchema,
   NormalizedAgentEventSchema,
   parseAgentEventJsonl,
   type NormalizedAgentEvent,
@@ -78,6 +81,62 @@ export function registerAgentEventRoutes(app: FastifyInstance, db: SqliteDb): vo
     }
   });
 
+  app.post('/api/tasks/:taskId/agent-hooks/codex', async (request, reply) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    if (!tasks.get(taskId)) return reply.code(404).send({ code: 'TASK_NOT_FOUND' });
+    try {
+      const headers = request.headers;
+      const actorId = requiredHeader(headers['x-roleflock-actor-id'], 'x-roleflock-actor-id');
+      const installationId = requiredHeader(
+        headers['x-roleflock-installation-id'],
+        'x-roleflock-installation-id',
+      );
+      const declaredRole =
+        optionalHeader(headers['x-roleflock-declared-role']) ?? 'executor';
+      const input = CodexHookInputSchema.parse(request.body);
+      const prior = events
+        .listSessionsByTask(taskId)
+        .find(
+          (session) =>
+            session.agentFamily === 'codex' &&
+            session.nativeSessionId === input.session_id &&
+            session.installationId === installationId,
+        );
+      const worktree = new WorktreeRepository(db).getByTask(taskId);
+      if (!worktree) throw new Error(`Task worktree is unavailable: ${taskId}`);
+      const timestamp = new Date().toISOString();
+      const event = adaptCodexHook(input, {
+        binding: currentAgentEventBinding(db, taskId, actorId),
+        workspacePath: worktree.path,
+        declaredRole,
+        sequence: prior ? prior.lastSequence + 1 : 0,
+        previousEventHash: prior?.lastEventHash,
+        occurredAt: timestamp,
+        receivedAt: timestamp,
+        installationId,
+      });
+      assertAgentEventCorrelation(db, taskId, event);
+      const result = events.ingest(event);
+      audit.append({
+        id: randomUUID(),
+        actor: actorId,
+        action: 'external_agent.codex_hook_ingested',
+        targetType: 'task',
+        targetId: taskId,
+        details: {
+          hookEventName: input.hook_event_name,
+          nativeSessionId: input.session_id,
+          eventHash: event.eventHash,
+          status: result.status,
+        },
+        createdAt: timestamp,
+      });
+      return result;
+    } catch (error) {
+      return ingestError(reply, error);
+    }
+  });
+
   app.get('/api/tasks/:taskId/agent-sessions', async (request, reply) => {
     const taskId = (request.params as { taskId: string }).taskId;
     if (!tasks.get(taskId)) return reply.code(404).send({ code: 'TASK_NOT_FOUND' });
@@ -90,6 +149,16 @@ export function registerAgentEventRoutes(app: FastifyInstance, db: SqliteDb): vo
     if (!session) return reply.code(404).send({ code: 'AGENT_SESSION_NOT_FOUND' });
     return events.listEvents(sessionId);
   });
+}
+
+function requiredHeader(value: string | string[] | undefined, name: string): string {
+  const resolved = optionalHeader(value);
+  if (!resolved) throw new Error(`${name} header is required`);
+  return resolved;
+}
+
+function optionalHeader(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function parseBatch(body: unknown): NormalizedAgentEvent[] {
