@@ -116,7 +116,7 @@ export function registerApi(
   registerExecutionPlanRoutes(app, db, bus);
   registerVerificationSpecificationRoutes(app, db, bus);
   registerVerificationResultRoutes(app, db);
-  registerChangePassportRoutes(app, db);
+  registerChangePassportRoutes(app, db, dataDir);
   registerRoleRecommendationRoutes(app, db, providers, orchestrator.router);
   registerAgentEventRoutes(app, db);
   registerGitHubRoutes(app, db, bus);
@@ -1068,7 +1068,8 @@ export function registerApi(
     app.post(`/api/tasks/:id/${action}`, async (request, reply) => {
       const task = tasks.get((request.params as { id: string }).id);
       if (!task) return reply.code(404).send({ error: 'Task not found' });
-      orchestrator.resolveAcceptance(task.id, action === 'accept' ? 'accepted' : 'rejected');
+      // Awaited so the passport exists before the client refetches the task.
+      await orchestrator.resolveAcceptance(task.id, action === 'accept' ? 'accepted' : 'rejected');
       return { accepted: true };
     });
   }

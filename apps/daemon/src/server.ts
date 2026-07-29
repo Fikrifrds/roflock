@@ -110,7 +110,17 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
   }
   const documents = new DocumentService(db, join(dataDir, 'documents'));
   const reviewApps = new ReviewAppService();
-  const orchestrator = new Orchestrator(db, bus, join(dataDir, 'worktrees'), providers, documents);
+  // Passport signing keys live in their own encrypted store, never beside
+  // provider credentials and never in SQLite.
+  const signingSecrets = new LocalSecretStore(dataDir, 'runner-signing');
+  const orchestrator = new Orchestrator(
+    db,
+    bus,
+    join(dataDir, 'worktrees'),
+    providers,
+    documents,
+    signingSecrets,
+  );
   registerApi(
     app,
     db,

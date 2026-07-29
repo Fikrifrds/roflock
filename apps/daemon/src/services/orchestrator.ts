@@ -32,17 +32,21 @@ import {
   ApprovalGrantRepository,
   AuditRepository,
   ChangeContractRepository,
+  ChangePassportRepository,
   ConfirmationRepository,
   ConcurrencyPolicyRepository,
   ControlCommandRepository,
   EvidenceRepository,
   EventStore,
+  ExecutionPlanRepository,
   InvocationRepository,
   LeaseRepository,
   LocalKnowledgeRepository,
   ProcessHandleRepository,
+  RunnerIdentityRepository,
   TaskRepository,
   UsageRepository,
+  VerificationResultRepository,
   VerificationSpecificationRepository,
   WorktreeRepository,
   type SqliteDb,
@@ -72,13 +76,23 @@ import { CursorWriterAdapter, assertChangedPathsAllowed } from '@roleflock/provi
 import { budgetStatus, estimateInvocationCost } from '@roleflock/usage-ledger';
 import {
   freezeVerificationSpecification,
+  type VerificationDecision,
   type VerificationSpecification,
 } from '@roleflock/verification-runner';
+import type { SecretStore } from '@roleflock/secret-store';
 import { EventBus } from './event-bus.js';
+import { issueTaskChangePassport } from './change-passport-issuance.js';
 import { authoritativeConflictMessage, type DocumentService } from './documents.js';
+import { runIndependentVerification } from './independent-verification.js';
 import { applyModelPatch, buildPatchWriterContext } from './model-patch.js';
 import { loadPriceCards } from './pricing.js';
 import { ProviderRegistry } from './provider-registry.js';
+import {
+  describeSealedCommit,
+  sealResultCommit,
+  resolveRepositoryRoot,
+  type SealedResultCommit,
+} from './result-commit.js';
 import { RoleRouter, type RoleRoute, type RoutedRole } from './role-routing.js';
 import { discoverVerificationCommand } from './verification-command.js';
 
@@ -276,12 +290,31 @@ export class Orchestrator {
   private readonly confirmations: ConfirmationRepository;
   private readonly concurrency: ConcurrencyPolicyRepository;
   private readonly changeContracts: ChangeContractRepository;
+  private readonly executionPlans: ExecutionPlanRepository;
+  private readonly verificationResults: VerificationResultRepository;
+  private readonly passports: ChangePassportRepository;
+  private readonly runnerIdentities: RunnerIdentityRepository;
   private readonly invocations: InvocationRepository;
   private readonly leases: LeaseRepository;
   private readonly processHandles: ProcessHandleRepository;
   private readonly worktreeBaseDir: string;
   private readonly providers?: ProviderRegistry;
   private readonly documents?: DocumentService;
+  /** Holds the passport signing key. Absent in tests that never issue one. */
+  private readonly signingSecrets?: SecretStore;
+  /**
+   * The independent verification a run produced, keyed by task, so acceptance
+   * can bind a passport to the exact commit that was verified.
+   */
+  private readonly verificationRuns = new Map<
+    string,
+    {
+      sealed: SealedResultCommit;
+      decision: VerificationDecision;
+      networkEnforcement: 'enforced' | 'unenforced';
+      isolationProvider: string;
+    }
+  >();
   private readonly forceFake: boolean;
   private readonly documentConflictResolved = new Set<string>();
   readonly router: RoleRouter;
@@ -292,6 +325,7 @@ export class Orchestrator {
     worktreeBaseDir: string,
     providers?: ProviderRegistry,
     documents?: DocumentService,
+    signingSecrets?: SecretStore,
   ) {
     this.tasks = new TaskRepository(db);
     this.executions = new ActiveExecutionRepository(db);
@@ -304,12 +338,17 @@ export class Orchestrator {
     this.confirmations = new ConfirmationRepository(db);
     this.concurrency = new ConcurrencyPolicyRepository(db);
     this.changeContracts = new ChangeContractRepository(db);
+    this.executionPlans = new ExecutionPlanRepository(db);
+    this.verificationResults = new VerificationResultRepository(db);
+    this.passports = new ChangePassportRepository(db);
+    this.runnerIdentities = new RunnerIdentityRepository(db);
     this.invocations = new InvocationRepository(db);
     this.leases = new LeaseRepository(db);
     this.processHandles = new ProcessHandleRepository(db);
     this.worktreeBaseDir = worktreeBaseDir;
     this.providers = providers;
     this.documents = documents;
+    this.signingSecrets = signingSecrets;
     this.forceFake = process.env.ROLEFLOCK_FORCE_FAKE === '1';
     // A registry with only the fake provider still gives the router a real
     // preference list to walk, so routing behaves identically in tests.
@@ -429,10 +468,23 @@ export class Orchestrator {
     this.bus.publish('control.commanded', { taskId, commandType });
   }
 
-  resolveAcceptance(taskId: string, decision: 'accepted' | 'rejected'): void {
+  /**
+   * Records the human's acceptance and, when it is an approval, issues the
+   * passport bound to it.
+   *
+   * Issuance lives here rather than in the accept node because the node only
+   * exists while a graph run is alive. A reviewer who decides after a restart
+   * is making the same decision and must get the same artifact.
+   */
+  async resolveAcceptance(taskId: string, decision: 'accepted' | 'rejected'): Promise<void> {
     this.setTaskState(taskId, decision);
     this.acceptanceWaiters.get(taskId)?.resolve(decision);
     this.acceptanceWaiters.delete(taskId);
+    if (decision !== 'accepted') return;
+    await this.issuePassportForAcceptance({
+      taskId,
+      nodeRunId: this.executions.getByTask(taskId)?.nodeRunId ?? `acceptance_${taskId}`,
+    });
   }
 
   resolveConfirmation(id: string, decision: 'approved' | 'rejected'): void {
@@ -463,6 +515,289 @@ export class Orchestrator {
       return undefined;
     }
     return stored.contract;
+  }
+
+  /** The current plan, only when it is approved and bound to the live contract. */
+  private approvedPlan(taskId: string, contract: ChangeContract): ExecutionPlan | undefined {
+    const current = this.executionPlans.getByTask(taskId);
+    if (current === undefined) return undefined;
+    const { plan } = current;
+    return plan.status === 'approved' && plan.contractHash === contract.hash ? plan : undefined;
+  }
+
+  /**
+   * The three artifacts independent verification cannot run without.
+   *
+   * All present means the task carries authorised intent, an approved plan, and
+   * a specification frozen against both — the only state in which a
+   * clean-runner verdict can mean anything. Any missing piece leaves the task
+   * on the unassured path, which the UI labels as such rather than hiding.
+   */
+  private assuranceInputs(taskId: string):
+    | {
+        contract: ChangeContract;
+        plan: ExecutionPlan;
+        specification: Readonly<VerificationSpecification>;
+      }
+    | undefined {
+    const contract = this.currentContract(taskId);
+    if (contract === undefined) return undefined;
+    const plan = this.approvedPlan(taskId, contract);
+    if (plan === undefined) return undefined;
+    const stored = this.verificationSpecifications.getByTask(taskId);
+    if (stored === undefined) return undefined;
+    try {
+      return {
+        contract,
+        plan,
+        specification: freezeVerificationSpecification(stored, contract, plan),
+      };
+    } catch {
+      // A specification that no longer binds to the current contract and plan
+      // is not a usable verification input; the run falls back to the
+      // unassured path rather than verifying against stale intent.
+      return undefined;
+    }
+  }
+
+  /**
+   * Runs the frozen specification against the sealed result commit in a clean
+   * worktree and stores the criterion verdicts.
+   *
+   * Returns `undefined` when the task has no assurance inputs, which leaves the
+   * caller on the legacy executor-side check.
+   */
+  private async runAssuredVerification(input: {
+    task: Task;
+    graphRunId: string;
+    nodeRunId: string;
+    worktreePath: string;
+    baseCommit: string;
+  }): Promise<
+    { sealed: SealedResultCommit; decision: VerificationDecision; passed: boolean } | undefined
+  > {
+    const task = input.task;
+    const inputs = this.assuranceInputs(task.id);
+    if (inputs === undefined) return undefined;
+
+    this.publishLiveProgress(input.nodeRunId, {
+      activity: 'Sealing result commit for independent verification',
+    });
+    const sealed = await sealResultCommit({
+      worktreePath: input.worktreePath,
+      taskId: task.id,
+      baseCommit: input.baseCommit,
+      message: `RoleFlock verification subject for task ${task.id}`,
+    });
+    const repositoryRoot = await resolveRepositoryRoot(input.worktreePath);
+    const identity = await this.ensureRunnerIdentity();
+
+    this.publishLiveProgress(input.nodeRunId, {
+      activity: `Verifying ${sealed.resultCommit.slice(0, 10)} in a clean worktree`,
+      append: `$ verifying ${inputs.specification.checks.length} frozen check(s) against ${sealed.resultCommit.slice(0, 10)}\n`,
+    });
+    this.appendEvent(task.id, 'verification.started', {
+      graphRunId: input.graphRunId,
+      nodeRunId: input.nodeRunId,
+      specificationHash: inputs.specification.hash,
+      resultCommit: sealed.resultCommit,
+    });
+
+    const outcome = await runIndependentVerification({
+      specification: inputs.specification,
+      contract: inputs.contract,
+      plan: inputs.plan,
+      repositoryRoot,
+      repositoryId: task.projectId,
+      verifierBaseDirectory: join(this.worktreeBaseDir, 'verification'),
+      runId: `${task.id}-${input.nodeRunId}`,
+      baseCommit: input.baseCommit,
+      resultCommit: sealed.resultCommit,
+      runnerIdentity: { runnerId: identity.id, trustLevel: 'clean_local_runner' },
+      decisionId: randomUUID(),
+    });
+
+    this.verificationResults.create({
+      decision: outcome.decision,
+      attestations: outcome.attestations,
+    });
+    this.verificationRuns.set(task.id, {
+      sealed,
+      decision: outcome.decision,
+      networkEnforcement: outcome.networkEnforcement,
+      isolationProvider: outcome.isolationProvider,
+    });
+
+    for (const verdict of outcome.decision.verdicts) {
+      if (verdict.outcome === 'pass') continue;
+      this.evidence.addFinding({
+        id: randomUUID(),
+        taskId: task.id,
+        nodeRunId: input.nodeRunId,
+        severity: verdict.outcome === 'fail' ? 'error' : 'warning',
+        summary: `Criterion ${verdict.criterionId}: ${verdict.outcome.replaceAll('_', ' ')}`,
+        details: verdict.explanation,
+        createdAt: now(),
+      });
+    }
+    this.appendEvent(task.id, 'verification.completed', {
+      graphRunId: input.graphRunId,
+      nodeRunId: input.nodeRunId,
+      decisionHash: outcome.decision.hash,
+      outcome: outcome.decision.overallOutcome,
+      resultCommit: sealed.resultCommit,
+    });
+
+    return {
+      sealed,
+      decision: outcome.decision,
+      passed: outcome.decision.overallOutcome === 'pass',
+    };
+  }
+
+  /**
+   * The verified subject for a task, from this run's memory when it is still
+   * warm and from durable evidence when it is not.
+   *
+   * The rebuild path matters because acceptance is a human step: the daemon can
+   * restart between verification and the reviewer's decision, and a passport
+   * that silently goes missing for that reason would punish the reviewer for a
+   * process detail they never saw.
+   */
+  private async verificationSubject(taskId: string): Promise<
+    | {
+        sealed: { resultCommit: string; treeDigest: string; diffDigest: string };
+        decision: VerificationDecision;
+        networkEnforcement: 'enforced' | 'unenforced';
+        isolationProvider: string;
+      }
+    | undefined
+  > {
+    const warm = this.verificationRuns.get(taskId);
+    if (warm) return warm;
+
+    const stored = this.verificationResults.getLatest(taskId);
+    const worktree = this.worktrees.getByTask(taskId);
+    if (stored === undefined || worktree === undefined || !existsSync(worktree.path)) {
+      return undefined;
+    }
+    try {
+      const described = await describeSealedCommit({
+        worktreePath: worktree.path,
+        baseCommit: stored.decision.subject.baseCommit,
+        resultCommit: stored.decision.subject.resultCommit,
+      });
+      return {
+        sealed: {
+          resultCommit: stored.decision.subject.resultCommit,
+          treeDigest: described.treeDigest,
+          diffDigest: described.diffDigest,
+        },
+        decision: stored.decision,
+        // Recovered evidence cannot prove the isolation the original run had,
+        // so it claims none rather than inheriting an unverifiable assumption.
+        networkEnforcement: 'unenforced',
+        isolationProvider: 'roleflock.unenforced_local',
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Issues the signed Change Passport for an accepted task.
+   *
+   * Silent by design when the run has no independent verification behind it:
+   * a passport is a claim that evidence exists, so the absence of evidence must
+   * produce no passport rather than a weaker one.
+   */
+  private async issuePassportForAcceptance(input: {
+    taskId: string;
+    nodeRunId: string;
+  }): Promise<void> {
+    if (this.signingSecrets === undefined) return;
+    const task = this.tasks.get(input.taskId);
+    if (task === undefined) return;
+    const run = await this.verificationSubject(task.id);
+    if (run === undefined) return;
+    const inputs = this.assuranceInputs(task.id);
+    if (inputs === undefined) return;
+
+    try {
+      const passport = await issueTaskChangePassport(
+        {
+          passports: this.passports,
+          identities: this.runnerIdentities,
+          secrets: this.signingSecrets,
+        },
+        {
+          taskId: task.id,
+          repositoryId: task.projectId,
+          contract: inputs.contract,
+          plan: inputs.plan,
+          specification: inputs.specification,
+          decision: run.decision,
+          acceptance: {
+            actorId: 'local-user',
+            decidedAt: now(),
+            nodeRunId: input.nodeRunId,
+          },
+          subject: {
+            baseCommit: run.decision.subject.baseCommit,
+            resultCommit: run.sealed.resultCommit,
+            treeDigest: run.sealed.treeDigest,
+            diffDigest: run.sealed.diffDigest,
+          },
+          events: this.events.list(task.id),
+          networkEnforcement: run.networkEnforcement,
+          isolationProvider: run.isolationProvider,
+          blockingDeviations: this.executionPlans.listDeviations(task.id).map((deviation) => ({
+            id: deviation.id,
+            hash: deviation.hash,
+            status: deviation.status,
+          })),
+          issuedAt: now(),
+        },
+      );
+      this.appendEvent(task.id, 'passport.issued', {
+        passportId: passport.passportId,
+        verdict: passport.verdict,
+        resultCommit: passport.resultCommit,
+      });
+      this.bus.publish('passport.issued', {
+        taskId: task.id,
+        passportId: passport.passportId,
+        verdict: passport.verdict,
+      });
+    } catch (error) {
+      // Issuance refused because some binding drifted. That is a truthful
+      // outcome, not a run failure: the change is accepted, it simply carries
+      // no portable assurance, and the reviewer is told exactly why.
+      this.evidence.addFinding({
+        id: randomUUID(),
+        taskId: task.id,
+        nodeRunId: input.nodeRunId,
+        severity: 'warning',
+        summary: 'No Change Passport was issued for this acceptance',
+        details: error instanceof Error ? error.message : String(error),
+        createdAt: now(),
+      });
+    }
+  }
+
+  private async ensureRunnerIdentity(): Promise<{ id: string }> {
+    const existing = this.runnerIdentities.getActiveLocal();
+    if (existing) return existing;
+    if (this.signingSecrets === undefined) {
+      // Verification still runs and still produces attestations; it simply
+      // names an unsigned local runner until a signing store is configured.
+      return { id: 'local_clean_runner' };
+    }
+    const { LocalRunnerIdentityService } = await import('@roleflock/change-passport');
+    return new LocalRunnerIdentityService(
+      this.runnerIdentities,
+      this.signingSecrets,
+    ).ensureIdentity();
   }
 
   private async prepareRun(
@@ -1324,72 +1659,109 @@ export class Orchestrator {
           this.worktrees.setWriterLease(task.id, null);
         }
       } else if (role === 'test') {
-        const verification = await this.resolveVerification(task, worktreePath);
-        this.publishLiveProgress(nodeRunId, {
-          activity: `Running ${verification.label}`,
-          append: `$ ${verification.command}${verification.args.length ? ` ${verification.args.join(' ')}` : ''}\n`,
-        });
-        // A non-zero exit is a verification result, not an orchestration error:
-        // it must still be recorded as evidence before the node fails.
-        const { passed, exitCode, stdout, stderr, timedOut } = await runCommand({
-          command: verification.command,
-          args: verification.args,
-          cwd: worktreePath,
-          sandboxRoot: worktreePath,
-          timeoutMs: verificationTimeoutMs(),
-          onChunk: (stream, chunk) => {
-            this.publishLiveProgress(nodeRunId, {
-              append: stream === 'stderr' ? chunk : chunk,
-            });
-          },
-        }).then(
-          (result) => ({
-            passed: true,
-            exitCode: result.exitCode ?? 0,
-            stdout: result.stdout,
-            stderr: result.stderr,
-            timedOut: false,
-          }),
-          (error: unknown) => {
-            if (!(error instanceof CommandError)) throw error;
-            return {
-              passed: false,
-              exitCode: error.result.exitCode ?? undefined,
-              stdout: error.result.stdout,
-              stderr: error.result.stderr,
-              timedOut: error.result.timedOut,
-            };
-          },
-        );
-        this.evidence.addTestRun({
-          id: randomUUID(),
-          taskId: task.id,
+        // Assurance path: when the task carries authorised intent, an approved
+        // plan, and a frozen specification, the verdict comes from a clean
+        // runner reading a sealed commit — never from this worktree, which the
+        // writer still owns.
+        const assured = await this.runAssuredVerification({
+          task,
+          graphRunId,
           nodeRunId,
-          command: verification.label,
-          exitCode,
-          stdoutRef: stdout,
-          stderrRef: stderr,
-          passed,
-          createdAt: now(),
+          worktreePath,
+          baseCommit,
         });
-        if (!passed) {
-          // Classified explicitly so the runtime routes this back to the writer
-          // instead of treating it as an unknown orchestration error.
-          throw new NodeFailure(
-            `${
-              timedOut
-                ? `Verification timed out after ${verificationTimeoutMs()} ms`
-                : 'Verification failed'
-            } (${verification.label})${stderr ? `: ${stderr.slice(0, 400)}` : ''}`,
-            'verification_failed',
-            {
-              repairClass: classifyMechanicalFailure(`${verification.label}\n${stderr ?? ''}`),
+        if (assured) {
+          nodeOutput = JSON.stringify({
+            resultCommit: assured.sealed.resultCommit,
+            decisionHash: assured.decision.hash,
+            outcome: assured.decision.overallOutcome,
+          });
+          if (!assured.passed) {
+            const failing = assured.decision.verdicts.filter(
+              (verdict) => verdict.outcome !== 'pass',
+            );
+            throw new NodeFailure(
+              `Independent verification did not pass: ${failing
+                .map((verdict) => `${verdict.criterionId} (${verdict.outcome})`)
+                .join(', ')}`,
+              'verification_failed',
+              {
+                repairClass: classifyMechanicalFailure(
+                  assured.decision.findings.map((finding) => finding.summary).join('\n'),
+                ),
+              },
+            );
+          }
+        } else {
+          const verification = await this.resolveVerification(task, worktreePath);
+          this.publishLiveProgress(nodeRunId, {
+            activity: `Running ${verification.label}`,
+            append: `$ ${verification.command}${verification.args.length ? ` ${verification.args.join(' ')}` : ''}\n`,
+          });
+          // A non-zero exit is a verification result, not an orchestration error:
+          // it must still be recorded as evidence before the node fails.
+          const { passed, exitCode, stdout, stderr, timedOut } = await runCommand({
+            command: verification.command,
+            args: verification.args,
+            cwd: worktreePath,
+            sandboxRoot: worktreePath,
+            timeoutMs: verificationTimeoutMs(),
+            onChunk: (stream, chunk) => {
+              this.publishLiveProgress(nodeRunId, {
+                append: stream === 'stderr' ? chunk : chunk,
+              });
+            },
+          }).then(
+            (result) => ({
+              passed: true,
+              exitCode: result.exitCode ?? 0,
+              stdout: result.stdout,
+              stderr: result.stderr,
+              timedOut: false,
+            }),
+            (error: unknown) => {
+              if (!(error instanceof CommandError)) throw error;
+              return {
+                passed: false,
+                exitCode: error.result.exitCode ?? undefined,
+                stdout: error.result.stdout,
+                stderr: error.result.stderr,
+                timedOut: error.result.timedOut,
+              };
             },
           );
+          this.evidence.addTestRun({
+            id: randomUUID(),
+            taskId: task.id,
+            nodeRunId,
+            command: verification.label,
+            exitCode,
+            stdoutRef: stdout,
+            stderrRef: stderr,
+            passed,
+            createdAt: now(),
+          });
+          if (!passed) {
+            // Classified explicitly so the runtime routes this back to the writer
+            // instead of treating it as an unknown orchestration error.
+            throw new NodeFailure(
+              `${
+                timedOut
+                  ? `Verification timed out after ${verificationTimeoutMs()} ms`
+                  : 'Verification failed'
+              } (${verification.label})${stderr ? `: ${stderr.slice(0, 400)}` : ''}`,
+              'verification_failed',
+              {
+                repairClass: classifyMechanicalFailure(`${verification.label}\n${stderr ?? ''}`),
+              },
+            );
+          }
         }
       } else if (role === 'accept') {
         this.setTaskState(task.id, 'awaiting_acceptance');
         this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation');
+        // `resolveAcceptance` issues the passport, so it is already durable by
+        // the time this node resumes.
         const decision = await this.waitForAcceptance(task.id, controller.signal);
         if (decision === 'rejected') throw new Error('Human rejected the change');
       }

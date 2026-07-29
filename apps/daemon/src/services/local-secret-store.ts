@@ -17,9 +17,14 @@ export class LocalSecretStore {
   private readonly keyPath: string;
   private readonly valuesPath: string;
 
-  constructor(dataDir: string) {
-    this.keyPath = join(dataDir, 'provider-secrets.key');
-    this.valuesPath = join(dataDir, 'provider-secrets.json');
+  /**
+   * `namespace` keeps unrelated secret classes in separate files. Passport
+   * signing keys and provider credentials have different blast radii, so they
+   * do not share one encrypted blob.
+   */
+  constructor(dataDir: string, namespace = 'provider-secrets') {
+    this.keyPath = join(dataDir, `${namespace}.key`);
+    this.valuesPath = join(dataDir, `${namespace}.json`);
   }
 
   async get(id: string): Promise<string | undefined> {
@@ -27,9 +32,10 @@ export class LocalSecretStore {
     if (!item) return undefined;
     const decipher = createDecipheriv('aes-256-gcm', this.key(), Buffer.from(item.iv, 'base64'));
     decipher.setAuthTag(Buffer.from(item.tag, 'base64'));
-    return Buffer.concat([decipher.update(Buffer.from(item.value, 'base64')), decipher.final()]).toString(
-      'utf8',
-    );
+    return Buffer.concat([
+      decipher.update(Buffer.from(item.value, 'base64')),
+      decipher.final(),
+    ]).toString('utf8');
   }
 
   async set(id: string, value: string): Promise<void> {
@@ -42,6 +48,13 @@ export class LocalSecretStore {
       tag: cipher.getAuthTag().toString('base64'),
       value: encrypted.toString('base64'),
     };
+    writeFileSync(this.valuesPath, JSON.stringify(values), { encoding: 'utf8', mode: 0o600 });
+  }
+
+  async delete(id: string): Promise<void> {
+    const values = this.readValues();
+    if (!(id in values)) return;
+    delete values[id];
     writeFileSync(this.valuesPath, JSON.stringify(values), { encoding: 'utf8', mode: 0o600 });
   }
 

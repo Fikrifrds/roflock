@@ -35,6 +35,7 @@
     "@roleflock/role-recommender": "workspace:*",
     "@roleflock/role-protocol": "workspace:*",
     "@roleflock/run-control": "workspace:*",
+    "@roleflock/secret-store": "workspace:*",
     "@roleflock/usage-ledger": "workspace:*",
     "@roleflock/verification-runner": "workspace:*",
     "fastify": "^5.2.1"
