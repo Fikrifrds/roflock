@@ -18,6 +18,7 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
+    "@roleflock/agent-events": "workspace:*",
     "@roleflock/change-passport": "workspace:*",
     "@roleflock/change-contracts": "workspace:*",
     "@roleflock/contracts": "workspace:*",

@@ -78,6 +78,7 @@ import { registerVerificationSpecificationRoutes } from './verification-specific
 import { registerVerificationResultRoutes } from './verification-results.js';
 import { registerChangePassportRoutes } from './change-passports.js';
 import { registerRoleRecommendationRoutes } from './role-recommendations.js';
+import { registerAgentEventRoutes } from './agent-events.js';
 import { evaluateContractStartGate } from '../services/contract-start-gate.js';
 import { findTaskPathCollisions } from '../services/path-collision.js';
 import { buildTaskHandoff } from '../services/task-handoff.js';
@@ -114,6 +115,7 @@ export function registerApi(
   registerVerificationResultRoutes(app, db);
   registerChangePassportRoutes(app, db);
   registerRoleRecommendationRoutes(app, db, providers, orchestrator.router);
+  registerAgentEventRoutes(app, db);
   app.get('/api/concurrency-policy', async (request) => {
     const projectId = (request.query as { projectId?: string }).projectId;
     return {

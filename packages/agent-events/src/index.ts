@@ -278,13 +278,14 @@ export function validateAgentEventOrdering(
   if (
     prior.source.agentFamily !== event.source.agentFamily ||
     prior.source.adapterId !== event.source.adapterId ||
+    prior.source.adapterVersion !== event.source.adapterVersion ||
     prior.source.nativeSessionId !== event.source.nativeSessionId ||
     prior.source.installationId !== event.source.installationId
   ) {
     violation(
       violations,
       'SOURCE_IDENTITY_CHANGED',
-      'Source family, adapter, session, and installation identity are immutable within a stream',
+      'Source family, adapter version, session, and installation identity are immutable within a stream',
     );
   }
   if (sha256Canonical(prior.binding) !== sha256Canonical(event.binding)) {
@@ -350,6 +351,13 @@ function validateEventShape(
       message: 'A stream must begin with session.started',
     });
   }
+  if (event.sequence > 0 && event.payload.type === 'session.started') {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['payload', 'type'],
+      message: 'session.started is only valid at sequence zero',
+    });
+  }
   if (event.payload.type === 'command.started') {
     const uniqueIndexes = new Set(event.payload.redactedArgumentIndexes);
     if (uniqueIndexes.size !== event.payload.redactedArgumentIndexes.length) {
@@ -382,3 +390,5 @@ function violation(
 ): void {
   violations.push({ code, reason });
 }
+
+export * from './jsonl.js';

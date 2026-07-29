@@ -6,7 +6,7 @@
 
 **Status:** In execution
 
-**Execution progress:** M0 through M7.1 complete; M7.2 is next
+**Execution progress:** M0 through M7.2 complete; M7.3 is next
 
 **Supersedes for product direction:** orchestration-first portions of `roleflock_implementation_plan_v1.0.md`
 
@@ -1690,7 +1690,7 @@ later ticket merely to make the product appear complete sooner.
 | M6.8 ✅ | Role recommendation UI                              | M6.7            | Apply-all and per-role override work                      |
 | M6.9 ✅ | Recommendation integration/adversarial tests        | M6.8            | Fallbacks cannot weaken hard constraints                  |
 | M7.1 ✅ | Normalised external agent event schema              | M2.2            | Source identity and ordering rules are frozen             |
-| M7.2    | Generic JSONL/HTTP ingest and correlation           | M7.1            | Replay and cross-task claims are rejected                 |
+| M7.2 ✅ | Generic JSONL/HTTP ingest and correlation           | M7.1            | Replay and cross-task claims are rejected                 |
 | M7.3    | Codex adapter/hook ingestion                        | M7.2            | Codex session maps to plan and worktree                   |
 | M7.4    | Claude Code adapter/hook ingestion                  | M7.2            | Claude session maps to plan and worktree                  |
 | M7.5    | Cursor adapter/API ingestion                        | M7.2            | Cursor session maps to plan and worktree                  |

@@ -80,6 +80,16 @@ export {
   RecommendationVersionConflictError,
   RoleRecommendationRepository,
 } from './repositories/role-recommendation-repository.js';
+export {
+  AgentEventOrderingError,
+  AgentSourceEventConflictError,
+  ExternalAgentEventRepository,
+  sourceStreamId,
+} from './repositories/external-agent-event-repository.js';
+export type {
+  AgentEventIngestResult,
+  ExternalAgentSession,
+} from './repositories/external-agent-event-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,
