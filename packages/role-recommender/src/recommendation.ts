@@ -88,6 +88,11 @@ export interface RecommendationRuntimeCandidate extends CandidateRuntimeState {
   availabilityConfidence: number;
   runnerId?: string;
   runnerIds?: Partial<Record<RecommendedRole, string>>;
+  observedVerifiedSuccess?: {
+    score: number;
+    confidence: number;
+    sampleSize: number;
+  };
 }
 
 interface EvaluatedCandidate {
@@ -201,6 +206,7 @@ export function generateRoleRecommendation(input: {
         profile: runtime.profile,
         hardConstraintDecision: hard,
         availabilityConfidence: runtime.availabilityConfidence,
+        observedVerifiedSuccess: runtime.observedVerifiedSuccess,
       })),
     });
     const scoreByCandidate = new Map(

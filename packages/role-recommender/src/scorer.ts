@@ -9,6 +9,8 @@ export interface RoleScoringConfig {
   scoringVersion: string;
   unknownOptionalTraitPenalty: number;
   preferredIndependencePenalty: number;
+  minimumObservedSamples: number;
+  minimumObservedConfidence: number;
   costPenalty: Record<'free' | 'low' | 'medium' | 'high' | 'unknown', number>;
   latencyPenalty: Record<'fast' | 'medium' | 'slow' | 'unknown', number>;
 }
@@ -17,6 +19,8 @@ export const DEFAULT_ROLE_SCORING_CONFIG: RoleScoringConfig = {
   scoringVersion: ROLE_SCORING_VERSION,
   unknownOptionalTraitPenalty: 0.025,
   preferredIndependencePenalty: 0.04,
+  minimumObservedSamples: 5,
+  minimumObservedConfidence: 0.25,
   costPenalty: { free: 0, low: 0.01, medium: 0.03, high: 0.07, unknown: 0.05 },
   latencyPenalty: { fast: 0, medium: 0.01, slow: 0.03, unknown: 0.02 },
 };
@@ -107,8 +111,13 @@ function scoreCandidate(
     .filter((contribution) => contribution.score === undefined)
     .map((contribution) => contribution.trait);
   const unknownTraitPenalty = unknownTraits.length * config.unknownOptionalTraitPenalty;
-  const verifiedSuccess = candidate.observedVerifiedSuccess
-    ? candidate.observedVerifiedSuccess.score * candidate.observedVerifiedSuccess.confidence
+  const observed = candidate.observedVerifiedSuccess;
+  const observedEvidenceApplied =
+    observed !== undefined &&
+    observed.sampleSize >= config.minimumObservedSamples &&
+    observed.confidence >= config.minimumObservedConfidence;
+  const verifiedSuccess = observedEvidenceApplied
+    ? observed!.score * observed!.confidence
     : 0;
   if (candidate.observedVerifiedSuccess) {
     assertUnit(candidate.observedVerifiedSuccess.score, 'observedVerifiedSuccess.score');
@@ -191,6 +200,11 @@ function scoreCandidate(
     ...(candidate.independenceDecision?.preferredViolations.map(
       (finding) => `preferred independence: ${finding.reason}`,
     ) ?? []),
+    ...(!observedEvidenceApplied && candidate.observedVerifiedSuccess
+      ? [
+          `observed outcomes below threshold: ${candidate.observedVerifiedSuccess.sampleSize} samples at ${round(candidate.observedVerifiedSuccess.confidence)} confidence`,
+        ]
+      : []),
   ].sort();
   const rationale = [
     `Role fit ${round(baseFit)} from ${weightedTraits.length} weighted trait(s).`,
@@ -215,7 +229,9 @@ function scoreCandidate(
     score: round(score),
     confidence: round(confidence),
     constraintConfidence: round(constraintConfidence),
-    observedSuccessConfidence: round(candidate.observedVerifiedSuccess?.confidence ?? 0),
+    observedSuccessConfidence: round(
+      observedEvidenceApplied ? candidate.observedVerifiedSuccess!.confidence : 0,
+    ),
     expectedCostClass,
     expectedLatencyClass,
     components: mapNumbers(components),

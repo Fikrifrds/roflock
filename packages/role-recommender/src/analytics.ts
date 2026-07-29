@@ -90,6 +90,42 @@ export function calculateRolePerformance(
   };
 }
 
+export function observedRecommendationSignal(
+  analytics: RolePerformanceAnalytics,
+  thresholds: { minimumSamples: number; minimumConfidence: number } = {
+    minimumSamples: 5,
+    minimumConfidence: 0.25,
+  },
+):
+  | { eligible: false; reason: string }
+  | { eligible: true; score: number; confidence: number; sampleSize: number } {
+  if (analytics.sampleSize < thresholds.minimumSamples) {
+    return {
+      eligible: false,
+      reason: `Requires ${thresholds.minimumSamples} compatible samples; found ${analytics.sampleSize}.`,
+    };
+  }
+  if (analytics.confidence < thresholds.minimumConfidence) {
+    return {
+      eligible: false,
+      reason: `Requires confidence ${thresholds.minimumConfidence}; found ${analytics.confidence}.`,
+    };
+  }
+  const firstPass = analytics.firstPassVerification.rate ?? analytics.accepted.rate;
+  return {
+    eligible: true,
+    score: Number(
+      (
+        analytics.accepted.rate * 0.55 +
+        firstPass * 0.3 +
+        (analytics.executionAdherence.mean ?? analytics.accepted.rate) * 0.15
+      ).toFixed(6),
+    ),
+    confidence: analytics.confidence,
+    sampleSize: analytics.sampleSize,
+  };
+}
+
 function sum(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }

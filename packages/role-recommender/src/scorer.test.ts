@@ -63,6 +63,23 @@ describe('deterministic role scorer and rationale', () => {
     expect(ranking.map((item) => item.providerId)).toEqual(['provider-a', 'provider-b']);
     expect(ranking[0]?.knownGaps).toContain('unknown weighted trait: long_context');
   });
+
+  it('applies observed outcomes only after sample and confidence thresholds', () => {
+    const low = candidate('provider-a', 'low-evidence', 0.8, 0.8);
+    low.observedVerifiedSuccess = { score: 1, confidence: 1, sampleSize: 4 };
+    const high = candidate('provider-b', 'enough-evidence', 0.8, 0.8);
+    high.observedVerifiedSuccess = { score: 1, confidence: 1, sampleSize: 5 };
+    const ranking = scoreRoleCandidates({
+      requirement: plannerRequirement(),
+      candidates: [low, high],
+    });
+    expect(ranking[0]).toMatchObject({
+      providerId: 'provider-b',
+      components: { verifiedSuccess: 1 },
+    });
+    expect(ranking[1]?.components.verifiedSuccess).toBe(0);
+    expect(ranking[1]?.knownGaps.join(' ')).toMatch(/below threshold/);
+  });
 });
 
 function plannerRequirement(): RoleRequirementProfile {

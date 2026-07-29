@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateRolePerformance } from './analytics.js';
+import { calculateRolePerformance, observedRecommendationSignal } from './analytics.js';
 import type { OutcomeObservation } from './outcomes.js';
 
 describe('role performance analytics', () => {
@@ -20,6 +20,19 @@ describe('role performance analytics', () => {
     expect(calculateRolePerformance(observations).caveats.join(' ')).toMatch(
       /not a controlled experiment/i,
     );
+    expect(observedRecommendationSignal(calculateRolePerformance(observations))).toMatchObject({
+      eligible: false,
+    });
+    const sufficient = calculateRolePerformance([
+      ...observations,
+      observation('accepted', true, 1100, 0.3),
+      observation('accepted', true, 1200, 0.3),
+      observation('accepted', true, 1300, 0.3),
+    ]);
+    expect(observedRecommendationSignal(sufficient)).toMatchObject({
+      eligible: true,
+      sampleSize: 5,
+    });
   });
 });
 
