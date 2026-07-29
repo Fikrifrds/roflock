@@ -5376,6 +5376,38 @@ pre {
   box-shadow: var(--shadow-card);
 }
 
+.verification-spec-panel {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.verification-check-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.verification-check-list li {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+}
+
+.verification-check-list code {
+  overflow-x: auto;
+  color: var(--text-body);
+  font-size: var(--text-sm);
+}
+
+.verification-check-list small {
+  color: var(--text-faint);
+}
+
 .verification-subject {
   display: flex;
   flex-wrap: wrap;
@@ -5694,8 +5726,11 @@ pre {
 }
 
 .plan-actions {
-  display: grid;
-  grid-template-columns: auto minmax(260px, 1fr) auto;
+  /* Flex rather than fixed columns: the approve button disappears once the plan
+     is approved, and a three-column template then handed the reason field the
+     content-sized track and stretched the revise button across the rest. */
+  display: flex;
+  flex-wrap: wrap;
   align-items: end;
   gap: var(--space-3);
   padding-top: var(--space-4);
@@ -5704,6 +5739,7 @@ pre {
 
 .plan-revision-field {
   display: grid;
+  flex: 1 1 260px;
   gap: var(--space-2);
   color: var(--text-muted);
   font-size: var(--text-sm);

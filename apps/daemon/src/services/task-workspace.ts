@@ -1,6 +1,29 @@
 import { execFile } from 'node:child_process';
+import { realpath } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { promisify } from 'node:util';
 const exec = promisify(execFile);
+
+/**
+ * True only when the task is writing in the repository's primary checkout. A
+ * linked worktree reports a git directory under the main repository, so the
+ * two paths diverge.
+ */
+async function isPrimaryCheckout(worktreePath: string): Promise<boolean> {
+  try {
+    const [toplevel, commonDir] = await Promise.all([
+      git(worktreePath, ['rev-parse', '--show-toplevel']),
+      git(worktreePath, ['rev-parse', '--path-format=absolute', '--git-common-dir']),
+    ]);
+    const [resolvedTop, resolvedRoot] = await Promise.all([
+      realpath(toplevel),
+      realpath(dirname(commonDir)),
+    ]);
+    return resolvedTop === resolvedRoot;
+  } catch {
+    return false;
+  }
+}
 
 type WorktreeRecord = {
   path: string;
@@ -112,6 +135,9 @@ export async function inspectTaskWorkspace(
     ]);
   const files = parseStatus(status);
   applyNumstat(files, await git(worktree.path, ['diff', '--numstat', 'HEAD']));
+  // Tasks default to an external worktree, so this was reporting "editing in
+  // project folder" for changes that were nowhere near the project folder.
+  const inPlace = await isPrimaryCheckout(worktree.path);
   const baseAhead = Number(
     (await optionalGit(worktree.path, ['rev-list', '--count', `${worktree.baseCommit}..HEAD`])) ??
       0,
@@ -122,7 +148,7 @@ export async function inspectTaskWorkspace(
   return {
     available: true,
     path: worktree.path,
-    inPlace: true,
+    inPlace,
     branchName: worktree.branchName,
     baseCommit: worktree.baseCommit,
     headCommit,

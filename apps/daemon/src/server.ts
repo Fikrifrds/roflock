@@ -138,7 +138,18 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
     },
   );
   const webDist = join(process.cwd(), 'apps', 'web', 'dist');
-  if (existsSync(webDist)) await app.register(statik, { root: webDist, wildcard: false });
+  if (existsSync(webDist)) {
+    await app.register(statik, { root: webDist, wildcard: false });
+    // The UI is a single-page app, so every client route has to resolve to its
+    // shell. Without this a bookmarked or refreshed task URL returned the API's
+    // 404 JSON instead of the page the user was looking at.
+    app.setNotFoundHandler((request, reply) => {
+      if (request.method !== 'GET' || request.url.startsWith('/api/')) {
+        return reply.code(404).send({ error: 'Not found' });
+      }
+      return reply.sendFile('index.html');
+    });
+  }
   app.addHook('onClose', async () => {
     await reviewApps.close();
     db.close();

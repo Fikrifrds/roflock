@@ -14,6 +14,18 @@ export class UnauthorizedError extends Error {
   }
 }
 
+/** A failed daemon response, carrying the API's own reason code when it sent one. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 const TOKEN_KEY = 'roleflock-token';
 const CSRF_KEY = 'roleflock-csrf';
 const TOKEN_PARAM = 'rft';
@@ -88,10 +100,13 @@ export function createApi() {
     }
 
     if (!response.ok) {
-      throw new Error(
-        ((await response.json().catch(() => ({}))) as { error?: string }).error ??
-          response.statusText,
-      );
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+      };
+      // The machine-readable code rides along so callers can branch on the
+      // reason instead of string-matching the human sentence, which changes.
+      throw new ApiError(body.error ?? response.statusText, response.status, body.code);
     }
     return response.json() as Promise<T>;
   }
