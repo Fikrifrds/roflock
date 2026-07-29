@@ -128,6 +128,8 @@ export type {
   StoredPartyApprovalDecision,
   StoredTransparencyEntry,
 } from './repositories/transparency-log-repository.js';
+export { MetadataSyncRepository } from './repositories/metadata-sync-repository.js';
+export type { MetadataSyncBatch } from './repositories/metadata-sync-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createLogger, redact } from './index.js';
+import {
+  createLogger,
+  createMetadataSyncEnvelope,
+  redact,
+  verifyMetadataSyncEnvelope,
+} from './index.js';
 
 describe('redact', () => {
   it('redacts secret-looking string values', () => {
@@ -8,6 +13,29 @@ describe('redact', () => {
     expect(redact('-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----')).toContain(
       '[REDACTED]',
     );
+  });
+
+  it('builds an allowlisted metadata-only sync envelope', () => {
+    const record = {
+      type: 'task' as const,
+      taskId: 'task_1',
+      projectId: 'project_1',
+      state: 'VERIFYING',
+      risk: 'high',
+      updatedAt: '2026-07-28T12:00:00.000Z',
+      sourceCode: 'do not upload',
+      prompt: 'also do not upload',
+    };
+    const envelope = createMetadataSyncEnvelope({
+      organisationId: 'org_1',
+      installationId: 'installation_1',
+      cursor: 'cursor_1',
+      records: [record],
+      createdAt: '2026-07-28T12:00:00.000Z',
+    });
+    expect(verifyMetadataSyncEnvelope(envelope)).toBe(true);
+    expect(JSON.stringify(envelope)).not.toContain('do not upload');
+    expect(JSON.stringify(envelope)).not.toContain('prompt');
   });
 
   it('redacts sensitive object keys', () => {
