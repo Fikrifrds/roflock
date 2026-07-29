@@ -2,7 +2,10 @@
   "name": "roleflock",
   "version": "0.1.0",
   "private": true,
-  "description": "RoleFlock by Mlola — governed agent graph for multi-model software engineering",
+  "description": "Independent delivery assurance for AI-generated software",
+  "bin": {
+    "roleflock": "./apps/cli/dist/cli.js"
+  },
   "packageManager": "pnpm@11.17.0",
   "engines": {
     "node": ">=24"
@@ -14,6 +17,7 @@
     "start": "pnpm build && pnpm --filter @roleflock/daemon start",
     "url": "node scripts/print-url.mjs",
     "diagnostics": "node scripts/diagnostics.mjs",
+    "passport": "node apps/cli/dist/cli.js passport",
     "benchmark": "node scripts/benchmark-verified-fix.mjs",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
