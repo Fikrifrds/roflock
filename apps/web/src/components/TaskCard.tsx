@@ -8,9 +8,7 @@ export function TaskCard({ task }: { task: Task }) {
     <Link className="row task" to={`/tasks/${task.id}`}>
       <div>
         <b>{task.title}</b>
-        <small>
-          {task.type.replaceAll('_', ' ')} · {formatTaskState(task.state)}
-        </small>
+        <small>{task.type.replaceAll('_', ' ')}</small>
       </div>
       <StatusPill tone={taskStateTone(task.state)}>{formatTaskState(task.state)}</StatusPill>
     </Link>

@@ -39,6 +39,9 @@ describe('AssuranceSummary', () => {
     expect(stage('Verification')).toHaveTextContent('Self-reported tests are not evidence');
     expect(stage('Passport')).toHaveTextContent('Not issued');
     expect(screen.getByText('This change is not fully assured yet.')).toBeInTheDocument();
+    expect(screen.getByLabelText('0 of 4 assurance stages proven')).toHaveTextContent(
+      '0 of 4 proven',
+    );
   });
 
   it('confirms the full chain only when every stage is proven', async () => {
@@ -76,6 +79,23 @@ describe('AssuranceSummary', () => {
     expect(stage('Passport')).toHaveTextContent('Local self-attestation');
     expect(
       screen.getByText('Authorised, planned, independently verified, and signed.'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('4 of 4 assurance stages proven')).toHaveTextContent(
+      '4 of 4 proven',
+    );
+  });
+
+  it('distinguishes acceptance from a complete assurance chain', async () => {
+    stubApi({
+      '/api/tasks/t1/change-contract': null,
+      '/api/tasks/t1/execution-plan': null,
+      '/api/tasks/t1/verification-result': null,
+      '/api/tasks/t1/change-passport': null,
+    });
+    renderApp(<AssuranceSummary task={{ ...task, state: 'accepted' }} />);
+
+    expect(
+      await screen.findByText('Accepted result, but assurance chain is incomplete.'),
     ).toBeInTheDocument();
   });
 

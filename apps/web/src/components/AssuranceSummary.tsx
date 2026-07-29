@@ -131,6 +131,8 @@ export function AssuranceSummary({ task }: { task: Task }) {
   ];
 
   const assured = stages.every((stage) => stage.tone === 'ok');
+  const provenStages = stages.filter((stage) => stage.tone === 'ok').length;
+  const acceptedWithoutAssurance = task.state === 'accepted' && !assured;
 
   return (
     <section
@@ -138,12 +140,22 @@ export function AssuranceSummary({ task }: { task: Task }) {
       aria-label="Assurance chain"
     >
       <div className="assurance-summary-head">
-        <p className="eyebrow">ASSURANCE CHAIN</p>
-        <strong>
-          {assured
-            ? 'Authorised, planned, independently verified, and signed.'
-            : 'This change is not fully assured yet.'}
-        </strong>
+        <div>
+          <p className="eyebrow">ASSURANCE CHAIN</p>
+          <strong>
+            {assured
+              ? 'Authorised, planned, independently verified, and signed.'
+              : acceptedWithoutAssurance
+                ? 'Accepted result, but assurance chain is incomplete.'
+                : 'This change is not fully assured yet.'}
+          </strong>
+        </div>
+        <span
+          className="assurance-progress"
+          aria-label={`${provenStages} of ${stages.length} assurance stages proven`}
+        >
+          <strong>{provenStages}</strong> of {stages.length} proven
+        </span>
       </div>
       <ol className="assurance-stage-list">
         {stages.map((stage) => (

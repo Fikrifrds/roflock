@@ -5290,6 +5290,13 @@ pre {
 }
 
 .assurance-summary-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.assurance-summary-head > div {
   display: grid;
   gap: var(--space-1);
 }
@@ -5297,6 +5304,31 @@ pre {
 .assurance-summary-head strong {
   font-size: var(--text-lg);
   line-height: var(--leading-tight);
+}
+
+.assurance-progress {
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.assurance-progress strong {
+  color: var(--text);
+  font: 700 var(--text-sm) / 1 var(--font-mono);
+}
+
+.assurance-summary-complete .assurance-progress {
+  border-color: var(--ok-line);
+  background: var(--ok-wash);
+}
+
+.assurance-summary-complete .assurance-progress strong {
+  color: var(--ok);
 }
 
 .assurance-stage-list {
@@ -6190,12 +6222,32 @@ pre {
   .workspace-tabs {
     width: 100%;
     flex: 1;
+    gap: 1px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .workspace-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .workspace-tabs button,
   .workspace-tab-link {
-    flex: 1;
+    flex: 0 0 auto;
+    padding-inline: 6px;
+    font-size: var(--text-2xs);
     text-align: center;
+  }
+
+  .assurance-summary {
+    padding: var(--space-5);
+  }
+
+  .assurance-summary-head {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .task-delete-button {
