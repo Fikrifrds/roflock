@@ -27,6 +27,7 @@ const RecommendationCandidateSchema = z
     providerId: z.string().trim().min(1),
     modelId: z.string().trim().min(1),
     modelFamily: z.string().trim().min(1).optional(),
+    runnerId: z.string().trim().min(1).optional(),
     effort: z.string().trim().min(1),
     rank: z.number().int().positive().optional(),
     selected: z.boolean(),
@@ -225,15 +226,20 @@ export function generateRoleRecommendation(input: {
   const selectedKeys = new Set(
     selected.map(({ role, candidate }) => candidateKey(role, candidate.runtime)),
   );
+  const fallbackKeys = selectSafeFallbacks(
+    requiredRoles,
+    selected,
+    evaluated,
+    independenceRequirements,
+  );
   const candidates: RecommendationCandidate[] = [];
 
   for (const role of RECOMMENDED_ROLES) {
-    let fallbackTaken = false;
     const chosenForRole = selected.find((entry) => entry.role === role)?.candidate;
     for (const evaluatedCandidate of evaluated.get(role) ?? []) {
       const key = candidateKey(role, evaluatedCandidate.runtime);
       const isSelected = selectedKeys.has(key);
-      let fallback = false;
+      const fallback = fallbackKeys.has(key);
       let independence: IndependenceDecision | undefined;
       if (
         !isSelected &&
@@ -248,9 +254,9 @@ export function generateRoleRecommendation(input: {
           ],
           independenceRequirements,
         );
-        fallback = independence.eligible && !fallbackTaken;
-        if (fallback) fallbackTaken = true;
       }
+      const runnerId =
+        evaluatedCandidate.runtime.runnerIds?.[role] ?? evaluatedCandidate.runtime.runnerId;
       const score = evaluatedCandidate.score;
       candidates.push({
         role,
@@ -259,6 +265,7 @@ export function generateRoleRecommendation(input: {
         ...(evaluatedCandidate.runtime.profile.modelFamily
           ? { modelFamily: evaluatedCandidate.runtime.profile.modelFamily }
           : {}),
+        ...(runnerId ? { runnerId } : {}),
         effort: requirements[role].requiredEffort ?? 'medium',
         ...(score ? { rank: score.rank, score: score.score, confidence: score.confidence } : {}),
         selected: isSelected,
@@ -340,6 +347,107 @@ export function generateRoleRecommendation(input: {
   });
 }
 
+export interface RecommendationRosterChoice {
+  role: RecommendedRole;
+  providerId: string;
+  modelId: string;
+}
+
+export interface RecommendationRosterValidation {
+  eligible: boolean;
+  missingRoles: RecommendedRole[];
+  duplicateRoles: RecommendedRole[];
+  unknownOrIneligible: RecommendationRosterChoice[];
+  independence: IndependenceDecision;
+}
+
+export function validateRecommendationRoster(
+  recommendation: RoleRecommendation,
+  roster: readonly RecommendationRosterChoice[],
+): RecommendationRosterValidation {
+  const parsed = RoleRecommendationSchema.parse(recommendation);
+  const missingRoles = parsed.requiredRoles.filter(
+    (role) => !roster.some((choice) => choice.role === role),
+  );
+  const duplicateRoles = parsed.requiredRoles.filter(
+    (role) => roster.filter((choice) => choice.role === role).length > 1,
+  );
+  const assignments: ProposedRoleAssignment[] = [];
+  const unknownOrIneligible: RecommendationRosterChoice[] = [];
+  for (const choice of roster) {
+    const candidate = parsed.candidates.find(
+      (item) =>
+        item.role === choice.role &&
+        item.providerId === choice.providerId &&
+        item.modelId === choice.modelId &&
+        item.eligible,
+    );
+    if (!candidate) {
+      unknownOrIneligible.push(choice);
+      continue;
+    }
+    assignments.push({
+      role: choice.role,
+      providerId: choice.providerId,
+      modelId: choice.modelId,
+      ...(candidate.modelFamily ? { modelFamily: candidate.modelFamily } : {}),
+      ...(candidate.runnerId ? { runnerId: candidate.runnerId } : {}),
+      invocationScope: 'dedicated',
+    });
+  }
+  const independence = evaluateRosterIndependence(
+    assignments,
+    defaultIndependenceRequirements(parsed.risk, parsed.requiredRoles as RoleId[]),
+  );
+  return {
+    eligible:
+      missingRoles.length === 0 &&
+      duplicateRoles.length === 0 &&
+      unknownOrIneligible.length === 0 &&
+      independence.eligible,
+    missingRoles,
+    duplicateRoles,
+    unknownOrIneligible,
+    independence,
+  };
+}
+
+export function validateRecommendationFallbackMatrix(
+  recommendation: RoleRecommendation,
+  primaryRoster?: readonly RecommendationRosterChoice[],
+): RecommendationRosterValidation[] {
+  const parsed = RoleRecommendationSchema.parse(recommendation);
+  const choices = parsed.requiredRoles.map((role) =>
+    [
+      ...(primaryRoster
+        ? primaryRoster.filter((choice) => choice.role === role)
+        : parsed.candidates
+            .filter((candidate) => candidate.role === role && candidate.selected)
+            .map((candidate) => ({
+              role,
+              providerId: candidate.providerId,
+              modelId: candidate.modelId,
+            }))),
+      ...parsed.candidates
+        .filter((candidate) => candidate.role === role && candidate.fallback)
+        .map((candidate) => ({
+          role,
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+        })),
+    ].filter(
+      (choice, index, all) =>
+        all.findIndex(
+          (item) =>
+            item.role === choice.role &&
+            item.providerId === choice.providerId &&
+            item.modelId === choice.modelId,
+        ) === index,
+    ),
+  );
+  return cartesian(choices).map((roster) => validateRecommendationRoster(parsed, roster));
+}
+
 function requirement(
   role: RecommendedRole,
   options: {
@@ -416,6 +524,52 @@ function selectRoster(
   };
   visit(0, []);
   return best?.selection ?? [];
+}
+
+function selectSafeFallbacks(
+  roles: readonly RecommendedRole[],
+  selected: ReadonlyArray<{ role: RecommendedRole; candidate: EvaluatedCandidate }>,
+  candidates: ReadonlyMap<RecommendedRole, readonly EvaluatedCandidate[]>,
+  requirements: ReturnType<typeof defaultIndependenceRequirements>,
+): Set<string> {
+  const selectedByRole = new Map(selected.map((entry) => [entry.role, entry.candidate]));
+  const fallbackByRole = new Map<RecommendedRole, EvaluatedCandidate>();
+  for (const role of roles) {
+    for (const candidate of candidates.get(role) ?? []) {
+      if (!candidate.hard.eligible || !candidate.score || candidate === selectedByRole.get(role)) {
+        continue;
+      }
+      fallbackByRole.set(role, candidate);
+      const choices = roles.map((choiceRole) => {
+        const primary = selectedByRole.get(choiceRole);
+        const fallback = fallbackByRole.get(choiceRole);
+        return [primary, fallback].filter(
+          (value): value is EvaluatedCandidate => value !== undefined,
+        );
+      });
+      const safe = cartesian(choices).every(
+        (combination) =>
+          evaluateRosterIndependence(
+            combination.map((choice, index) => assignmentFor(roles[index]!, choice.runtime)),
+            requirements,
+          ).eligible,
+      );
+      if (safe) break;
+      fallbackByRole.delete(role);
+    }
+  }
+  return new Set(
+    [...fallbackByRole].map(([role, candidate]) => candidateKey(role, candidate.runtime)),
+  );
+}
+
+function cartesian<T>(groups: readonly (readonly T[])[]): T[][] {
+  if (groups.some((group) => group.length === 0)) return [];
+  return groups.reduce<T[][]>(
+    (combinations, group) =>
+      combinations.flatMap((combination) => group.map((item) => [...combination, item])),
+    [[]],
+  );
 }
 
 function assignmentFor(

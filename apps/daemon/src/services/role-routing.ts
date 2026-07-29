@@ -125,6 +125,34 @@ export class RoleRouter {
     return saved;
   }
 
+  replaceTaskRole(
+    taskId: string,
+    role: RoutedRole,
+    candidates: RoleCandidateInput[],
+    provenance: { recommendationId: string; recommendationActionId: string },
+  ): RoleCandidate[] {
+    const saved = this.assignments.replaceTaskRole(taskId, role, candidates, provenance, now());
+    this.audit.append({
+      id: randomUUID(),
+      actor: 'local-user',
+      action: 'task.role.assignments.pinned',
+      targetType: 'task',
+      targetId: taskId,
+      details: {
+        role,
+        recommendationId: provenance.recommendationId,
+        recommendationActionId: provenance.recommendationActionId,
+        candidates: saved.map((candidate) => ({
+          providerId: candidate.providerConnectionId,
+          modelId: candidate.modelId,
+          effort: candidate.effort,
+        })),
+      },
+      createdAt: now(),
+    });
+    return saved;
+  }
+
   /** Restores one role to its shipping default. */
   resetRole(role: RoutedRole): RoleCandidate[] {
     return this.replaceRole(role, DEFAULT_ROLE_ASSIGNMENTS[role]);
@@ -194,13 +222,20 @@ export class RoleRouter {
    * outcome available, and it hides the one thing the operator needs to know.
    * The caller stops the run and surfaces the refusals instead.
    */
-  async route(role: RoutedRole, options: { forceFake?: boolean } = {}): Promise<RoleRoute | null> {
+  async route(
+    role: RoutedRole,
+    options: { forceFake?: boolean; taskId?: string } = {},
+  ): Promise<RoleRoute | null> {
     if (options.forceFake) return this.fakeRoute(role, []);
 
     const at = now();
     const skipped: SkippedCandidate[] = [];
 
-    for (const candidate of this.assignments.listForRole(role)) {
+    const taskCandidates = options.taskId
+      ? this.assignments.listForTaskRole(options.taskId, role)
+      : [];
+    const candidates = taskCandidates.length ? taskCandidates : this.assignments.listForRole(role);
+    for (const candidate of candidates) {
       const { providerConnectionId: providerId, modelId } = candidate;
 
       if (!candidate.enabled) {

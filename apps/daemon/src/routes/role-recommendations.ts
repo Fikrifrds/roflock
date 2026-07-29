@@ -12,6 +12,8 @@ import {
 } from '@roleflock/database';
 import {
   generateRoleRecommendation,
+  validateRecommendationFallbackMatrix,
+  validateRecommendationRoster,
   type RecommendedRole,
   type RoleRecommendation,
 } from '@roleflock/role-recommender';
@@ -134,6 +136,9 @@ export function registerRoleRecommendationRoutes(
     const recommendationId = (request.params as { id: string }).id;
     const stored = recommendations.get(recommendationId);
     if (!stored) return reply.code(404).send({ code: 'ROLE_RECOMMENDATION_NOT_FOUND' });
+    if (!rosterCanChange(tasks.get(stored.recommendation.taskId)?.state)) {
+      return reply.code(409).send({ code: 'TASK_ROSTER_LOCKED' });
+    }
     if (!stored.recommendation.complete) {
       return reply.code(409).send({
         code: 'ROLE_RECOMMENDATION_INCOMPLETE',
@@ -153,6 +158,11 @@ export function registerRoleRecommendationRoutes(
       return { ...stored, action: replay };
     }
     const roster = selectedRoster(stored.recommendation);
+    const rosterDecision = validateRecommendationRoster(stored.recommendation, roster);
+    const fallbackDecisions = validateRecommendationFallbackMatrix(stored.recommendation, roster);
+    if (!rosterDecision.eligible || fallbackDecisions.some((decision) => !decision.eligible)) {
+      return reply.code(409).send({ code: 'ROLE_RECOMMENDATION_ROSTER_INVALID' });
+    }
     try {
       const action = db.transaction(() => {
         const result = recommendations.recordAction({
@@ -164,7 +174,7 @@ export function registerRoleRecommendationRoutes(
           idempotencyKey: mutation.idempotencyKey,
           createdAt: new Date().toISOString(),
         });
-        applyRoster(router, stored.recommendation, roster);
+        applyRoster(router, stored.recommendation, roster, result.id);
         auditAction(audit, stored.recommendation.taskId, result);
         return result;
       })();
@@ -178,6 +188,9 @@ export function registerRoleRecommendationRoutes(
     const recommendationId = (request.params as { id: string }).id;
     const stored = recommendations.get(recommendationId);
     if (!stored) return reply.code(404).send({ code: 'ROLE_RECOMMENDATION_NOT_FOUND' });
+    if (!rosterCanChange(tasks.get(stored.recommendation.taskId)?.state)) {
+      return reply.code(409).send({ code: 'TASK_ROSTER_LOCKED' });
+    }
     const mutation = mutationHeaders(request.headers);
     if ('error' in mutation) return reply.code(428).send({ code: mutation.error });
     const body = request.body as {
@@ -207,7 +220,8 @@ export function registerRoleRecommendationRoutes(
         error: 'Override candidate must be an eligible candidate from this frozen recommendation',
       });
     }
-    const roster = selectedRoster(stored.recommendation).map((entry) =>
+    const baseRoster = stored.actions.at(-1)?.roster ?? selectedRoster(stored.recommendation);
+    const roster = baseRoster.map((entry) =>
       entry.role === role
         ? {
             role,
@@ -223,6 +237,17 @@ export function registerRoleRecommendationRoutes(
         providerId: candidate.providerId,
         modelId: candidate.modelId,
         effort: candidate.effort,
+      });
+    }
+    const rosterDecision = validateRecommendationRoster(stored.recommendation, roster);
+    const fallbackDecisions = validateRecommendationFallbackMatrix(stored.recommendation, roster);
+    if (!rosterDecision.eligible || fallbackDecisions.some((decision) => !decision.eligible)) {
+      return reply.code(409).send({
+        code: 'OVERRIDE_ROSTER_INDEPENDENCE_VIOLATION',
+        requiredViolations: [
+          ...rosterDecision.independence.requiredViolations,
+          ...fallbackDecisions.flatMap((decision) => decision.independence.requiredViolations),
+        ],
       });
     }
     const replay = recommendations.findActionByIdempotency(
@@ -256,7 +281,7 @@ export function registerRoleRecommendationRoutes(
           idempotencyKey: mutation.idempotencyKey,
           createdAt: new Date().toISOString(),
         });
-        applyRoster(router, stored.recommendation, roster);
+        applyRoster(router, stored.recommendation, roster, result.id);
         auditAction(audit, stored.recommendation.taskId, result);
         return result;
       })();
@@ -282,6 +307,7 @@ function applyRoster(
   router: RoleRouter,
   recommendation: RoleRecommendation,
   roster: readonly RecommendationRosterEntry[],
+  recommendationActionId: string,
 ): void {
   for (const entry of roster) {
     const candidates: RoleCandidateInput[] = [
@@ -303,7 +329,10 @@ function applyRoster(
           effort: candidate.effort,
         })),
     ];
-    router.replaceRole(ROUTED_ROLE[entry.role], candidates);
+    router.replaceTaskRole(recommendation.taskId, ROUTED_ROLE[entry.role], candidates, {
+      recommendationId: recommendation.id,
+      recommendationActionId,
+    });
   }
 }
 
@@ -372,4 +401,8 @@ function deterministicRecommendationId(taskId: string, idempotencyKey: string): 
 
 function header(value: string | string[] | undefined): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function rosterCanChange(state: string | undefined): boolean {
+  return state !== undefined && ['draft', 'ready', 'failed', 'cancelled'].includes(state);
 }

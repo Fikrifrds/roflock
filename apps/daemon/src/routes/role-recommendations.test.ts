@@ -42,7 +42,7 @@ describe('role recommendation API', () => {
     const applied: Array<{ role: RoutedRole; candidates: RoleCandidateInput[] }> = [];
     const router = {
       activeCooldowns: () => [],
-      replaceRole: (role: RoutedRole, candidates: RoleCandidateInput[]) => {
+      replaceTaskRole: (_taskId: string, role: RoutedRole, candidates: RoleCandidateInput[]) => {
         applied.push({ role, candidates });
         return [];
       },
@@ -132,6 +132,76 @@ describe('role recommendation API', () => {
       'role.recommendation.applied',
       'role.recommendation.overridden',
     ]);
+
+    const verifierAlternative = repository
+      .get(stored.recommendation.id)!
+      .recommendation.candidates.find(
+        (candidate) => candidate.role === 'verifier' && candidate.eligible && !candidate.selected,
+      );
+    expect(verifierAlternative).toBeDefined();
+    const secondOverride = await app.inject({
+      method: 'POST',
+      url: `/api/role-recommendations/${stored.recommendation.id}/override`,
+      headers: { 'idempotency-key': 'override-2', 'if-match': '2' },
+      payload: {
+        role: 'verifier',
+        providerId: verifierAlternative!.providerId,
+        modelId: verifierAlternative!.modelId,
+        reason: 'Use a faster eligible verifier for this bounded task.',
+      },
+    });
+    expect(secondOverride.statusCode).toBe(200);
+    const afterSecondOverride = repository.get(stored.recommendation.id)!;
+    expect(afterSecondOverride.revision).toBe(3);
+    expect(afterSecondOverride.actions.at(-1)?.roster).toContainEqual({
+      role: 'planner',
+      providerId: alternative!.providerId,
+      modelId: alternative!.modelId,
+      effort: alternative!.effort,
+    });
+
+    const ineligibleExecutor = afterSecondOverride.recommendation.candidates.find(
+      (candidate) =>
+        candidate.role === 'executor' && candidate.providerId === 'claude' && !candidate.eligible,
+    );
+    expect(ineligibleExecutor).toBeDefined();
+    const rejected = await app.inject({
+      method: 'POST',
+      url: `/api/role-recommendations/${stored.recommendation.id}/override`,
+      headers: { 'idempotency-key': 'override-malicious', 'if-match': '3' },
+      payload: {
+        role: 'executor',
+        providerId: ineligibleExecutor!.providerId,
+        modelId: ineligibleExecutor!.modelId,
+        reason: 'Attempt to bypass writer constraints.',
+      },
+    });
+    expect(rejected.statusCode).toBe(409);
+    expect(rejected.json()).toMatchObject({ code: 'OVERRIDE_CANDIDATE_INELIGIBLE' });
+    expect(repository.get(stored.recommendation.id)?.revision).toBe(3);
+
+    new TaskRepository(db).upsert({
+      id: 'task_1',
+      projectId: 'project_1',
+      type: 'feature',
+      title: 'Feature',
+      brief: 'Implement a feature.',
+      risk: 'medium',
+      state: 'running',
+      workflowGraphVersionId: 'graph_1',
+      budgetPolicyId: 'budget_1',
+      maxAttempts: 3,
+      createdAt: at,
+      updatedAt: '2026-07-28T13:00:00.000Z',
+    });
+    const locked = await app.inject({
+      method: 'POST',
+      url: `/api/role-recommendations/${stored.recommendation.id}/apply`,
+      headers: { 'idempotency-key': 'apply-while-running', 'if-match': '3' },
+    });
+    expect(locked.statusCode).toBe(409);
+    expect(locked.json()).toMatchObject({ code: 'TASK_ROSTER_LOCKED' });
+    expect(repository.get(stored.recommendation.id)?.revision).toBe(3);
     await app.close();
   });
 });

@@ -9,6 +9,8 @@ export interface RoleCandidate {
   modelId: string;
   effort?: string;
   enabled: boolean;
+  recommendationId?: string;
+  recommendationActionId?: string;
 }
 
 export interface RoleCandidateInput {
@@ -26,6 +28,11 @@ interface Row {
   model_id: string;
   effort: string | null;
   enabled: number;
+}
+
+interface TaskRow extends Row {
+  recommendation_id: string;
+  recommendation_action_id: string;
 }
 
 function toCandidate(row: Row): RoleCandidate {
@@ -64,6 +71,21 @@ export class RoleAssignmentRepository {
         .prepare('SELECT * FROM role_assignments WHERE role = ? ORDER BY position ASC')
         .all(role) as Row[]
     ).map(toCandidate);
+  }
+
+  listForTaskRole(taskId: string, role: string): RoleCandidate[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT * FROM task_role_assignments
+           WHERE task_id = ? AND role = ? ORDER BY position ASC`,
+        )
+        .all(taskId, role) as TaskRow[]
+    ).map((row) => ({
+      ...toCandidate(row),
+      recommendationId: row.recommendation_id,
+      recommendationActionId: row.recommendation_action_id,
+    }));
   }
 
   hasAny(): boolean {
@@ -105,6 +127,43 @@ export class RoleAssignmentRepository {
     })();
 
     return this.listForRole(role);
+  }
+
+  replaceTaskRole(
+    taskId: string,
+    role: string,
+    candidates: RoleCandidateInput[],
+    provenance: { recommendationId: string; recommendationActionId: string },
+    at: string,
+  ): RoleCandidate[] {
+    const remove = this.db.prepare(
+      'DELETE FROM task_role_assignments WHERE task_id = ? AND role = ?',
+    );
+    const insert = this.db.prepare(
+      `INSERT INTO task_role_assignments
+        (id, task_id, role, position, provider_connection_id, model_id, effort, enabled,
+         recommendation_id, recommendation_action_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    this.db.transaction(() => {
+      remove.run(taskId, role);
+      candidates.forEach((candidate, position) => {
+        insert.run(
+          randomUUID(),
+          taskId,
+          role,
+          position,
+          candidate.providerConnectionId,
+          candidate.modelId,
+          candidate.effort ?? null,
+          candidate.enabled === false ? 0 : 1,
+          provenance.recommendationId,
+          provenance.recommendationActionId,
+          at,
+        );
+      });
+    })();
+    return this.listForTaskRole(taskId, role);
   }
 }
 
@@ -192,9 +251,7 @@ export class ProviderCooldownRepository {
 
   clear(providerConnectionId: string, modelId: string): void {
     this.db
-      .prepare(
-        'DELETE FROM provider_cooldowns WHERE provider_connection_id = ? AND model_id = ?',
-      )
+      .prepare('DELETE FROM provider_cooldowns WHERE provider_connection_id = ? AND model_id = ?')
       .run(providerConnectionId, modelId);
   }
 }

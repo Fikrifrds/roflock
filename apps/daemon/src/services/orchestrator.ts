@@ -820,7 +820,7 @@ export class Orchestrator {
 
       const route =
         role === 'planner' || role === 'reviewer' || role === 'writer' || role === 'verifier'
-          ? await this.resolveRoute(role)
+          ? await this.resolveRoute(role, task.id)
           : undefined;
 
       const phase =
@@ -1661,8 +1661,8 @@ export class Orchestrator {
     this.setTaskState(task.id, 'running');
   }
 
-  private async resolveRoute(role: RoutedRole): Promise<RoleRoute | null> {
-    return this.router.route(role, { forceFake: this.forceFake });
+  private async resolveRoute(role: RoutedRole, taskId: string): Promise<RoleRoute | null> {
+    return this.router.route(role, { forceFake: this.forceFake, taskId });
   }
 
   /**
@@ -1692,7 +1692,7 @@ export class Orchestrator {
     const refusals: ProviderRefusal[] = [];
 
     for (;;) {
-      const route = await this.resolveRoute(input.role);
+      const route = await this.resolveRoute(input.role, input.task.id);
       if (!route) {
         // Nothing the operator configured can serve this turn. Stop and say
         // what refused, rather than inventing an answer.

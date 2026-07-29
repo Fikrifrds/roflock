@@ -614,6 +614,7 @@ export type RoleRecommendationCandidateView = {
   providerId: string;
   modelId: string;
   modelFamily?: string;
+  runnerId?: string;
   effort: string;
   rank?: number;
   selected: boolean;
