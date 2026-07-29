@@ -144,3 +144,121 @@ function allowlistedMetadataRecord(record: MetadataSyncRecord): MetadataSyncReco
       };
   }
 }
+
+export interface AssuranceTelemetryEvent {
+  schemaVersion: 1;
+  eventId: string;
+  eventName: string;
+  occurredAt: string;
+  severity: 'debug' | 'info' | 'warn' | 'error';
+  traceId?: string;
+  spanId?: string;
+  organisationId?: string;
+  projectId?: string;
+  taskId?: string;
+  actorId?: string;
+  attributes: Record<string, string | number | boolean>;
+}
+
+export function createAssuranceTelemetryEvent(
+  input: AssuranceTelemetryEvent,
+): AssuranceTelemetryEvent {
+  const clean = redact(input) as AssuranceTelemetryEvent;
+  return {
+    schemaVersion: 1,
+    eventId: clean.eventId,
+    eventName: clean.eventName,
+    occurredAt: clean.occurredAt,
+    severity: clean.severity,
+    traceId: clean.traceId,
+    spanId: clean.spanId,
+    organisationId: clean.organisationId,
+    projectId: clean.projectId,
+    taskId: clean.taskId,
+    actorId: clean.actorId,
+    attributes: Object.fromEntries(
+      Object.entries(clean.attributes).filter(
+        ([, value]) =>
+          typeof value === 'string' ||
+          typeof value === 'number' ||
+          typeof value === 'boolean',
+      ),
+    ),
+  };
+}
+
+export function toOpenTelemetryLog(event: AssuranceTelemetryEvent): {
+  timeUnixNano: string;
+  severityText: string;
+  body: { stringValue: string };
+  attributes: Array<{ key: string; value: { stringValue: string } }>;
+  traceId?: string;
+  spanId?: string;
+} {
+  const value = createAssuranceTelemetryEvent(event);
+  return {
+    timeUnixNano: String(BigInt(Date.parse(value.occurredAt)) * 1_000_000n),
+    severityText: value.severity.toUpperCase(),
+    body: { stringValue: value.eventName },
+    attributes: Object.entries({
+      'roleflock.event_id': value.eventId,
+      'roleflock.organisation_id': value.organisationId ?? '',
+      'roleflock.project_id': value.projectId ?? '',
+      'roleflock.task_id': value.taskId ?? '',
+      'roleflock.actor_id': value.actorId ?? '',
+      ...value.attributes,
+    }).map(([key, attribute]) => ({
+      key,
+      value: { stringValue: String(attribute) },
+    })),
+    traceId: value.traceId,
+    spanId: value.spanId,
+  };
+}
+
+export function toSiemJson(event: AssuranceTelemetryEvent): string {
+  return JSON.stringify(createAssuranceTelemetryEvent(event));
+}
+
+export interface OpaDecision {
+  allowed: boolean;
+  decisionId?: string;
+  reason: string;
+  source: 'opa' | 'fallback';
+}
+
+export class OpaPolicyAdapter {
+  constructor(
+    private readonly query: (input: Record<string, unknown>) => Promise<unknown>,
+    private readonly failClosed = true,
+  ) {}
+
+  async evaluate(input: Record<string, unknown>): Promise<OpaDecision> {
+    try {
+      const response = (await this.query(redact(input) as Record<string, unknown>)) as {
+        result?: { allow?: unknown; reason?: unknown; decision_id?: unknown };
+      };
+      if (typeof response?.result?.allow !== 'boolean') {
+        throw new Error('OPA response has no boolean result.allow');
+      }
+      return {
+        allowed: response.result.allow,
+        decisionId:
+          typeof response.result.decision_id === 'string'
+            ? response.result.decision_id
+            : undefined,
+        reason:
+          typeof response.result.reason === 'string'
+            ? response.result.reason
+            : 'OPA policy decision',
+        source: 'opa',
+      };
+    } catch (error) {
+      return {
+        allowed: !this.failClosed,
+        reason: `OPA unavailable: ${error instanceof Error ? error.message : 'unknown error'}`,
+        source: 'fallback',
+      };
+    }
+  }
+}

@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   createLogger,
+  createAssuranceTelemetryEvent,
   createMetadataSyncEnvelope,
+  OpaPolicyAdapter,
   redact,
   verifyMetadataSyncEnvelope,
+  toOpenTelemetryLog,
+  toSiemJson,
 } from './index.js';
 
 describe('redact', () => {
@@ -13,6 +17,47 @@ describe('redact', () => {
     expect(redact('-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----')).toContain(
       '[REDACTED]',
     );
+  });
+
+  it('exports redacted assurance events to SIEM and OpenTelemetry', () => {
+    const event = createAssuranceTelemetryEvent({
+      schemaVersion: 1,
+      eventId: 'event_1',
+      eventName: 'passport.issued',
+      occurredAt: '2026-07-28T12:00:00.000Z',
+      severity: 'info',
+      taskId: 'task_1',
+      attributes: { verdict: 'pass', api_key: 'sk-abcdefghijklmnop' },
+    });
+    expect(toSiemJson(event)).toContain('[REDACTED]');
+    expect(toOpenTelemetryLog(event)).toMatchObject({
+      severityText: 'INFO',
+      body: { stringValue: 'passport.issued' },
+    });
+  });
+
+  it('supports explicit fail-closed and fail-open OPA fallback', async () => {
+    const unavailable = async () => {
+      throw new Error('offline');
+    };
+    await expect(new OpaPolicyAdapter(unavailable, true).evaluate({ action: 'push' })).resolves.toMatchObject({
+      allowed: false,
+      source: 'fallback',
+    });
+    await expect(new OpaPolicyAdapter(unavailable, false).evaluate({ action: 'read' })).resolves.toMatchObject({
+      allowed: true,
+      source: 'fallback',
+    });
+    await expect(
+      new OpaPolicyAdapter(async () => ({
+        result: { allow: false, reason: 'protected path', decision_id: 'decision_1' },
+      })).evaluate({ action: 'write' }),
+    ).resolves.toEqual({
+      allowed: false,
+      decisionId: 'decision_1',
+      reason: 'protected path',
+      source: 'opa',
+    });
   });
 
   it('builds an allowlisted metadata-only sync envelope', () => {
