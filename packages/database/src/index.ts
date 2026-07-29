@@ -103,6 +103,8 @@ export type {
   CommitStatusDecision,
   GitHubStatusCheck,
 } from './repositories/github-status-check-repository.js';
+export { GitHubReviewPublicationRepository } from './repositories/github-review-publication-repository.js';
+export type { GitHubReviewPublication } from './repositories/github-review-publication-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,

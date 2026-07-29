@@ -1,13 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import {
+  buildReviewPacket,
+  decodeChangePassportPayload,
+  renderGitHubReviewPacket,
+} from '@roleflock/change-passport';
+import { sha256Canonical } from '@roleflock/contracts';
+import {
   AuditRepository,
   ChangePassportRepository,
   ChangeContractRepository,
   GitHubAuthorityLinkRepository,
   GitHubIntegrationRepository,
+  GitHubReviewPublicationRepository,
   GitHubStatusCheckRepository,
   ProjectRepository,
+  RunnerIdentityRepository,
   TaskRepository,
   type SqliteDb,
 } from '@roleflock/database';
@@ -21,6 +29,8 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb): void {
   const passports = new ChangePassportRepository(db);
   const statusChecks = new GitHubStatusCheckRepository(db);
   const tasks = new TaskRepository(db);
+  const publications = new GitHubReviewPublicationRepository(db);
+  const runnerIdentities = new RunnerIdentityRepository(db);
 
   app.post('/api/integrations/github/installations', async (request) => {
     const body = request.body as Record<string, unknown>;
@@ -181,6 +191,50 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb): void {
     if (!repository) return reply.code(404).send({ code: 'GITHUB_REPOSITORY_NOT_MAPPED' });
     const commit = required((request.query as { commit?: string }).commit, 'commit');
     return statusChecks.evaluateCommit(repository.id, commit);
+  });
+
+  app.post('/api/tasks/:taskId/github-review-publications', async (request, reply) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    const task = tasks.get(taskId);
+    if (!task) return reply.code(404).send({ code: 'TASK_NOT_FOUND' });
+    const repository = github.getRepositoryByProject(task.projectId);
+    if (!repository) return reply.code(409).send({ code: 'GITHUB_REPOSITORY_NOT_MAPPED' });
+    const passport = passports.getLatestByTask(taskId);
+    if (!passport) return reply.code(409).send({ code: 'CHANGE_PASSPORT_REQUIRED' });
+    const identity = runnerIdentities.get(passport.issuerIdentityId);
+    if (!identity) return reply.code(409).send({ code: 'PASSPORT_ISSUER_NOT_FOUND' });
+    const body = request.body as Record<string, unknown>;
+    const pullRequestNumber = Number(body.pullRequestNumber);
+    if (!Number.isInteger(pullRequestNumber) || pullRequestNumber <= 0) {
+      throw new Error('pullRequestNumber must be a positive integer');
+    }
+    const packet = buildReviewPacket({
+      payload: decodeChangePassportPayload(passport.envelope),
+      issuerIdentity: identity,
+    });
+    const markdown = renderGitHubReviewPacket(packet);
+    const timestamp = new Date().toISOString();
+    const publication = publications.create({
+      id: `github_publication_${randomUUID()}`,
+      githubRepositoryMappingId: repository.id,
+      taskId,
+      pullRequestNumber,
+      commitSha: passport.resultCommit,
+      passportId: passport.passportId,
+      passportPayloadDigest: passport.payloadDigest,
+      packetBodyDigest: sha256Canonical(markdown),
+      githubCommentId: optional(body.githubCommentId),
+      githubCommentUrl: optional(body.githubCommentUrl),
+      publishedBy: required(body.publishedBy, 'publishedBy'),
+      publishedAt: timestamp,
+    });
+    record(audit, 'github.review_packet_published', publication.id, publication, timestamp);
+    return { publication, packet, markdown };
+  });
+
+  app.get('/api/tasks/:taskId/github-review-publications', async (request) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    return publications.listByTask(taskId);
   });
 }
 

@@ -148,10 +148,49 @@ export function buildReviewPacket(input: {
   });
 }
 
+export function renderGitHubReviewPacket(packet: ReviewPacket): string {
+  const value = ReviewPacketSchema.parse(packet);
+  const criteria =
+    value.criteria.length === 0
+      ? '- Criterion-level verdicts are not available in this publication.'
+      : value.criteria
+          .map(
+            (criterion) =>
+              `- **${escapeMarkdown(criterion.criterionId)}**: ${criterion.outcome.replaceAll('_', ' ')} — ${escapeMarkdown(criterion.explanation)} (${criterion.evidenceCount} evidence refs)`,
+          )
+          .join('\n');
+  const caveats =
+    value.caveats.length === 0
+      ? '- None declared.'
+      : value.caveats.map((caveat) => `- ${escapeMarkdown(caveat)}`).join('\n');
+  return [
+    `## RoleFlock assurance: ${value.verdict.toUpperCase()}`,
+    '',
+    `Passport: \`${value.passportId}\``,
+    `Commit: \`${value.subject.resultCommit}\``,
+    `Issuer trust: ${value.assurance.issuerTrustLabel}`,
+    `Verification: ${value.assurance.verification.replaceAll('_', ' ')}`,
+    '',
+    '### Acceptance criteria',
+    '',
+    criteria,
+    '',
+    '### Caveats',
+    '',
+    caveats,
+    '',
+    '_This packet is a projection of a signed Change Passport. Status is valid only for the exact commit above._',
+  ].join('\n');
+}
+
 function trustLabel(
   trust: ChangePassportPayload['assurance']['issuerTrust'],
 ): ReviewPacket['assurance']['issuerTrustLabel'] {
   if (trust === 'local_self') return 'Local self-attestation';
   if (trust === 'organisation') return 'Organisation-trusted attestation';
   return 'External attestation';
+}
+
+function escapeMarkdown(value: string): string {
+  return value.replace(/[\\`*_{}[\]()#+\-.!|>]/g, '\\$&');
 }

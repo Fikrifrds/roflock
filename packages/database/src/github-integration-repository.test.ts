@@ -3,6 +3,7 @@ import { openDatabase, migrate, type SqliteDb } from './client.js';
 import { GitHubIntegrationRepository } from './repositories/github-integration-repository.js';
 import { GitHubAuthorityLinkRepository } from './repositories/github-authority-link-repository.js';
 import { GitHubStatusCheckRepository } from './repositories/github-status-check-repository.js';
+import { GitHubReviewPublicationRepository } from './repositories/github-review-publication-repository.js';
 
 let db: SqliteDb | undefined;
 afterEach(() => db?.close());
@@ -98,6 +99,27 @@ describe('GitHub identity and repository mapping', () => {
       state: 'missing',
       invalidatedCheck: { id: 'status_1', commitSha: 'a'.repeat(40) },
     });
+    const publications = new GitHubReviewPublicationRepository(db);
+    publications.create({
+      id: 'publication_1',
+      githubRepositoryMappingId: 'github_repository_1',
+      taskId: 'task_1',
+      pullRequestNumber: 7,
+      commitSha: 'a'.repeat(40),
+      passportId: 'passport_1',
+      passportPayloadDigest: '2'.repeat(64),
+      packetBodyDigest: '3'.repeat(64),
+      githubCommentId: 'comment_1',
+      publishedBy: 'actor_local_1',
+      publishedAt: at,
+    });
+    expect(publications.listByTask('task_1')).toMatchObject([
+      {
+        pullRequestNumber: 7,
+        commitSha: 'a'.repeat(40),
+        packetBodyDigest: '3'.repeat(64),
+      },
+    ]);
   });
 });
 

@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { buildReviewPacket, parseChangePassportPayload, type RunnerIdentity } from './index.js';
+import {
+  buildReviewPacket,
+  parseChangePassportPayload,
+  renderGitHubReviewPacket,
+  type RunnerIdentity,
+} from './index.js';
 
 describe('Change Passport review packet', () => {
   it('labels local self-attestation without implying organisation trust', () => {
@@ -49,6 +54,19 @@ describe('Change Passport review packet', () => {
     });
     expect(packet.assurance.issuerTrustLabel).toBe('Organisation-trusted attestation');
     expect(packet.caveats.join(' ')).not.toMatch(/workstation owner/);
+  });
+
+  it('renders a commit-bound GitHub review packet', () => {
+    const payload = parseChangePassportPayload(fixture());
+    const markdown = renderGitHubReviewPacket(
+      buildReviewPacket({
+        payload,
+        issuerIdentity: identity('local_installation'),
+      }),
+    );
+    expect(markdown).toContain(`Passport: \`${payload.passportId}\``);
+    expect(markdown).toContain(`Commit: \`${payload.subject.resultCommit}\``);
+    expect(markdown).toContain('valid only for the exact commit');
   });
 });
 
