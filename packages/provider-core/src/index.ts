@@ -4,7 +4,16 @@ import type { InvocationEvent } from '@roleflock/contracts';
 
 const execFileAsync = promisify(execFile);
 
-export interface ProviderCapabilities { streaming: boolean; tools: boolean; writes: boolean; patches?: boolean; headless: boolean; }
+export interface ProviderCapabilities {
+  streaming: boolean;
+  tools: boolean;
+  writes: boolean;
+  patches?: boolean;
+  headless: boolean;
+  structuredOutput?: boolean;
+  imageInput?: boolean;
+  browser?: boolean;
+}
 export interface ProviderHealth {
   status: 'ready' | 'missing' | 'unauthenticated' | 'error';
   detail?: string;
@@ -53,6 +62,59 @@ export interface ProviderModel {
   effort?: Effort;
   /** Family label (`Opus 5`, `GPT-5.6 Sol`) used for grouping in the picker. */
   family?: string;
+  catalogueSource?: 'runtime_catalogue' | 'curated_alias' | 'configured' | 'provider_reported';
+  supportedEffort?: Effort[];
+  maxContextTokens?: number;
+  capabilities?: Partial<
+    Pick<
+      ProviderCapabilities,
+      'tools' | 'writes' | 'patches' | 'headless' | 'structuredOutput' | 'imageInput' | 'browser'
+    >
+  >;
+  costClass?: 'free' | 'low' | 'medium' | 'high' | 'unknown';
+  latencyClass?: 'fast' | 'medium' | 'slow' | 'unknown';
+}
+
+export interface NormalizedProviderModel extends ProviderModel {
+  providerId: string;
+  modelId: string;
+  modelFamily?: string;
+  capabilitySource: 'runtime_detected';
+  metadataSource: NonNullable<ProviderModel['catalogueSource']>;
+}
+
+export function normalizeProviderModel(
+  providerId: string,
+  providerCapabilities: ProviderCapabilities,
+  model: ProviderModel,
+): NormalizedProviderModel {
+  const capabilities = {
+    tools: providerCapabilities.tools,
+    writes: providerCapabilities.writes,
+    headless: providerCapabilities.headless,
+    ...(providerCapabilities.patches !== undefined
+      ? { patches: providerCapabilities.patches }
+      : {}),
+    ...(providerCapabilities.structuredOutput !== undefined
+      ? { structuredOutput: providerCapabilities.structuredOutput }
+      : {}),
+    ...(providerCapabilities.imageInput !== undefined
+      ? { imageInput: providerCapabilities.imageInput }
+      : {}),
+    ...(providerCapabilities.browser !== undefined
+      ? { browser: providerCapabilities.browser }
+      : {}),
+    ...model.capabilities,
+  };
+  return {
+    ...model,
+    providerId,
+    modelId: model.id,
+    ...(model.family ? { modelFamily: model.family } : {}),
+    capabilities,
+    capabilitySource: 'runtime_detected',
+    metadataSource: model.catalogueSource ?? 'provider_reported',
+  };
 }
 
 export interface InvocationRequest {
@@ -250,7 +312,16 @@ export class FakeProvider implements ProviderAdapter {
   constructor(public readonly id = 'fake', private readonly events: InvocationEvent[] = []) {}
   async healthCheck(): Promise<ProviderHealth> { return { status: 'ready' }; }
   async detectCapabilities(): Promise<ProviderCapabilities> { return this.capabilities; }
-  async listModels(): Promise<ProviderModel[]> { return [{ id: 'phase0-fake', displayName: 'Phase 0 Fake' }]; }
+  async listModels(): Promise<ProviderModel[]> {
+    return [
+      {
+        id: 'phase0-fake',
+        displayName: 'Phase 0 Fake',
+        family: 'phase0-fake',
+        catalogueSource: 'configured',
+      },
+    ];
+  }
   async *invoke(request: InvocationRequest): AsyncIterable<InvocationEvent> {
     yield { type: 'invocation.started', invocationId: request.invocationId };
     for (const event of this.events) { if (request.signal?.aborted) { yield { type: 'invocation.interrupted', reason: 'aborted' }; return; } yield event; }

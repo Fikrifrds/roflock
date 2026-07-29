@@ -138,7 +138,8 @@ export async function discoverCursor(
   }
 
   const resolved = await resolveCandidate('cursor-agent');
-  if (resolved && (await looksLikeCursorAgent(resolved))) return { status: 'ready', binary: resolved };
+  if (resolved && (await looksLikeCursorAgent(resolved)))
+    return { status: 'ready', binary: resolved };
 
   return {
     status: 'missing',
@@ -176,7 +177,9 @@ export function parseCursorModelList(stdout: string): ProviderModel[] {
       id,
       displayName,
       ...(isEffort(effort) ? { effort } : {}),
+      ...(isEffort(effort) ? { supportedEffort: [effort] } : {}),
       family: id.replace(CURSOR_EFFORT_SUFFIX, '').replace(/-fast$/, ''),
+      catalogueSource: 'runtime_catalogue',
     });
   }
 
@@ -195,7 +198,10 @@ function extractStreamUsage(line: string): ReturnType<typeof parseReportedUsage>
 
 type ToolCallEnvelope = {
   writeToolCall?: { args?: { path?: unknown; fileText?: unknown } };
-  readToolCall?: { args?: { path?: unknown }; result?: { success?: { content?: unknown; totalLines?: unknown } } };
+  readToolCall?: {
+    args?: { path?: unknown };
+    result?: { success?: { content?: unknown; totalLines?: unknown } };
+  };
   editToolCall?: { args?: { path?: unknown; oldString?: unknown; newString?: unknown } };
   function?: { name?: unknown; arguments?: unknown };
 };
@@ -256,7 +262,9 @@ function formatToolCallText(json: Record<string, unknown>): string | undefined {
     const path = read.args.path;
     if (subtype === 'completed') {
       const lines = read.result?.success?.totalLines;
-      return typeof lines === 'number' ? `\n▸ Read ${path} (${lines} lines)\n` : `\n▸ Read ${path}\n`;
+      return typeof lines === 'number'
+        ? `\n▸ Read ${path} (${lines} lines)\n`
+        : `\n▸ Read ${path}\n`;
     }
     return `\n▸ Reading ${path}\n`;
   }
@@ -289,7 +297,15 @@ function decodeJsonishArguments(raw: string): string | undefined {
     const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === 'object') {
       const record = parsed as Record<string, unknown>;
-      for (const key of ['fileText', 'contents', 'content', 'new_string', 'newString', 'patch', 'diff']) {
+      for (const key of [
+        'fileText',
+        'contents',
+        'content',
+        'new_string',
+        'newString',
+        'patch',
+        'diff',
+      ]) {
         if (typeof record[key] === 'string') return record[key] as string;
       }
       return JSON.stringify(parsed, null, 2);

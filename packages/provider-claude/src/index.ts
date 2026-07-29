@@ -81,7 +81,17 @@ export class ClaudeAdapter implements ProviderAdapter {
         displayName: 'Haiku — fastest for quick answers',
         family: 'haiku',
       },
-    ];
+    ].map((model) => ({
+      ...model,
+      catalogueSource: 'curated_alias' as const,
+      supportedEffort: [
+        'low',
+        'medium',
+        'high',
+        'xhigh',
+        'max',
+      ] as ProviderModel['supportedEffort'],
+    }));
   }
 
   async *invoke(request: InvocationRequest): AsyncIterable<InvocationEvent> {

@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { InvocationEvent } from '@roleflock/contracts';
 import {
+  EFFORT_LEVELS,
   classifyProviderFailure,
   parseReportedUsage,
   whichBinary,
@@ -101,7 +102,11 @@ export class CodexAdapter implements ProviderAdapter {
         displayName: 'GPT-5.4 mini — small and cost-efficient',
         family: 'gpt-5.4',
       },
-    ];
+    ].map((model) => ({
+      ...model,
+      catalogueSource: 'curated_alias' as const,
+      supportedEffort: [...EFFORT_LEVELS],
+    }));
   }
 
   async *invoke(request: InvocationRequest): AsyncIterable<InvocationEvent> {

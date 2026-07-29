@@ -1,6 +1,7 @@
 import {
   FakeProvider,
   ProviderRegistry as AdapterRegistry,
+  normalizeProviderModel,
   type ProviderAdapter,
   type ProviderCapabilities,
   type ProviderHealth,
@@ -256,7 +257,12 @@ export class ProviderRegistry {
   }
 
   async models(id: string): Promise<ProviderModel[]> {
-    return (await this.get(id).listModels?.()) ?? [];
+    const adapter = this.get(id);
+    const [models, capabilities] = await Promise.all([
+      adapter.listModels?.() ?? Promise.resolve([]),
+      this.capabilities(id),
+    ]);
+    return models.map((model) => normalizeProviderModel(id, capabilities, model));
   }
 
   async authAction(id: string, action: 'login' | 'logout' | 'switch'): Promise<AuthActionResult> {

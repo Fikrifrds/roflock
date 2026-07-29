@@ -38,7 +38,13 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
   }
 
   async listModels(): Promise<ProviderModel[]> {
-    return [{ id: this.model, displayName: this.model }];
+    return [
+      {
+        id: this.model,
+        displayName: this.model,
+        catalogueSource: 'configured',
+      },
+    ];
   }
 
   async *invoke(request: InvocationRequest): AsyncIterable<InvocationEvent> {
