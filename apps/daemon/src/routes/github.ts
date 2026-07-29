@@ -24,6 +24,7 @@ import {
   type SqliteDb,
 } from '@roleflock/database';
 import type { EventBus } from '../services/event-bus.js';
+import { evaluateGitHubProtectionGate } from '../services/github-protection-gate.js';
 
 export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb, bus: EventBus): void {
   const github = new GitHubIntegrationRepository(db);
@@ -318,6 +319,21 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb, bus: Ev
     });
     record(audit, 'github.comment_routed_to_planner', result.receipt.id, result.receipt, timestamp);
     return reply.code(201).send({ feedback: result.item, receipt: result.receipt, replayed: false });
+  });
+
+  app.get('/api/projects/:projectId/github-protection-gate', async (request, reply) => {
+    const projectId = (request.params as { projectId: string }).projectId;
+    const repository = github.getRepositoryByProject(projectId);
+    if (!repository) return reply.code(404).send({ code: 'GITHUB_REPOSITORY_NOT_MAPPED' });
+    const commit = required((request.query as { commit?: string }).commit, 'commit');
+    const status = statusChecks.evaluateCommit(repository.id, commit);
+    const passportId = status.state === 'current' ? status.check.passportId : undefined;
+    return evaluateGitHubProtectionGate({
+      status,
+      passportRevoked: passportId
+        ? passports.getRevocation(passportId) !== undefined
+        : false,
+    });
   });
 }
 
