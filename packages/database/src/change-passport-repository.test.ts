@@ -47,6 +47,7 @@ describe('ChangePassportRepository', () => {
     };
     passports.create(record);
     expect(passports.get('passport_1')).toEqual(record);
+    expect(passports.getLatestByTask('task_1')).toEqual(record);
 
     const revocation = {
       passportId: 'passport_1',

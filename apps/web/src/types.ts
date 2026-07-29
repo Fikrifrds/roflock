@@ -271,6 +271,61 @@ export type VerificationResultResponse = {
   }>;
 };
 
+export type ChangePassportResponse = {
+  passport: {
+    passportId: string;
+    payloadDigest: string;
+    verdict: 'pass' | 'fail' | 'conditional' | 'revoked';
+  };
+  revocation?: {
+    reason: string;
+    revokedAt: string;
+  };
+  reviewPacket: {
+    passportId: string;
+    subject: {
+      repositoryId: string;
+      baseCommit: string;
+      resultCommit: string;
+      treeDigest: string;
+      diffDigest: string;
+    };
+    verdict: 'pass' | 'fail' | 'conditional' | 'revoked';
+    criteria: Array<{
+      criterionId: string;
+      outcome: 'pass' | 'fail' | 'insufficient_evidence' | 'not_applicable';
+      explanation: string;
+      evidenceCount: number;
+    }>;
+    evidence: {
+      executionAttestations: number;
+      verificationAttestations: number;
+      availability: 'complete' | 'partial' | 'digest_only';
+    };
+    assurance: {
+      issuerTrust: 'local_self' | 'organisation' | 'external';
+      issuerTrustLabel:
+        'Local self-attestation' | 'Organisation-trusted attestation' | 'External attestation';
+      verification: string;
+      execution: string;
+      independence: string[];
+      runnerIdentityId: string;
+      keyId: string;
+    };
+    approvals: number;
+    openBlockingDeviations: number;
+    unresolvedRisks: Array<{
+      id: string;
+      summary: string;
+      severity: string;
+      blocking: boolean;
+    }>;
+    caveats: string[];
+    issuedAt: string;
+    expiresAt?: string;
+  };
+};
+
 export type TaskHandoff = {
   manifest: {
     schemaVersion: 1;

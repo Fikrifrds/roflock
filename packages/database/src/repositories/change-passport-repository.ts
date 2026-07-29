@@ -50,6 +50,19 @@ export class ChangePassportRepository implements ChangePassportStore {
     };
   }
 
+  getLatestByTask(taskId: string): StoredPassport | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT passport_id
+         FROM change_passports
+         WHERE task_id = ?
+         ORDER BY issued_at DESC, rowid DESC
+         LIMIT 1`,
+      )
+      .get(taskId) as { passport_id: string } | undefined;
+    return row ? this.get(row.passport_id) : undefined;
+  }
+
   revoke(revocation: PassportRevocation): PassportRevocation {
     const parsed = PassportRevocationSchema.parse(revocation);
     this.db

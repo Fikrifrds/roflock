@@ -65,6 +65,9 @@ importers:
       '@roleflock/command-runner':
         specifier: workspace:*
         version: link:../../packages/command-runner
+      '@roleflock/change-passport':
+        specifier: workspace:*
+        version: link:../../packages/change-passport
       '@roleflock/change-contracts':
         specifier: workspace:*
         version: link:../../packages/change-contracts
