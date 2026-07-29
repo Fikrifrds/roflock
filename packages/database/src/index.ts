@@ -75,6 +75,16 @@ export { VerificationResultRepository } from './repositories/verification-result
 export type { StoredVerificationResult } from './repositories/verification-result-repository.js';
 export { RunnerIdentityRepository } from './repositories/runner-identity-repository.js';
 export { ChangePassportRepository } from './repositories/change-passport-repository.js';
+export {
+  RecommendationIdempotencyConflictError,
+  RecommendationVersionConflictError,
+  RoleRecommendationRepository,
+} from './repositories/role-recommendation-repository.js';
+export type {
+  RecommendationRosterEntry,
+  RoleRecommendationAction,
+  StoredRoleRecommendation,
+} from './repositories/role-recommendation-repository.js';
 export type {
   ChangeContractAggregate,
   StoredChangeContractVersion,

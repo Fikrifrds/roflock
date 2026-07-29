@@ -21,6 +21,7 @@
     "@roleflock/change-passport": "workspace:*",
     "@roleflock/change-contracts": "workspace:*",
     "@roleflock/contracts": "workspace:*",
+    "@roleflock/role-recommender": "workspace:*",
     "@roleflock/role-protocol": "workspace:*",
     "@roleflock/verification-runner": "workspace:*",
     "better-sqlite3": "^11.10.0"

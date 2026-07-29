@@ -10,6 +10,7 @@
     { "path": "../contracts" },
     { "path": "../change-passport" },
     { "path": "../change-contracts" },
+    { "path": "../role-recommender" },
     { "path": "../verification-runner" }
   ]
 }
