@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { calculateRolePerformance, observedRecommendationSignal } from './analytics.js';
+import {
+  calculateRolePerformance,
+  explainAdaptiveRouting,
+  observedRecommendationSignal,
+} from './analytics.js';
 import type { OutcomeObservation } from './outcomes.js';
 
 describe('role performance analytics', () => {
@@ -33,6 +37,26 @@ describe('role performance analytics', () => {
       eligible: true,
       sampleSize: 5,
     });
+    expect(
+      explainAdaptiveRouting({
+        analytics: sufficient,
+        postMergePenalty: 0.25,
+      }),
+    ).toMatchObject({
+      applied: true,
+      factors: [
+        { name: 'observed_success', contribution: expect.any(Number) },
+        { name: 'post_merge_penalty', contribution: -0.25 },
+        { name: 'user_control', contribution: 0 },
+      ],
+    });
+    expect(
+      explainAdaptiveRouting({
+        analytics: sufficient,
+        postMergePenalty: 0.25,
+        control: 'frozen',
+      }),
+    ).toMatchObject({ applied: false, netAdjustment: 0 });
   });
 });
 

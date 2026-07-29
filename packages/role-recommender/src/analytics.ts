@@ -126,6 +126,75 @@ export function observedRecommendationSignal(
   };
 }
 
+export interface AdaptiveRoutingExplanation {
+  evidenceKind: 'observational';
+  applied: boolean;
+  sampleSize: number;
+  confidence: number;
+  factors: Array<{
+    name: 'observed_success' | 'post_merge_penalty' | 'user_control';
+    contribution: number;
+    explanation: string;
+  }>;
+  netAdjustment: number;
+  summary: string;
+}
+
+export function explainAdaptiveRouting(input: {
+  analytics: RolePerformanceAnalytics;
+  postMergePenalty: number;
+  control?: 'default' | 'excluded' | 'frozen' | 'overridden';
+}): AdaptiveRoutingExplanation {
+  const signal = observedRecommendationSignal(input.analytics);
+  const control = input.control ?? 'default';
+  const blocked = control === 'excluded' || control === 'frozen';
+  const observedContribution =
+    signal.eligible && !blocked
+      ? Number((signal.score * signal.confidence * 0.15).toFixed(6))
+      : 0;
+  const postMergeContribution =
+    !blocked ? -Number(Math.min(1, Math.max(0, input.postMergePenalty)).toFixed(6)) : 0;
+  const factors: AdaptiveRoutingExplanation['factors'] = [
+    {
+      name: 'observed_success',
+      contribution: observedContribution,
+      explanation: signal.eligible
+        ? blocked
+          ? `Eligible evidence was not applied because control is ${control}.`
+          : `${signal.sampleSize} compatible observations met the learning threshold.`
+        : signal.reason,
+    },
+    {
+      name: 'post_merge_penalty',
+      contribution: postMergeContribution,
+      explanation:
+        input.postMergePenalty > 0
+          ? 'Rollback or escaped-defect feedback reduces future ranking.'
+          : 'No post-merge failure penalty is active.',
+    },
+    {
+      name: 'user_control',
+      contribution: 0,
+      explanation: `Effective adaptive-routing control is ${control}.`,
+    },
+  ];
+  const netAdjustment = Number(
+    factors.reduce((total, factor) => total + factor.contribution, 0).toFixed(6),
+  );
+  return {
+    evidenceKind: 'observational',
+    applied: signal.eligible && !blocked,
+    sampleSize: input.analytics.sampleSize,
+    confidence: input.analytics.confidence,
+    factors,
+    netAdjustment,
+    summary:
+      netAdjustment === 0
+        ? 'Adaptive evidence did not change ranking.'
+        : `Adaptive evidence changes ranking by ${netAdjustment > 0 ? '+' : ''}${netAdjustment}.`,
+  };
+}
+
 function sum(values: readonly number[]): number {
   return values.reduce((total, value) => total + value, 0);
 }

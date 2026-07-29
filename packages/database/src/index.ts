@@ -131,6 +131,8 @@ export type {
 export { MetadataSyncRepository } from './repositories/metadata-sync-repository.js';
 export type { MetadataSyncBatch } from './repositories/metadata-sync-repository.js';
 export { OutcomeObservationRepository } from './repositories/outcome-observation-repository.js';
+export { AdaptiveRoutingControlRepository } from './repositories/adaptive-routing-control-repository.js';
+export type { AdaptiveRoutingControl } from './repositories/adaptive-routing-control-repository.js';
 export type {
   RecommendationRosterEntry,
   RoleRecommendationAction,

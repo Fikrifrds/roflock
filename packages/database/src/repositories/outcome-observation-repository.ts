@@ -100,6 +100,12 @@ export class OutcomeObservationRepository {
            FROM outcome_observations o
            JOIN outcome_task_classes c ON c.observation_id = o.observation_id
            WHERE c.class_key = ? AND c.confidence >= ? AND o.excluded = 0
+             AND COALESCE((
+               SELECT action FROM adaptive_routing_controls arc
+               WHERE arc.target_type = 'observation'
+                 AND arc.target_id = o.observation_id
+               ORDER BY arc.created_at DESC, arc.rowid DESC LIMIT 1
+             ), 'include') <> 'exclude'
            ORDER BY o.observed_at ASC`,
         )
         .all(classKey, minimumConfidence) as Array<{ observation_json: string }>

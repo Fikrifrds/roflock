@@ -1,7 +1,14 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import { OutcomeObservationRepository, TaskRepository, type SqliteDb } from '@roleflock/database';
+import {
+  AdaptiveRoutingControlRepository,
+  OutcomeObservationRepository,
+  TaskRepository,
+  type SqliteDb,
+} from '@roleflock/database';
 import {
   calculateRolePerformance,
+  explainAdaptiveRouting,
   normalizeTaskClass,
   postMergeFailurePenalty,
   type SealedPostMergeOutcome,
@@ -14,6 +21,7 @@ export function registerOutcomeObservationRoutes(
 ): void {
   const tasks = new TaskRepository(db);
   const observations = new OutcomeObservationRepository(db);
+  const controls = new AdaptiveRoutingControlRepository(db);
 
   app.post('/api/tasks/:taskId/outcome-observations', async (request, reply) => {
     const taskId = (request.params as { taskId: string }).taskId;
@@ -62,9 +70,20 @@ export function registerOutcomeObservationRoutes(
           (!query.providerId || observation.roleAssignment.providerId === query.providerId) &&
           (!query.modelId || observation.roleAssignment.modelId === query.modelId),
       );
+    const analytics = calculateRolePerformance(cohort);
     const postMerge = cohort.flatMap((observation) =>
       observations.listPostMerge(observation.observationId),
     );
+    const postMergeSummary = postMergeFailurePenalty(postMerge);
+    const effectiveControl =
+      (query.modelId ? controls.effective('model', query.modelId) : undefined) ??
+      controls.effective('cohort', query.classKey);
+    const control =
+      effectiveControl?.action === 'freeze'
+        ? 'frozen'
+        : effectiveControl?.action === 'override'
+          ? 'overridden'
+          : 'default';
     return {
       filters: {
         classKey: query.classKey,
@@ -72,8 +91,14 @@ export function registerOutcomeObservationRoutes(
         providerId: query.providerId,
         modelId: query.modelId,
       },
-      analytics: calculateRolePerformance(cohort),
-      postMerge: postMergeFailurePenalty(postMerge),
+      analytics,
+      postMerge: postMergeSummary,
+      explanation: explainAdaptiveRouting({
+        analytics,
+        postMergePenalty: postMergeSummary.penalty,
+        control,
+      }),
+      effectiveControl,
     };
   });
 
@@ -97,4 +122,61 @@ export function registerOutcomeObservationRoutes(
     const observationId = (request.params as { observationId: string }).observationId;
     return observations.listPostMerge(observationId);
   });
+
+  app.post('/api/adaptive-routing-controls', async (request) => {
+    const body = request.body as Record<string, unknown>;
+    return controls.create({
+      id: `routing_control_${randomUUID()}`,
+      organisationId: optional(body.organisationId),
+      projectId: optional(body.projectId),
+      targetType: enumValue(
+        body.targetType,
+        ['observation', 'cohort', 'model', 'routing'],
+        'targetType',
+      ),
+      targetId: required(body.targetId, 'targetId'),
+      action: enumValue(
+        body.action,
+        ['exclude', 'include', 'freeze', 'unfreeze', 'override', 'clear_override'],
+        'action',
+      ),
+      value:
+        typeof body.value === 'object' && body.value !== null
+          ? (body.value as Record<string, unknown>)
+          : undefined,
+      reason: required(body.reason, 'reason'),
+      actorId: required(body.actorId, 'actorId'),
+      createdAt: new Date().toISOString(),
+    });
+  });
+
+  app.get('/api/adaptive-routing-controls/:targetType/:targetId', async (request) => {
+    const { targetType, targetId } = request.params as {
+      targetType: 'observation' | 'cohort' | 'model' | 'routing';
+      targetId: string;
+    };
+    return {
+      effective: controls.effective(targetType, targetId),
+      history: controls.history(targetType, targetId),
+    };
+  });
+}
+
+function required(value: unknown, field: string): string {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required`);
+  return value.trim();
+}
+
+function optional(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function enumValue<const T extends readonly string[]>(
+  value: unknown,
+  allowed: T,
+  field: string,
+): T[number] {
+  const resolved = required(value, field);
+  if (!allowed.includes(resolved)) throw new Error(`${field} is invalid`);
+  return resolved as T[number];
 }
