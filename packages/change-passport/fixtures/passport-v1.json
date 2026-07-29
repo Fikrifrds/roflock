@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "1.0.0",
+  "passportId": "passport_fixture_1",
+  "taskId": "task_fixture_1",
+  "subject": {
+    "repositoryId": "repository_fixture_1",
+    "baseCommit": "1111111111111111111111111111111111111111",
+    "resultCommit": "2222222222222222222222222222222222222222",
+    "treeDigest": "3333333333333333333333333333333333333333333333333333333333333333",
+    "diffDigest": "4444444444444444444444444444444444444444444444444444444444444444"
+  },
+  "contract": {
+    "id": "contract_fixture_1",
+    "kind": "change_contract",
+    "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "digestAlgorithm": "sha256",
+    "availability": "embedded"
+  },
+  "plan": {
+    "id": "plan_fixture_1",
+    "kind": "execution_plan",
+    "digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "digestAlgorithm": "sha256",
+    "availability": "embedded"
+  },
+  "verificationSpecification": {
+    "id": "verification_fixture_1",
+    "kind": "verification_specification",
+    "digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "digestAlgorithm": "sha256",
+    "availability": "embedded"
+  },
+  "executionAttestations": [],
+  "verificationAttestations": [
+    {
+      "id": "attestation_fixture_1",
+      "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "kind": "verification_attestation",
+      "outcome": "pass",
+      "runnerIdentityId": "runner_fixture_1",
+      "availability": "embedded"
+    }
+  ],
+  "policyDecisions": [
+    {
+      "id": "policy_fixture_1",
+      "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "predicate": "criteria_pass",
+      "outcome": "pass",
+      "required": true
+    }
+  ],
+  "approvals": [
+    {
+      "id": "approval_fixture_1",
+      "digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "actorId": "authority_fixture_1",
+      "decision": "approved",
+      "artifactHashes": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      ],
+      "resultCommit": "2222222222222222222222222222222222222222"
+    }
+  ],
+  "disclosures": [],
+  "deviations": [],
+  "unresolvedRisks": [],
+  "eventChainDigest": "9999999999999999999999999999999999999999999999999999999999999999",
+  "verdict": "pass",
+  "assurance": {
+    "intent": "authorised",
+    "plan": "approved",
+    "execution": "roleflock_managed",
+    "verification": "clean_local_runner",
+    "verifierIndependence": ["separate_invocation", "clean_workspace", "separate_credentials"],
+    "issuerTrust": "local_self",
+    "evidenceAvailability": "complete"
+  },
+  "issuedAt": "2026-07-28T10:00:00.000Z"
+}
