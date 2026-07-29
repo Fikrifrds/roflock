@@ -174,7 +174,10 @@ describe('ExecutionPlanPanel', () => {
     renderApp(<ExecutionPlanPanel task={task} />);
 
     expect(
-      await screen.findByText(/planner has not proposed an Execution Plan/i),
+      await screen.findByText(/No Execution Plan has been proposed for this task/i),
     ).toBeInTheDocument();
+    // The blocked state must also offer the way out of it, or the assurance
+    // chain is unreachable without hand-crafted API calls.
+    expect(screen.getByRole('button', { name: 'Propose plan from contract' })).toBeInTheDocument();
   });
 });

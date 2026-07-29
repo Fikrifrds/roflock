@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import {
   ChangeContractRepository,
   ExecutionPlanRepository,
+  ProjectRepository,
   TaskRepository,
   VerificationSpecificationRepository,
   type SqliteDb,
@@ -15,7 +16,9 @@ import {
   freezeVerificationSpecification,
   sealVerificationSpecification,
 } from '@roleflock/verification-runner';
+import { draftVerificationSpecification } from '../services/assurance-draft.js';
 import type { EventBus } from '../services/event-bus.js';
+import { discoverVerificationCommand } from '../services/verification-command.js';
 
 export function registerVerificationSpecificationRoutes(
   app: FastifyInstance,
@@ -26,6 +29,7 @@ export function registerVerificationSpecificationRoutes(
   const contracts = new ChangeContractRepository(db);
   const plans = new ExecutionPlanRepository(db);
   const specifications = new VerificationSpecificationRepository(db);
+  const projects = new ProjectRepository(db);
 
   app.get('/api/tasks/:taskId/verification-specification', async (request, reply) => {
     const taskId = (request.params as { taskId: string }).taskId;
@@ -35,6 +39,45 @@ export function registerVerificationSpecificationRoutes(
     }
     reply.header('etag', `"${specification.hash}"`);
     return { specification };
+  });
+
+  /**
+   * The specification that would be frozen for the current approved plan.
+   *
+   * Reports a missing verification command rather than inventing a check: a
+   * specification whose evidence cannot actually be produced is worse than none.
+   */
+  app.get('/api/tasks/:taskId/verification-specification/draft', async (request, reply) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    const task = tasks.get(taskId);
+    if (task === undefined) return reply.code(404).send(error('TASK_NOT_FOUND'));
+    const contractAggregate = contracts.getByTask(taskId);
+    const contract =
+      contractAggregate === undefined
+        ? undefined
+        : contracts.getCurrent(contractAggregate.id)?.contract;
+    if (
+      contract === undefined ||
+      contract.status !== 'authorised' ||
+      contract.hash !== contractAggregate?.currentHash
+    ) {
+      return reply.code(409).send(error('AUTHORISED_CONTRACT_REQUIRED'));
+    }
+    const plan = plans.getByTask(taskId)?.plan;
+    if (plan === undefined || plan.status !== 'approved' || plan.contractHash !== contract.hash) {
+      return reply.code(409).send(error('APPROVED_PLAN_REQUIRED'));
+    }
+    const project = projects.get(task.projectId);
+    const verificationCommand =
+      task.verificationCommand?.trim() ||
+      (project ? await discoverVerificationCommand(project.resolvedPath) : undefined);
+    if (!verificationCommand) {
+      return reply.code(409).send(error('VERIFICATION_COMMAND_REQUIRED'));
+    }
+    return {
+      verificationCommand,
+      draft: draftVerificationSpecification({ contract, plan, verificationCommand }),
+    };
   });
 
   app.post('/api/tasks/:taskId/verification-specification', async (request, reply) => {

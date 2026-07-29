@@ -41,6 +41,24 @@ export function ExecutionPlanPanel({ task }: { task: Task }) {
     );
   };
 
+  /**
+   * Derives a plan from the authorised contract and proposes it.
+   *
+   * The draft is fetched rather than assembled here so the boundary the
+   * executor will be held to is computed from the repository, not guessed by
+   * the browser.
+   */
+  const proposeFromContract = () =>
+    mutate('propose', async () => {
+      const draft = (await api.request(`/api/tasks/${task.id}/execution-plan/draft`)) as {
+        plan: Record<string, unknown>;
+      };
+      await api.request(`/api/tasks/${task.id}/execution-plan`, {
+        method: 'POST',
+        body: JSON.stringify(draft.plan),
+      });
+    });
+
   const revise = () => {
     if (plan === undefined || response === undefined || !revisionReason.trim()) return;
     return mutate('revise', () =>
@@ -55,7 +73,9 @@ export function ExecutionPlanPanel({ task }: { task: Task }) {
     );
   };
 
-  if (query.isLoading) {
+  // A settled error means "no plan exists", which is a state to render, not to
+  // keep waiting on.
+  if (query.isLoading && !query.isError) {
     return (
       <Section title="Execution plan" description="Checking the planner's sealed instructions…">
         <p className="hint">Loading execution plan…</p>
@@ -69,10 +89,21 @@ export function ExecutionPlanPanel({ task }: { task: Task }) {
         title="Execution plan"
         description="Planner-owned steps and boundaries that executors must follow exactly."
       >
+        {error ? (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        ) : null}
         <p className="hint">
-          The planner has not proposed an Execution Plan for this task. Execution cannot enter
-          assured mode until a plan is proposed and approved.
+          No Execution Plan has been proposed for this task, so execution cannot enter assured mode.
+          You can propose one derived from the authorised contract — one step per acceptance
+          criterion, scoped to the paths this repository tracks — then review and approve it below.
         </p>
+        <div className="actions">
+          <button type="button" disabled={busy !== ''} onClick={() => void proposeFromContract()}>
+            {busy === 'propose' ? 'Proposing…' : 'Propose plan from contract'}
+          </button>
+        </div>
       </Section>
     );
   }

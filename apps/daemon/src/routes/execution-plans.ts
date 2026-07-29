@@ -9,10 +9,12 @@ import {
 import {
   ChangeContractRepository,
   ExecutionPlanRepository,
+  ProjectRepository,
   TaskRepository,
   planSnapshotId,
   type SqliteDb,
 } from '@roleflock/database';
+import { draftExecutionPlan } from '../services/assurance-draft.js';
 import type { EventBus } from '../services/event-bus.js';
 import { findTaskPathCollisions } from '../services/path-collision.js';
 
@@ -24,6 +26,30 @@ export function registerExecutionPlanRoutes(
   const plans = new ExecutionPlanRepository(db);
   const contracts = new ChangeContractRepository(db);
   const tasks = new TaskRepository(db);
+  const projects = new ProjectRepository(db);
+
+  /**
+   * A proposable plan derived from the authorised contract.
+   *
+   * Read-only: it produces nothing durable, so the human still performs the
+   * authority act of proposing and approving it.
+   */
+  app.get('/api/tasks/:taskId/execution-plan/draft', async (request, reply) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    const task = tasks.get(taskId);
+    if (task === undefined) return reply.code(404).send(error('TASK_NOT_FOUND'));
+    const contract = currentAuthorisedContract(taskId, contracts);
+    if (contract === undefined) {
+      return reply.code(409).send(error('AUTHORISED_CONTRACT_REQUIRED'));
+    }
+    const project = projects.get(task.projectId);
+    if (project === undefined) return reply.code(409).send(error('PROJECT_NOT_FOUND'));
+    return draftExecutionPlan({
+      contract,
+      repositoryRoot: project.resolvedPath,
+      verificationCommand: task.verificationCommand ?? undefined,
+    });
+  });
 
   app.post('/api/tasks/:taskId/execution-plan', async (request, reply) => {
     const taskId = (request.params as { taskId: string }).taskId;

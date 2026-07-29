@@ -6,6 +6,7 @@ import { AssuranceSummary } from '../components/AssuranceSummary.js';
 import { BlockedBanner } from '../components/BlockedBanner.js';
 import { ChangeContractPanel } from '../components/ChangeContractPanel.js';
 import { ExecutionPlanPanel } from '../components/ExecutionPlanPanel.js';
+import { VerificationSpecPanel } from '../components/VerificationSpecPanel.js';
 import { VerificationVerdictPanel } from '../components/VerificationVerdictPanel.js';
 import { ChangePassportPanel } from '../components/ChangePassportPanel.js';
 import { TaskHandoffPanel } from '../components/TaskHandoffPanel.js';
@@ -203,6 +204,7 @@ export function TaskDetail() {
         <>
           <ChangeContractPanel task={task} />
           <ExecutionPlanPanel task={task} />
+          <VerificationSpecPanel task={task} />
           <RoleRecommendationPanel task={task} />
         </>
       ) : null}
