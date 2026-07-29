@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { Section } from './primitives.js';
 import { api, useData } from '../lib/client.js';
-import type { Task, TaskHandoff } from '../types.js';
+import type { AgentAssuranceGap, Task, TaskHandoff } from '../types.js';
 
 export function TaskHandoffPanel({ task }: { task: Task }) {
   const query = useData<TaskHandoff>(['task-handoff', task.id], `/api/tasks/${task.id}/handoff`);
+  const assurance = useData<AgentAssuranceGap>(
+    ['agent-assurance-gap', task.id],
+    `/api/tasks/${task.id}/agent-assurance-gap`,
+  );
   const handoff = query.data?.manifest !== undefined ? query.data : undefined;
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -89,6 +93,15 @@ export function TaskHandoffPanel({ task }: { task: Task }) {
           ),
         )}
       </div>
+      {assurance.data ? (
+        <div className={`handoff-assurance handoff-assurance-${assurance.data.level}`}>
+          <strong>External evidence: {assurance.data.level}</strong>
+          <span>
+            {assurance.data.observedEventCount} events · {assurance.data.gaps.length} visible gaps
+          </span>
+          {assurance.data.reentry.required ? <p>{assurance.data.reentry.reason}</p> : null}
+        </div>
+      ) : null}
       <details className="handoff-command-details">
         <summary>Inspect pinned commands</summary>
         {handoff.commands

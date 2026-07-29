@@ -194,6 +194,17 @@ describe('generic external agent event API', () => {
         binding: { taskId: task.id },
       },
     });
+    const assuranceGap = await server.app.inject({
+      method: 'GET',
+      url: `/api/tasks/${task.id}/agent-assurance-gap`,
+      headers,
+    });
+    expect(assuranceGap.statusCode).toBe(200);
+    expect(assuranceGap.json()).toMatchObject({
+      taskId: task.id,
+      level: 'partial',
+      reentry: { required: true, owner: 'planner', action: 'review_assurance_gap' },
+    });
     const started = sealAgentEvent(sourceEvent(binding, 0));
     const accepted = await server.app.inject({
       method: 'POST',

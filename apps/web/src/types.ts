@@ -353,6 +353,31 @@ export type TaskHandoff = {
   }>;
 };
 
+export type AgentAssuranceGap = {
+  taskId: string;
+  level: 'complete' | 'partial' | 'unobserved';
+  observedEventCount: number;
+  gaps: Array<{
+    code: string;
+    severity: 'warning' | 'blocking';
+    message: string;
+    sessionId?: string;
+  }>;
+  reentry: {
+    required: boolean;
+    owner: 'planner';
+    action: 'continue_execution' | 'review_assurance_gap';
+    reason: string;
+  };
+  sessions: Array<{
+    sessionId: string;
+    agentFamily: string;
+    nativeSessionId: string;
+    level: 'complete' | 'partial' | 'unobserved';
+    observedEventCount: number;
+  }>;
+};
+
 export type Project = {
   id: string;
   name: string;

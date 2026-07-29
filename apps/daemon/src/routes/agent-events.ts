@@ -15,6 +15,7 @@ import {
   adaptCursorStream,
   ClaudeCodeHookInputSchema,
   CodexHookInputSchema,
+  calculateTelemetryAssurance,
   NormalizedAgentEventSchema,
   parseAgentEventJsonl,
   type NormalizedAgentEvent,
@@ -260,6 +261,48 @@ export function registerAgentEventRoutes(app: FastifyInstance, db: SqliteDb): vo
     const taskId = (request.params as { taskId: string }).taskId;
     if (!tasks.get(taskId)) return reply.code(404).send({ code: 'TASK_NOT_FOUND' });
     return events.listSessionsByTask(taskId);
+  });
+
+  app.get('/api/tasks/:taskId/agent-assurance-gap', async (request, reply) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    if (!tasks.get(taskId)) return reply.code(404).send({ code: 'TASK_NOT_FOUND' });
+    const sessions = events.listSessionsByTask(taskId);
+    if (sessions.length === 0) {
+      return { taskId, ...calculateTelemetryAssurance([]), sessions: [] };
+    }
+    const reports = sessions.map((session) => ({
+      sessionId: session.id,
+      agentFamily: session.agentFamily,
+      nativeSessionId: session.nativeSessionId,
+      ...calculateTelemetryAssurance(events.listEvents(session.id)),
+    }));
+    const level = reports.some((report) => report.level === 'unobserved')
+      ? 'unobserved'
+      : reports.some((report) => report.level === 'partial')
+        ? 'partial'
+        : 'complete';
+    const gaps = reports.flatMap((report) =>
+      report.gaps.map((gap) => ({ ...gap, sessionId: report.sessionId })),
+    );
+    return {
+      taskId,
+      level,
+      observedEventCount: reports.reduce(
+        (total, report) => total + report.observedEventCount,
+        0,
+      ),
+      gaps,
+      reentry: {
+        required: gaps.length > 0,
+        owner: 'planner',
+        action: gaps.length > 0 ? 'review_assurance_gap' : 'continue_execution',
+        reason:
+          gaps.length > 0
+            ? 'Planner must decide whether to collect evidence, revise verification, or accept an explicit caveat.'
+            : 'External evidence is complete for the declared telemetry expectation.',
+      },
+      sessions: reports,
+    };
   });
 
   app.get('/api/agent-sessions/:sessionId/events', async (request, reply) => {

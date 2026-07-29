@@ -395,3 +395,4 @@ export * from './jsonl.js';
 export * from './adapters/codex.js';
 export * from './adapters/claude-code.js';
 export * from './adapters/cursor.js';
+export * from './assurance.js';

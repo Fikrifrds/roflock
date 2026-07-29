@@ -5657,6 +5657,29 @@ pre {
   gap: var(--space-2);
 }
 
+.handoff-assurance {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface-subtle);
+}
+
+.handoff-assurance-complete {
+  border-color: var(--success);
+}
+
+.handoff-assurance-partial,
+.handoff-assurance-unobserved {
+  border-color: var(--warning);
+}
+
+.handoff-assurance p {
+  margin: 0.25rem 0 0;
+}
+
 .handoff-command-details summary {
   color: var(--text-muted);
   cursor: pointer;
