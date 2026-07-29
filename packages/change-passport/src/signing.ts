@@ -85,20 +85,33 @@ export class LocalRunnerIdentityService {
     identity: RunnerIdentity;
     envelope: SignedChangePassport;
   }> {
+    return this.signEnvelope(
+      CHANGE_PASSPORT_PAYLOAD_TYPE,
+      Buffer.from(encodeChangePassportPayload(payload), 'base64'),
+    );
+  }
+
+  async signEnvelope(
+    payloadType: string,
+    payload: Buffer,
+  ): Promise<{
+    identity: RunnerIdentity;
+    envelope: SignedChangePassport;
+  }> {
     const identity = await this.ensureIdentity();
     if (identity.status !== 'active') throw new Error('Runner identity is not active');
     const privateKey = await this.secrets.get(identity.keyReference);
     if (!privateKey) throw new Error('Private signing key is unavailable in the OS secret store');
-    const encodedPayload = encodeChangePassportPayload(payload);
+    const encodedPayload = payload.toString('base64');
     const signature = signBytes(
       null,
-      dssePreAuthenticationEncoding(CHANGE_PASSPORT_PAYLOAD_TYPE, encodedPayload),
+      dssePreAuthenticationEncoding(payloadType, encodedPayload),
       privateKey,
     ).toString('base64');
     return {
       identity,
       envelope: SignedChangePassportSchema.parse({
-        payloadType: CHANGE_PASSPORT_PAYLOAD_TYPE,
+        payloadType,
         payload: encodedPayload,
         signatures: [{ keyid: identity.keyId, sig: signature, algorithm: 'ed25519' }],
       }),

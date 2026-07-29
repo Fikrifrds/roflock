@@ -74,6 +74,7 @@ export { VerificationSpecificationRepository } from './repositories/verification
 export { VerificationResultRepository } from './repositories/verification-result-repository.js';
 export type { StoredVerificationResult } from './repositories/verification-result-repository.js';
 export { RunnerIdentityRepository } from './repositories/runner-identity-repository.js';
+export { ChangePassportRepository } from './repositories/change-passport-repository.js';
 export type {
   ChangeContractAggregate,
   StoredChangeContractVersion,
