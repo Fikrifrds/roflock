@@ -1,7 +1,10 @@
 import type { RiskClass, TaskType } from '@roleflock/contracts';
 import { ROLE_AUTHORITY_MATRIX, type RoleId as AuthorityRoleId } from '@roleflock/role-protocol';
 
-export type GraphMode = 'direct' | 'fast' | 'standard' | 'bug_fix' | 'critical';
+export type GraphMode = 'direct' | 'fast' | 'standard' | 'bug_fix' | 'critical' | 'assured';
+
+/** Modes that predate `assured`, and so have retained v1/v2 shapes. */
+export type LegacyGraphMode = Exclude<GraphMode, 'assured'>;
 
 /**
  * The dispatch key the orchestrator uses to decide what a node actually does.
@@ -77,6 +80,17 @@ export interface WorkflowGraph {
   maxConcurrency: number;
   /** Total re-entries into any loop, across the whole run. */
   maxLoopIterations: number;
+  /**
+   * Makes the assurance chain mandatory rather than opportunistic.
+   *
+   * Every other mode verifies through the assurance path when a task happens to
+   * carry an authorised contract, an approved plan, and a frozen verification
+   * specification, and quietly drops to the writer's own worktree check when it
+   * does not. On a graph marked here the orchestrator must fail instead, so a
+   * result cannot be presented as independently verified when the inputs that
+   * make independence meaningful were absent.
+   */
+  requiresAssurance?: true;
 }
 
 export interface WorkflowRecommendation {
@@ -220,12 +234,65 @@ export const criticalGraph: WorkflowGraph = {
   maxLoopIterations: 4,
 };
 
+/**
+ * The canonical assured path.
+ *
+ * Structurally this is the bug-fix shape; what makes it different is that the
+ * assurance chain is required rather than opportunistic, and that the planner
+ * node carries real authority — `authorityRole: 'planner'` is what makes the
+ * orchestrator compile the planner's turn into a versioned plan proposal bound
+ * to the authorised contract, instead of leaving it as free prose.
+ *
+ * The remaining nodes deliberately carry no `authorityRole` yet. Those gates
+ * require artifacts the runtime does not present today — a plan critique, a
+ * plan approval, an execution report, a test attestation — and declaring the
+ * role without producing its artifact would fail every run rather than assure
+ * it. They are added as each artifact becomes real.
+ */
+const assuredNodes: GraphNode[] = [
+  node('planner', 'planner', 'agent', [], {
+    authorityRole: 'planner',
+    focus:
+      'Trace the implementation path, identify the root cause, and propose the smallest safe code change.',
+  }),
+  node('planner_tests', 'planner', 'agent', [], {
+    focus:
+      'Independently inspect tests and failure modes. Propose regression coverage and verification risks.',
+  }),
+  node('reviewer', 'reviewer', 'human_approval', ['planner', 'planner_tests']),
+  node('writer', 'writer', 'agent', ['reviewer'], { writer: true, maxAttempts: 2 }),
+  node('test', 'test', 'test', ['writer'], { required: true }),
+  node('verifier', 'verifier', 'agent', ['test']),
+  node('accept', 'accept', 'human_approval', ['verifier']),
+];
+
+export const assuredGraph: WorkflowGraph = {
+  id: 'assured',
+  version: graphVersionId('assured'),
+  label: 'Assured',
+  description:
+    'Contract-bound planning → reviewer → writer → independent verification of the sealed commit → human accept',
+  nodes: assuredNodes,
+  edges: [
+    ...assuredNodes.flatMap((current) =>
+      current.dependsOn.map((from) => ({ from, to: current.id, when: 'always' as const })),
+    ),
+    { from: 'test', to: 'writer', when: 'on_fail', guard: 'repair_envelope' },
+    { from: 'test', to: 'planner', when: 'on_fail' },
+    { from: 'verifier', to: 'planner', when: 'on_needs_changes' },
+  ],
+  maxConcurrency: 2,
+  maxLoopIterations: 3,
+  requiresAssurance: true,
+};
+
 export const workflowGraphs: Record<GraphMode, WorkflowGraph> = {
   direct: directGraph,
   fast: fastGraph,
   standard: standardGraph,
   bug_fix: bugFixGraph,
   critical: criticalGraph,
+  assured: assuredGraph,
 };
 
 const legacyBugFixNodes: GraphNode[] = [
@@ -237,7 +304,7 @@ const legacyBugFixNodes: GraphNode[] = [
   node('accept', 'accept', 'human_approval', ['verifier']),
 ];
 
-const legacyGraphs: Record<GraphMode, WorkflowGraph> = {
+const legacyGraphs: Record<LegacyGraphMode, WorkflowGraph> = {
   direct: {
     ...directGraph,
     version: 'direct@1',
@@ -298,7 +365,7 @@ const previousBugFixEdges: GraphEdge[] = [
 ];
 
 /** Exact v2 shapes remain available for tasks created before planner-owned routing. */
-const previousGraphsV2: Record<GraphMode, WorkflowGraph> = {
+const previousGraphsV2: Record<LegacyGraphMode, WorkflowGraph> = {
   direct: {
     ...directGraph,
     version: 'direct@2',
@@ -339,11 +406,14 @@ const previousGraphsV2: Record<GraphMode, WorkflowGraph> = {
  */
 export function getWorkflowGraph(modeOrVersion: string): WorkflowGraph {
   const { mode, version } = parseGraphVersionId(modeOrVersion);
+  // `assured` was introduced at the current schema version, so it has no v1 or
+  // v2 shape to retain. Asking for one is a stale reference, not a graph to
+  // reconstruct, and is rejected rather than silently answered with v3.
   const graph =
     version === 1
-      ? legacyGraphs[mode as GraphMode]
+      ? legacyGraphs[mode as LegacyGraphMode]
       : version === 2
-        ? previousGraphsV2[mode as GraphMode]
+        ? previousGraphsV2[mode as LegacyGraphMode]
         : workflowGraphs[mode as GraphMode];
   if (!graph) throw new Error(`Unknown workflow mode: ${modeOrVersion}`);
   if (version !== undefined && version !== 1 && version !== 2 && version !== GRAPH_SCHEMA_VERSION) {
@@ -371,16 +441,18 @@ export function recommendWorkflow(input: {
     input.type === 'migration'
   ) {
     return {
-      mode: 'critical',
-      rationale: 'High-impact work needs independent review and verification before accept.',
+      mode: 'assured',
+      rationale:
+        'High-impact work must not fall back to a writer-side check: assurance is required, not opportunistic.',
       overridable: true,
     };
   }
 
   if (input.type === 'bug_fix') {
     return {
-      mode: 'bug_fix',
-      rationale: 'Bug fixes use the verified fix path with reviewer confirmation.',
+      mode: 'assured',
+      rationale:
+        'A verified fix is only worth the extra steps when the verdict is independent, so assurance is required.',
       overridable: true,
     };
   }
@@ -519,6 +591,24 @@ export function validateGraph(graph: WorkflowGraph): string[] {
   const writers = graph.nodes.filter((n) => n.writer);
   if (writers.length > 1) errors.push('parallel writers are not allowed');
   if (writers.length === 0) errors.push('graph requires a writer node');
+
+  // A mode that promises assurance must be shaped so it can deliver it. Without
+  // these the run could reach acceptance having never produced an independent
+  // verdict, which is the overstatement the flag exists to prevent.
+  if (graph.requiresAssurance) {
+    if (!graph.nodes.some((n) => n.role === 'test' && n.required)) {
+      errors.push('assured graph requires a required deterministic test node');
+    }
+    if (!graph.nodes.some((n) => n.role === 'verifier')) {
+      errors.push('assured graph requires an independent verifier node');
+    }
+    if (!graph.nodes.some((n) => n.role === 'planner' && n.authorityRole === 'planner')) {
+      errors.push('assured graph requires a planner node holding planner authority');
+    }
+    if (!graph.nodes.some((n) => n.role === 'accept' && n.kind === 'human_approval')) {
+      errors.push('assured graph requires human acceptance');
+    }
+  }
 
   const acceptNodes = graph.nodes.filter((n) => n.role === 'accept');
   if (acceptNodes.length === 0) errors.push('graph requires a terminal accept node');

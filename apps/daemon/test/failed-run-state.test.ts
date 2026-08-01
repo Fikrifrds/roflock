@@ -76,6 +76,9 @@ describe('a failed run leaves no node still claiming to work', () => {
           payload: {
             projectId,
             type: 'bug_fix',
+            // The rejection path is graph-shape independent; pinned so this
+            // stays a reviewer-rejection test rather than an assurance one.
+            mode: 'bug_fix',
             title: 'Reject the reviewer',
             brief: 'A rejected confirmation must fail the run cleanly.',
           },

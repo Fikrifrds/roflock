@@ -495,6 +495,10 @@ export function registerApi(
       roles: graph.nodes.map((node) => node.id),
       maxConcurrency: graph.maxConcurrency,
       maxLoopIterations: graph.maxLoopIterations,
+      // Surfaced so the picker can say which modes verify independently and
+      // which fall back to the writer's own check. Leaving the caller to infer
+      // it from the label is how "verified" ends up meaning two things.
+      requiresAssurance: graph.requiresAssurance === true,
     })),
   );
 

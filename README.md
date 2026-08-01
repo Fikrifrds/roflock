@@ -23,7 +23,10 @@ Implemented and covered by automated tests:
 - Verified bug-fix flow (planner → approval → writer → verification → verifier → accept)
 - Per-role provider and model choice with automatic failover when a quota runs out
 - Required real verification (`npm test` or a custom argv command); a live run fails closed when neither exists
-- Direct / Fast / Standard / Bug Fix / Critical workflow modes, pinned to an immutable graph version
+- Assured / Direct / Fast / Standard / Bug Fix / Critical workflow modes, pinned to an immutable graph version
+- **Assured mode fails closed**: without an authorised contract, an approved plan, and a frozen
+  verification specification it refuses to run, instead of falling back to the writer's own
+  worktree check. Every other mode takes that fallback, and the workflow picker says so
 - Graph runtime: typed failure edges, bounded retry loops, concurrency limits, one writer per worktree
 - Read-only run graph on Task detail, showing live node state and failure routes
 - Folder picker + custom project names

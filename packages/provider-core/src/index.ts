@@ -325,6 +325,77 @@ export class FakeProvider implements ProviderAdapter {
   async *invoke(request: InvocationRequest): AsyncIterable<InvocationEvent> {
     yield { type: 'invocation.started', invocationId: request.invocationId };
     for (const event of this.events) { if (request.signal?.aborted) { yield { type: 'invocation.interrupted', reason: 'aborted' }; return; } yield event; }
-    if (!this.events.some((e) => e.type === 'invocation.completed' || e.type === 'invocation.failed')) yield { type: 'invocation.completed', output: '' };
+    if (!this.events.some((e) => e.type === 'invocation.completed' || e.type === 'invocation.failed')) {
+      // Emitted as a delta, not only on the completion event: consumers build a
+      // turn's text from `model.output.delta` and would otherwise see nothing.
+      const output = simulatedOutput(request.prompt);
+      if (output) yield { type: 'model.output.delta', text: output };
+      yield { type: 'invocation.completed', output };
+    }
   }
+}
+
+/**
+ * A planner turn that holds planner authority is compiled into a versioned
+ * Execution Plan, so an empty reply is not a usable simulation of it — the node
+ * fails on the compile rather than exercising the workflow the stand-in exists
+ * to exercise.
+ *
+ * The IDs are read back out of the prompt rather than invented, so the plan
+ * references the contract's real criteria and evidence and is rejected by
+ * `validateExecutionPlanAgainstContract` if the prompt and contract disagree.
+ * Every other turn keeps returning an empty string.
+ */
+function simulatedOutput(prompt: string): string {
+  if (!/Return exactly one JSON object/.test(prompt) || !/You propose an Execution Plan/.test(prompt)) {
+    return '';
+  }
+  const criterionIds = idsFrom(prompt, /criterion IDs from:\s*([^\n.]+)/);
+  const evidenceIds = idsFrom(prompt, /completionEvidenceIds entry must reference IDs from:\s*([^\n.]+)/);
+  if (criterionIds.length === 0 || evidenceIds.length === 0) return '';
+
+  const path = 'ROLEFLOCK_SIMULATION.md';
+  return JSON.stringify({
+    summary: 'Simulated Execution Plan from the deterministic stand-in.',
+    assumptions: [],
+    steps: [
+      {
+        id: 'STEP-1',
+        objective: 'Produce the change described by the Change Contract.',
+        criterionIds,
+        allowedOperations: ['modify_file', 'run_command'],
+        expectedFiles: [path],
+        completionEvidenceIds: evidenceIds,
+      },
+    ],
+    allowedPaths: [path],
+    expectedChangedPaths: [path],
+    forbiddenPaths: ['.github'],
+    dependencyChanges: [],
+    migrationActions: [],
+    verificationSpecId: 'verification_1',
+    repairEnvelope: {
+      allowedFailureClasses: ['formatting'],
+      maxAttempts: 1,
+      mayAddFiles: false,
+      mayChangeDependencies: false,
+      mayChangePublicApi: false,
+      mayChangeSchema: false,
+      pathScope: [path],
+    },
+    changeBudget: {
+      maxChangedFiles: 4,
+      maxAddedLines: 200,
+      maxDeletedLines: 100,
+      maxNewDependencies: 0,
+    },
+    decisionLog: [],
+  });
+}
+
+function idsFrom(prompt: string, pattern: RegExp): string[] {
+  return (prompt.match(pattern)?.[1] ?? '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
 }

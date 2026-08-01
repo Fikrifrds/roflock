@@ -84,6 +84,10 @@ describe('verified bug fix walking skeleton', () => {
       payload: {
         projectId: projectBody.id,
         type: 'bug_fix',
+        // Pinned explicitly. `bug_fix` now recommends `assured`, which refuses
+        // to verify without an approved plan and a frozen specification; this
+        // test is about the unassured graph shape, so it names it.
+        mode: 'bug_fix',
         title: 'Fix README typo',
         brief: 'README is incomplete',
         expectedBehaviour: 'Has fix note',

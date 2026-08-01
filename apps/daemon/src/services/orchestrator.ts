@@ -56,6 +56,7 @@ import {
   getWorkflowGraph,
   graphVersionId,
   validateGraph,
+  workflowGraphs,
   type GraphMode,
   type WorkflowGraph,
 } from '@roleflock/graph-core';
@@ -558,6 +559,37 @@ export class Orchestrator {
       // unassured path rather than verifying against stale intent.
       return undefined;
     }
+  }
+
+  /**
+   * Names the assurance inputs a task is missing, in the order a user has to
+   * supply them.
+   *
+   * Only used to explain a refusal. "Independent verification is unavailable"
+   * gives someone nothing to act on, whereas naming the missing artifact points
+   * at the exact screen that resolves it.
+   */
+  private missingAssuranceInputs(taskId: string): string[] {
+    const contract = this.currentContract(taskId);
+    if (contract === undefined) return ['an authorised Change Contract'];
+    const missing: string[] = [];
+    const plan = this.approvedPlan(taskId, contract);
+    if (plan === undefined) missing.push('an approved Execution Plan bound to that contract');
+    const stored = this.verificationSpecifications.getByTask(taskId);
+    if (stored === undefined) {
+      missing.push('a Verification Specification');
+      return missing;
+    }
+    if (plan !== undefined) {
+      try {
+        freezeVerificationSpecification(stored, contract, plan);
+      } catch (error) {
+        missing.push(
+          `a Verification Specification that still binds to the current contract and plan (${error instanceof Error ? error.message : String(error)})`,
+        );
+      }
+    }
+    return missing;
   }
 
   /**
@@ -1692,6 +1724,16 @@ export class Orchestrator {
               },
             );
           }
+        } else if (graph.requiresAssurance) {
+          // Fail closed. Every other mode drops to the writer's own worktree
+          // check here, which is exactly the substitution an assured run must
+          // never make: the check would pass, the task would reach acceptance,
+          // and nothing downstream would record that no independent verdict was
+          // ever produced.
+          throw new NodeFailure(
+            `Assured mode cannot verify this task without ${this.missingAssuranceInputs(task.id).join(', ')}. Supply it and resume, or run this task in a mode that does not claim assurance.`,
+            'verification_failed',
+          );
         } else {
           const verification = await this.resolveVerification(task, worktreePath);
           this.publishLiveProgress(nodeRunId, {
@@ -2576,16 +2618,32 @@ export function parseVerifierVerdict(output: string | undefined): VerifierVerdic
   return { decision, reason: reason || undefined };
 }
 
-const GRAPH_MODES: readonly GraphMode[] = ['direct', 'fast', 'standard', 'bug_fix', 'critical'];
+/**
+ * Derived rather than listed. A hand-maintained copy of the mode names drifts
+ * the moment a mode is added, and the cost of that drift is silent: the stored
+ * pin stops being recognised and the task runs a different graph than the one
+ * it was created with.
+ */
+const GRAPH_MODES: readonly GraphMode[] = Object.keys(workflowGraphs) as GraphMode[];
 
 /**
  * Pins a task to the graph version it was created with. Tasks written before
  * graph versioning stored a bare mode (`bug_fix`); those still resolve, but new
  * runs are recorded against an explicit `mode@version`.
+ *
+ * The legacy default only applies to a task that never recorded a mode. A task
+ * that names a mode this build does not have is an error, not something to
+ * substitute a graph for: quietly running `bug_fix` in place of a mode that
+ * required assurance would drop the guarantee the task was created under.
  */
 export function resolveTaskGraph(task: Task): WorkflowGraph {
   const stored = task.workflowGraphVersionId ?? '';
   const [mode] = stored.split('@');
   if (GRAPH_MODES.includes(mode as GraphMode)) return getWorkflowGraph(stored);
+  if (stored !== '') {
+    throw new Error(
+      `Task ${task.id} is pinned to workflow graph "${stored}", which this build does not provide.`,
+    );
+  }
   return getWorkflowGraph(graphVersionId(task.type === 'bug_fix' ? 'bug_fix' : 'standard'));
 }

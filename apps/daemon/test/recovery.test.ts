@@ -71,6 +71,10 @@ describe('daemon recovery', () => {
       payload: {
         projectId,
         type: 'bug_fix',
+        // Recovery is about the confirmation surviving a restart, not about
+        // assurance; `bug_fix` now recommends `assured`, which needs an
+        // approved plan this test deliberately does not create.
+        mode: 'bug_fix',
         title: 'Persist confirmation',
         brief: 'Confirm that a pending approval survives a daemon restart.',
       },

@@ -15,6 +15,7 @@ const FALLBACK_INTENTS = [
 ];
 
 const FALLBACK_WORKFLOWS: Workflow[] = [
+  { id: 'assured', label: 'Assured', description: '', requiresAssurance: true },
   { id: 'bug_fix', label: 'Verified Bug Fix', description: '' },
   { id: 'direct', label: 'Direct', description: '' },
   { id: 'fast', label: 'Fast', description: '' },
@@ -72,10 +73,19 @@ export function NewTask() {
     (workflow) => ({
       value: workflow.id,
       label: workflow.label,
-      description:
-        workflow.id === recommendation?.mode
-          ? `Recommended · ${workflow.description}`
-          : workflow.description,
+      // Assurance is stated on every option, not just the assured one. A mode
+      // that verifies through the writer's own worktree when the assurance
+      // inputs are absent should say so at the point the mode is chosen, rather
+      // than letting "Verified Bug Fix" imply an independent verdict.
+      description: [
+        workflow.id === recommendation?.mode ? 'Recommended' : undefined,
+        workflow.requiresAssurance
+          ? 'Independent verification required'
+          : 'No independent verification',
+        workflow.description || undefined,
+      ]
+        .filter(Boolean)
+        .join(' · '),
     }),
   );
 

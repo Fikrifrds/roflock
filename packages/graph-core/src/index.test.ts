@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   GRAPH_SCHEMA_VERSION,
+  assuredGraph,
   bugFixGraph,
   criticalGraph,
   directGraph,
@@ -234,13 +235,63 @@ describe('workflow graphs', () => {
   });
 
   it('recommends smallest sufficient modes from task intent', () => {
-    expect(recommendWorkflow({ type: 'bug_fix' }).mode).toBe('bug_fix');
     expect(recommendWorkflow({ type: 'investigation' }).mode).toBe('direct');
     expect(recommendWorkflow({ type: 'feature', risk: 'low' }).mode).toBe('fast');
     expect(recommendWorkflow({ type: 'feature', risk: 'medium' }).mode).toBe('standard');
-    expect(recommendWorkflow({ type: 'new_product' }).mode).toBe('critical');
-    expect(recommendWorkflow({ type: 'security_fix' }).mode).toBe('critical');
     // Direct mode must not drag in a reviewer the user did not ask for.
     expect(directGraph.nodes.some((n) => n.role === 'reviewer')).toBe(false);
+  });
+
+  it('recommends assurance for the work whose verdict has to be independent', () => {
+    // These previously landed on bug_fix and critical, which verify through the
+    // assurance chain only when the task happens to carry its inputs and fall
+    // back to the writer's own check when it does not.
+    expect(recommendWorkflow({ type: 'bug_fix' }).mode).toBe('assured');
+    expect(recommendWorkflow({ type: 'new_product' }).mode).toBe('assured');
+    expect(recommendWorkflow({ type: 'security_fix' }).mode).toBe('assured');
+    expect(recommendWorkflow({ type: 'feature', risk: 'critical' }).mode).toBe('assured');
+    expect(assuredGraph.requiresAssurance).toBe(true);
+  });
+
+  it('shapes the assured graph so it can deliver what its name claims', () => {
+    expect(validateGraph(assuredGraph)).toEqual([]);
+    expect(assuredGraph.nodes.find((n) => n.id === 'planner')?.authorityRole).toBe('planner');
+    // The verifier's findings are planner work; routing them to the writer would
+    // let the verifier prescribe an unapproved implementation.
+    expect(
+      assuredGraph.edges.some(
+        (edge) => edge.from === 'verifier' && edge.when === 'on_needs_changes' && edge.to === 'planner',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects an assured graph that could reach acceptance without an independent verdict', () => {
+    const withoutVerifier: WorkflowGraph = {
+      ...assuredGraph,
+      nodes: assuredGraph.nodes.filter((n) => n.role !== 'verifier'),
+      edges: assuredGraph.edges.filter((e) => e.from !== 'verifier' && e.to !== 'verifier'),
+    };
+    expect(validateGraph(withoutVerifier)).toContain(
+      'assured graph requires an independent verifier node',
+    );
+
+    const withoutPlannerAuthority: WorkflowGraph = {
+      ...assuredGraph,
+      nodes: assuredGraph.nodes.map((n) =>
+        n.id === 'planner' ? { id: n.id, role: n.role, kind: n.kind, dependsOn: n.dependsOn } : n,
+      ),
+    };
+    expect(validateGraph(withoutPlannerAuthority)).toContain(
+      'assured graph requires a planner node holding planner authority',
+    );
+  });
+
+  it('has no retained v1 or v2 shape to answer with', () => {
+    // `assured` was introduced at the current schema version. Answering a stale
+    // reference with v3 would silently change the graph a task started under.
+    expect(() => getWorkflowGraph('assured@1')).toThrow();
+    expect(() => getWorkflowGraph('assured@2')).toThrow();
+    expect(getWorkflowGraph('assured').id).toBe('assured');
+    expect(getWorkflowGraph(graphVersionId('assured')).requiresAssurance).toBe(true);
   });
 });

@@ -1741,11 +1741,22 @@ never built. Organisation authentication is local-actor only today.
 but the daemon wires an encrypted local file store whose key sits beside the
 ciphertext. §14's "never in SQLite plaintext" holds; "keychain" does not.
 
-**Graph authority roles.** No shipped workflow graph sets `authorityRole`, so
-the executor plan-pinning gate in the orchestrator is dormant for the five
-default graphs. Assurance activates per task once a contract, an approved plan,
-and a frozen verification specification exist; making it the default for every
-workflow is an open product decision, not an implementation gap.
+**Graph authority roles.** Partly closed. An `assured` mode now ships with
+`requiresAssurance`, so a task in that mode fails rather than dropping to the
+writer's own worktree check when the contract, approved plan, or frozen
+specification is missing, and `recommendWorkflow` selects it for bug fixes,
+security fixes, migrations, new products, and critical risk. Its planner node
+holds `authorityRole: 'planner'`, which activates the plan-proposal compilation
+that had never run.
+
+Still open: the other six role gates. `plan_critic`, `plan_approver`,
+`test_runner`, `executor`, `verifier`, and `release_approver` each require
+artifacts the runtime does not present yet — a plan critique, a plan approval,
+an execution report, a test attestation, a verification verdict, and a review
+packet. Declaring those roles on graph nodes before their artifacts exist would
+fail every run at the artifact gate rather than assure it, so they are added one
+at a time as each artifact becomes real. The executor plan-pinning gate
+therefore remains dormant.
 
 ---
 

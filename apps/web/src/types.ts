@@ -506,6 +506,8 @@ export type Workflow = {
   label: string;
   description: string;
   roles?: string[];
+  /** True when the mode fails rather than falling back to the writer's own check. */
+  requiresAssurance?: boolean;
 };
 
 /** Read-only projection of a graph run, from `/api/tasks/:id/graph`. */
