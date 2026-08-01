@@ -22,8 +22,14 @@ RoleFlock does **not** operate a hosted multi-tenant backend in Phase 0.
 | Custom HTTP provider | Request body you configure (endpoint + model) | When registered and invoked |
 | Update check (optional) | Product name, version, platform | Only if `ROLEFLOCK_UPDATE_URL` is set; otherwise offline stub |
 | Support export (your action) | Redacted diagnostics JSON you download | When you request export from Privacy or API |
+| GitHub publication (opt-in, per repository) | Commit SHA, assurance conclusion, status context, and — if you enable review comments — the rendered Change Passport review packet | Only for a repository you explicitly enable, using a token you supply |
 
 Update checks **never** include repository paths, file contents, or API keys.
+
+GitHub publication is off until you turn it on for a specific repository, and it sends
+assurance results only — never source code, diffs, prompts, or provider output. Turning it
+off deletes the stored token. The token lives in the local secret store under its own
+namespace, separate from provider credentials and from the passport signing key.
 
 ## What we do not collect centrally (Phase 0)
 

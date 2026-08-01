@@ -103,6 +103,11 @@ export type {
   CommitStatusDecision,
   GitHubStatusCheck,
 } from './repositories/github-status-check-repository.js';
+export {
+  DEFAULT_STATUS_CONTEXT,
+  GitHubPublicationSettingsRepository,
+} from './repositories/github-publication-settings-repository.js';
+export type { GitHubPublicationSettings } from './repositories/github-publication-settings-repository.js';
 export { GitHubReviewPublicationRepository } from './repositories/github-review-publication-repository.js';
 export type { GitHubReviewPublication } from './repositories/github-review-publication-repository.js';
 export { GitHubCommentFeedbackRepository } from './repositories/github-comment-feedback-repository.js';

@@ -23,6 +23,7 @@
     "@roleflock/contracts": "workspace:*",
     "@roleflock/database": "workspace:*",
     "@roleflock/evidence": "workspace:*",
+    "@roleflock/github-client": "workspace:*",
     "@roleflock/graph-core": "workspace:*",
     "@roleflock/graph-runtime": "workspace:*",
     "@roleflock/observability": "workspace:*",

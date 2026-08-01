@@ -10,6 +10,8 @@ import { classifyFeedbackText } from '@roleflock/role-protocol';
 import {
   AuditRepository,
   ChangePassportRepository,
+  DEFAULT_STATUS_CONTEXT,
+  GitHubPublicationSettingsRepository,
   ExecutionPlanRepository,
   FeedbackRepository,
   ChangeContractRepository,
@@ -25,6 +27,8 @@ import {
 } from '@roleflock/database';
 import type { EventBus } from '../services/event-bus.js';
 import { evaluateGitHubProtectionGate } from '../services/github-protection-gate.js';
+import { GitHubPublisher } from '../services/github-publisher.js';
+import { LocalSecretStore } from '../services/local-secret-store.js';
 import type { SigningSecretStore } from '../services/signing-secret-store.js';
 
 export function registerGitHubRoutes(
@@ -32,6 +36,7 @@ export function registerGitHubRoutes(
   db: SqliteDb,
   bus: EventBus,
   signing: SigningSecretStore,
+  dataDir: string,
 ): void {
   const github = new GitHubIntegrationRepository(db);
   const projects = new ProjectRepository(db);
@@ -46,6 +51,15 @@ export function registerGitHubRoutes(
   const commentFeedback = new GitHubCommentFeedbackRepository(db);
   const feedback = new FeedbackRepository(db);
   const executionPlans = new ExecutionPlanRepository(db);
+  const publicationSettings = new GitHubPublicationSettingsRepository(db);
+  // Publication tokens are scoped to their own namespace: they authorise writes
+  // to someone else's repository and must not share a blast radius with the
+  // passport signing key or with provider credentials.
+  const publicationSecrets = new LocalSecretStore(dataDir, 'github-publication');
+  const publisher = new GitHubPublisher({
+    settings: publicationSettings,
+    secrets: publicationSecrets,
+  });
 
   app.post('/api/integrations/github/installations', async (request) => {
     const body = request.body as Record<string, unknown>;
@@ -189,7 +203,56 @@ export function registerGitHubRoutes(
       createdAt: timestamp,
     });
     record(audit, 'github.status_check_created', check.id, check, timestamp);
-    return check;
+    // The decision above is durable whether or not it reaches GitHub. Publishing
+    // is reported alongside it rather than folded into it, so a transport
+    // failure cannot be mistaken for a different verdict.
+    const publication = await publisher.publishStatusCheck({ repository, check });
+    record(audit, 'github.status_check_published', check.id, publication, timestamp);
+    return { ...check, publication };
+  });
+
+  /**
+   * Opt-in for the only outbound calls RoleFlock makes to a user's repository.
+   * Off until this is set, and the token is held in the secret store rather
+   * than in SQLite beside the mapping it authorises.
+   */
+  app.put('/api/projects/:projectId/github-publication', async (request, reply) => {
+    const projectId = (request.params as { projectId: string }).projectId;
+    const repository = github.getRepositoryByProject(projectId);
+    if (!repository) return reply.code(404).send({ code: 'GITHUB_REPOSITORY_NOT_MAPPED' });
+    const body = request.body as Record<string, unknown>;
+    const enabled = body.enabled === true;
+    const token = optional(body.token);
+    if (enabled && !token && publicationSettings.get(repository.id).tokenSecretId === undefined) {
+      return reply.code(400).send({ code: 'GITHUB_TOKEN_REQUIRED' });
+    }
+
+    const tokenSecretId = `github.publication.${repository.id}`;
+    if (token) await publicationSecrets.set(tokenSecretId, token);
+    // Disabling removes the credential too: leaving a usable token behind for a
+    // repository the user just switched off is not what "off" should mean.
+    if (!enabled) await publicationSecrets.delete(tokenSecretId);
+
+    const timestamp = new Date().toISOString();
+    const saved = publicationSettings.upsert({
+      githubRepositoryMappingId: repository.id,
+      enabled,
+      ...(enabled ? { tokenSecretId } : {}),
+      statusContext: optional(body.statusContext) ?? DEFAULT_STATUS_CONTEXT,
+      publishReviewComments: body.publishReviewComments === true,
+      updatedAt: timestamp,
+    });
+    record(audit, 'github.publication_configured', repository.id, saved, timestamp);
+    // Never echo the token back, not even the one just supplied.
+    return { ...saved, tokenSecretId: undefined, tokenStored: saved.tokenSecretId !== undefined };
+  });
+
+  app.get('/api/projects/:projectId/github-publication', async (request, reply) => {
+    const projectId = (request.params as { projectId: string }).projectId;
+    const repository = github.getRepositoryByProject(projectId);
+    if (!repository) return reply.code(404).send({ code: 'GITHUB_REPOSITORY_NOT_MAPPED' });
+    const saved = publicationSettings.get(repository.id);
+    return { ...saved, tokenSecretId: undefined, tokenStored: saved.tokenSecretId !== undefined };
   });
 
   app.get('/api/projects/:projectId/github-status', async (request, reply) => {
@@ -237,7 +300,13 @@ export function registerGitHubRoutes(
       publishedAt: timestamp,
     });
     record(audit, 'github.review_packet_published', publication.id, publication, timestamp);
-    return { publication, packet, markdown };
+    const delivery = await publisher.publishReviewComment({
+      repository,
+      pullRequestNumber,
+      body: markdown,
+    });
+    record(audit, 'github.review_packet_delivered', publication.id, delivery, timestamp);
+    return { publication, packet, markdown, delivery };
   });
 
   app.get('/api/tasks/:taskId/github-review-publications', async (request) => {

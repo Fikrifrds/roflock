@@ -176,6 +176,9 @@ documents is clamped rather than forwarded.
 - Actual and shadow cost are never presented as one bill
 - Stopping a task kills its provider process and settles the task on a terminal state
 - Update checks never send repository paths or contents
+- GitHub publication is the only outbound call carrying repository data, is off until a
+  repository is explicitly opted in, and sends a commit status and an optional review-packet
+  comment — never source code. Disabling it deletes the stored token
 
 ## Workspace
 

@@ -34,6 +34,7 @@ import { MIGRATION_030 } from './migrations/030_outcome_observations.js';
 import { MIGRATION_031 } from './migrations/031_outcome_task_classes.js';
 import { MIGRATION_032 } from './migrations/032_post_merge_outcomes.js';
 import { MIGRATION_033 } from './migrations/033_adaptive_routing_controls.js';
+import { MIGRATION_034 } from './migrations/034_github_publication_settings.js';
 
 export type SqliteDb = Database.Database;
 
@@ -104,6 +105,7 @@ export function migrate(db: SqliteDb): void {
     MIGRATION_031,
     MIGRATION_032,
     MIGRATION_033,
+    MIGRATION_034,
   ];
   for (const migration of migrations) {
     if (applied.has(migration.version)) continue;

@@ -121,7 +121,7 @@ export function registerApi(
   registerChangePassportRoutes(app, db, signing);
   registerRoleRecommendationRoutes(app, db, providers, orchestrator.router);
   registerAgentEventRoutes(app, db);
-  registerGitHubRoutes(app, db, bus, signing);
+  registerGitHubRoutes(app, db, bus, signing, dataDir);
   registerOrganisationRoutes(app, db);
   registerOutcomeObservationRoutes(app, db);
   app.get('/api/concurrency-policy', async (request) => {

@@ -111,6 +111,27 @@ Two limits are deliberate and disclosed rather than hidden:
   The Change Passport review packet carries this as an explicit caveat, and a caller that
   cannot state the protection at all is disclosed as unstated rather than assumed safe.
 
+### Outbound GitHub publication
+
+Publishing an assurance result to GitHub is the only outbound call that carries data about a
+user's repository, so it is an explicit per-repository opt-in rather than something inferred
+from a repository mapping or the presence of a credential. What leaves the machine is the
+commit SHA, the conclusion, the status context, and — behind a second switch — the rendered
+review packet. Source code, diffs, prompts, and provider output never do.
+
+The token is a user-supplied credential held in the local secret store under its own
+namespace, so it does not share a blast radius with provider credentials or the passport
+signing key, and it is deleted when publication is switched off. It is never returned by an
+API response and never written to SQLite.
+
+Delivery is separated from decision. The status check row is recorded whether or not the call
+to GitHub succeeds, and a transport failure is reported alongside the decision rather than
+changing it, so an unreachable GitHub cannot turn a pass into a failure or the reverse.
+
+Commit statuses are used rather than check runs. Check runs require GitHub App authentication;
+a commit status can still be named as a required status check on a protected branch, which is
+the property the assurance gate needs, with far less credential surface.
+
 ### Independent verification
 
 Executor test output is a claim. Required deterministic evidence must bind the result

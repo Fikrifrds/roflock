@@ -1722,13 +1722,19 @@ Legend: ✅ complete · ◐ local model complete, outbound integration missing �
 Recorded here because §19.9 forbids presenting an unfinished capability as
 production assurance, and a ✅ that overstates reach does exactly that.
 
-**M8 — GitHub delivery gate.** The decision model, durable identity/authority
-mappings, commit-bound status records, review-packet publication records, and
-comment classification all exist and are tested. What does not exist is any
-outbound GitHub client: no GitHub App, no REST calls, no check-run publication.
-Consequently a protected branch cannot yet require a RoleFlock passport — the
-exit criterion is met in-model only. Closing M8 means adding an authenticated
-GitHub integration that publishes the check RoleFlock already decides.
+**M8 — GitHub delivery gate.** Mostly closed. An outbound client now publishes
+the commit status RoleFlock already decides and, behind a second switch, posts
+the rendered review packet as a pull-request comment. Publication is an explicit
+per-repository opt-in using a user-supplied token held in its own secret-store
+namespace, and delivery is reported separately from the decision so a transport
+failure cannot change a verdict. A protected branch can require the
+`roleflock/assurance` status.
+
+Still open: check runs and the GitHub App. Commit statuses were chosen because
+they satisfy the required-check property with a fine-grained token, where check
+runs need App authentication, an installation-token exchange, and a webhook
+receiver. Inbound webhooks — and therefore automatic invalidation on a new push
+without RoleFlock being asked — remain unbuilt.
 
 **M9.5 — metadata sync.** Envelopes and the outbox are built and allowlisted,
 but there is no transport and no hosted control plane to receive them. The
