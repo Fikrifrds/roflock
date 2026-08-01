@@ -60,6 +60,7 @@ import {
 import { customProviderId, ProviderRegistry } from '../services/provider-registry.js';
 import { DocumentService, isDocumentAuthority, isDocumentKind } from '../services/documents.js';
 import { LocalSecretStore } from '../services/local-secret-store.js';
+import type { SigningSecretStore } from '../services/signing-secret-store.js';
 import { checkForUpdates, getLocalVersion } from '../services/version-check.js';
 import { discoverVerificationCommand } from '../services/verification-command.js';
 import { ReviewAppService } from '../services/review-app.js';
@@ -97,6 +98,7 @@ export function registerApi(
   dataDir: string,
   providerSecrets: LocalSecretStore,
   reviewApps: ReviewAppService,
+  signing: SigningSecretStore,
   runtime: { host: string; port: number },
 ): void {
   const projects = new ProjectRepository(db),
@@ -116,10 +118,10 @@ export function registerApi(
   registerExecutionPlanRoutes(app, db, bus);
   registerVerificationSpecificationRoutes(app, db, bus);
   registerVerificationResultRoutes(app, db);
-  registerChangePassportRoutes(app, db, dataDir);
+  registerChangePassportRoutes(app, db, signing);
   registerRoleRecommendationRoutes(app, db, providers, orchestrator.router);
   registerAgentEventRoutes(app, db);
-  registerGitHubRoutes(app, db, bus);
+  registerGitHubRoutes(app, db, bus, signing);
   registerOrganisationRoutes(app, db);
   registerOutcomeObservationRoutes(app, db);
   app.get('/api/concurrency-policy', async (request) => {

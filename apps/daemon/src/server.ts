@@ -26,6 +26,7 @@ import { seedPricingDefaults } from './services/pricing.js';
 import { ProviderRegistry } from './services/provider-registry.js';
 import { DocumentService } from './services/documents.js';
 import { LocalSecretStore } from './services/local-secret-store.js';
+import { createSigningSecretStore } from './services/signing-secret-store.js';
 import { ReviewAppService } from './services/review-app.js';
 
 export interface ServerOptions {
@@ -110,16 +111,19 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
   }
   const documents = new DocumentService(db, join(dataDir, 'documents'));
   const reviewApps = new ReviewAppService();
-  // Passport signing keys live in their own encrypted store, never beside
-  // provider credentials and never in SQLite.
-  const signingSecrets = new LocalSecretStore(dataDir, 'runner-signing');
+  // Passport signing keys live in the OS keychain where one exists, and never
+  // beside provider credentials or in SQLite. On a platform without a keychain
+  // they stay in a separate encrypted file and the passport says so.
+  const signing = await createSigningSecretStore(dataDir, {
+    log: ({ level, message, error }) => app.log[level]({ err: error }, message),
+  });
   const orchestrator = new Orchestrator(
     db,
     bus,
     join(dataDir, 'worktrees'),
     providers,
     documents,
-    signingSecrets,
+    signing.store,
   );
   registerApi(
     app,
@@ -132,6 +136,7 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
     dataDir,
     providerSecrets,
     reviewApps,
+    signing,
     {
       host,
       port,

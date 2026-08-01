@@ -80,6 +80,12 @@ export function buildReviewPacket(input: {
       explanation: string;
     }>;
   };
+  /**
+   * How the issuer's private key is stored. Omitted only by callers that have no
+   * access to the signing store; a reviewer is told the protection is unstated
+   * rather than being left to assume the stronger of the two.
+   */
+  keyProtection?: 'os_keychain' | 'local_file';
 }): ReviewPacket {
   const { payload, issuerIdentity } = input;
   const caveats: string[] = [];
@@ -87,6 +93,13 @@ export function buildReviewPacket(input: {
     caveats.push(
       'Signed by this local installation. The workstation owner remains inside the trust boundary.',
     );
+  }
+  if (input.keyProtection === 'local_file') {
+    caveats.push(
+      'The issuer signing key is held in a local encrypted file whose key sits beside it, not in an OS keychain. Anything that can read the data directory can reproduce this signature.',
+    );
+  } else if (input.keyProtection === undefined) {
+    caveats.push('Issuer signing key protection is not stated in this view.');
   }
   if (payload.assurance.evidenceAvailability !== 'complete') {
     caveats.push(

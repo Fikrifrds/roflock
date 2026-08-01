@@ -12,19 +12,19 @@ import {
   VerificationResultRepository,
   type SqliteDb,
 } from '@roleflock/database';
-import { LocalSecretStore } from '../services/local-secret-store.js';
+import type { SigningSecretStore } from '../services/signing-secret-store.js';
 
 export function registerChangePassportRoutes(
   app: FastifyInstance,
   db: SqliteDb,
-  dataDir: string,
+  signing: SigningSecretStore,
 ): void {
   const passports = new ChangePassportRepository(db);
   const identities = new RunnerIdentityRepository(db);
   const verificationResults = new VerificationResultRepository(db);
   const signer = new ChangePassportService(
     passports,
-    new LocalRunnerIdentityService(identities, new LocalSecretStore(dataDir, 'runner-signing')),
+    new LocalRunnerIdentityService(identities, signing.store),
   );
 
   app.get('/api/tasks/:taskId/change-passport', async (request) => {
@@ -46,6 +46,7 @@ export function registerChangePassportRoutes(
         payload,
         issuerIdentity: identity,
         decision: verification?.decision,
+        keyProtection: signing.protection,
       }),
     };
   });

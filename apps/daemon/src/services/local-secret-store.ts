@@ -1,5 +1,5 @@
 import { randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 interface EncryptedValue {
@@ -56,6 +56,22 @@ export class LocalSecretStore {
     if (!(id in values)) return;
     delete values[id];
     writeFileSync(this.valuesPath, JSON.stringify(values), { encoding: 'utf8', mode: 0o600 });
+  }
+
+  /** Every stored id, so a migration can move this store's contents elsewhere. */
+  async listIds(): Promise<string[]> {
+    return Object.keys(this.readValues());
+  }
+
+  /**
+   * Removes the backing files entirely. Used once the secrets have been moved
+   * into the OS keychain: leaving the key file behind would keep the material
+   * readable from disk, which is the thing the move is meant to end.
+   */
+  async destroy(): Promise<void> {
+    for (const path of [this.valuesPath, this.keyPath]) {
+      if (existsSync(path)) rmSync(path);
+    }
   }
 
   private key(): Buffer {

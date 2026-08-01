@@ -56,6 +56,32 @@ describe('Change Passport review packet', () => {
     expect(packet.caveats.join(' ')).not.toMatch(/workstation owner/);
   });
 
+  it('discloses a signing key that is only protected by a local file', () => {
+    const packet = buildReviewPacket({
+      payload: parseChangePassportPayload(fixture()),
+      issuerIdentity: identity('local_installation'),
+      keyProtection: 'local_file',
+    });
+    expect(packet.caveats.join(' ')).toMatch(/local encrypted file whose key sits beside it/i);
+  });
+
+  it('adds no key-protection caveat once the key is in an OS keychain', () => {
+    const packet = buildReviewPacket({
+      payload: parseChangePassportPayload(fixture()),
+      issuerIdentity: identity('local_installation'),
+      keyProtection: 'os_keychain',
+    });
+    expect(packet.caveats.join(' ')).not.toMatch(/signing key/i);
+  });
+
+  it('says key protection is unstated rather than implying the stronger case', () => {
+    const packet = buildReviewPacket({
+      payload: parseChangePassportPayload(fixture()),
+      issuerIdentity: identity('local_installation'),
+    });
+    expect(packet.caveats.join(' ')).toMatch(/protection is not stated/i);
+  });
+
   it('renders a commit-bound GitHub review packet', () => {
     const payload = parseChangePassportPayload(fixture());
     const markdown = renderGitHubReviewPacket(

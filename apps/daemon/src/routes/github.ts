@@ -25,8 +25,14 @@ import {
 } from '@roleflock/database';
 import type { EventBus } from '../services/event-bus.js';
 import { evaluateGitHubProtectionGate } from '../services/github-protection-gate.js';
+import type { SigningSecretStore } from '../services/signing-secret-store.js';
 
-export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb, bus: EventBus): void {
+export function registerGitHubRoutes(
+  app: FastifyInstance,
+  db: SqliteDb,
+  bus: EventBus,
+  signing: SigningSecretStore,
+): void {
   const github = new GitHubIntegrationRepository(db);
   const projects = new ProjectRepository(db);
   const audit = new AuditRepository(db);
@@ -212,6 +218,7 @@ export function registerGitHubRoutes(app: FastifyInstance, db: SqliteDb, bus: Ev
     const packet = buildReviewPacket({
       payload: decodeChangePassportPayload(passport.envelope),
       issuerIdentity: identity,
+      keyProtection: signing.protection,
     });
     const markdown = renderGitHubReviewPacket(packet);
     const timestamp = new Date().toISOString();

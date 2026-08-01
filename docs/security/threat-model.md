@@ -93,6 +93,24 @@ keys require registration, rotation, revocation, and repository scope. A valid s
 proves issuer possession only; policy separately determines whether that issuer and
 assurance level are trusted.
 
+On macOS the daemon holds the issuer key in the login keychain through the `security` CLI.
+A key found in the older local file store is moved into the keychain at startup, and the
+file plus its encryption key are removed only after the keychain returns the same value, so
+an interrupted move leaves the identity able to sign. A keychain that exists but refuses to
+answer — typically locked or denied — does **not** fall back to the file store: signing
+fails closed until it is unlocked, because a silent fallback would let a passport keep
+claiming a protection it no longer has.
+
+Two limits are deliberate and disclosed rather than hidden:
+
+- `security add-generic-password` accepts the secret as a command argument, so another local
+  account can observe it in the process table during the write. Reads do not pass through
+  argv. Key creation and migration are the only writes.
+- Platforms without a wired keychain keep the encrypted local file, whose key sits beside
+  the ciphertext. Anything that can read the data directory can reproduce the signature.
+  The Change Passport review packet carries this as an explicit caveat, and a caller that
+  cannot state the protection at all is disclosed as unstated rather than assumed safe.
+
 ### Independent verification
 
 Executor test output is a claim. Required deterministic evidence must bind the result
