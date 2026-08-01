@@ -50,29 +50,32 @@ Honest sorting of what exists in the repo today.
 
 | Capability | Verdict |
 |---|---|
-| Enforced verification, fails closed (`test` node, `NodeFailure`) | **Replicable.** A `Stop`/`PostToolUse` hook in `settings.json` can force a test run and fail hard. This is hygiene, not a differentiator. |
+| Enforced verification, fails closed (`test` node, `NodeFailure`) | **Partly replicable.** A `Stop`/`PostToolUse` hook can force a test run and fail hard — that part is hygiene. What a hook cannot do is refuse to accept its own result: the `assured` mode's `requiresAssurance` binds the verdict to an authorised contract, an approved plan, and a specification frozen against both, judged in a clean runner against a sealed commit. |
 | Evidence, audit trail, disclosure manifest, approval grants with expiry and use limits | **Real, but only with a second party.** Claude Code produces a transcript; RoleFlock produces a record. The difference is worth nothing to a solo developer on a private project, and a great deal to a reviewer, client, or auditor who must trust the change without redoing the work. |
 | Multi-provider routing with quota failover | **Real and immediate.** But it is a feature, not a product category. |
-| Running many tasks unattended and in parallel | **Required parity, currently dormant.** It creates throughput but is also native to leading coding-agent products. |
+| Running many tasks unattended and in parallel | **Required parity, now active.** External worktrees are the default and parallel runs survive a restart. It creates throughput but is also native to leading coding-agent products. |
 | Contract-bound intent, independent verification, policy authority, and portable commit-bound acceptance evidence | **Primary product boundary.** The coding agent is the worker; RoleFlock is the independent authority. |
 
-## The architectural contradiction
+## The architectural contradiction — resolved
 
-`orchestrator.ts:446` hardcodes `mode: 'in_place'`. `prepareTaskWorkspace`
-(`packages/repository-runtime/src/index.ts:227`) then checks out
-`roleflock/<taskId>` **inside the project folder** — one branch at a time — and the
-writer lease permits one writer per worktree. `mode: 'external'` exists and works;
-it survives only as a recovery path for older runs (`orchestrator.ts:430-437`).
+**This section described a contradiction that no longer exists. It is kept because the
+reasoning still explains why parallelism was treated as a prerequisite.**
 
-So RoleFlock is architecturally a **single-threaded, human-supervised** tool today:
-precisely the shape where Claude Code wins outright and where RoleFlock's governance
-reads as friction. This is the most expensive product decision currently encoded in
-the repo.
+The finding was that the orchestrator hardcoded `mode: 'in_place'`, checking out
+`roleflock/<taskId>` inside the project folder one branch at a time, which made RoleFlock
+architecturally single-threaded and human-supervised — the shape where Claude Code wins
+outright and RoleFlock's governance reads as friction. It was called the most expensive
+product decision encoded in the repo.
 
-Restoring external worktrees makes the unanswerable sentence available: five tasks
-running in five worktrees while you are away, returning five branches that each
-passed real verification, each with its own evidence. "Another way to give feedback"
-is answerable in one sentence. That is not.
+External worktrees are now the default: `orchestrator.ts` prepares each run its own
+worktree under the data directory and keeps `in_place` only as a recovery path for older
+runs. `parallel-recovery` covers four isolated tasks keeping their slots, worktrees, and
+approved plan pins across a restart. The sentence the section wanted is available: N tasks
+running in N worktrees while you are away, each returning a branch that passed real
+verification with its own evidence.
+
+What remains true is the ordering it argued for — parallelism supplies throughput, and
+assurance supplies the differentiated trust layer on top of it.
 
 ## Consequences for the feedback design
 
