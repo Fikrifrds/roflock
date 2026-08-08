@@ -2019,7 +2019,7 @@ export function registerApi(
     return pack;
   });
   app.post('/api/data/backup', async () => {
-    const result = backupLocalData(dataDir);
+    const result = await backupLocalData(db, dataDir);
     audit.append({
       id: randomUUID(),
       actor: 'local-user',

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
+import { openMigratedDatabase } from '@roleflock/database';
 import { verifyEvidenceBundle } from '@roleflock/evidence';
 import { createServer } from '../src/server.js';
 
@@ -103,7 +104,17 @@ describe('export and data controls', () => {
     });
     expect(backup.statusCode).toBe(200);
     const backupDir = (backup.json() as { backupDir: string }).backupDir;
-    expect(existsSync(join(backupDir, 'roleflock.db'))).toBe(true);
+    const backupPath = join(backupDir, 'roleflock.db');
+    expect(existsSync(backupPath)).toBe(true);
+    const restored = openMigratedDatabase(backupPath);
+    try {
+      expect(restored.pragma('integrity_check', { simple: true })).toBe('ok');
+      expect(
+        (restored.prepare('SELECT COUNT(*) AS count FROM tasks').get() as { count: number }).count,
+      ).toBe(1);
+    } finally {
+      restored.close();
+    }
 
     const denied = await app.inject({
       method: 'POST',

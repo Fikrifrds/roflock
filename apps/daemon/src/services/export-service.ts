@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { DATABASE_FILE_NAME, DATABASE_FILE_NAMES } from '../data-dir.js';
 import {
@@ -125,19 +125,19 @@ export function buildDiagnosticsExport(db: SqliteDb, dataDir: string): Diagnosti
   }) as DiagnosticsExport;
 }
 
-export function backupLocalData(dataDir: string): { backupDir: string; files: string[] } {
+export async function backupLocalData(
+  db: SqliteDb,
+  dataDir: string,
+): Promise<{ backupDir: string; files: string[] }> {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupDir = join(dataDir, 'backups', stamp);
   mkdirSync(backupDir, { recursive: true });
-  const files: string[] = [];
-  for (const name of DATABASE_FILE_NAMES) {
-    const path = join(dataDir, name);
-    if (existsSync(path)) {
-      copyFileSync(path, join(backupDir, name));
-      files.push(name);
-    }
-  }
-  return { backupDir, files };
+  // SQLite's online backup API takes a transactionally consistent snapshot
+  // while the live WAL database remains open. Copying the database, WAL, and
+  // SHM files one after another can capture three different moments and leave
+  // the operator with a backup that cannot be restored.
+  await db.backup(join(backupDir, DATABASE_FILE_NAME));
+  return { backupDir, files: [DATABASE_FILE_NAME] };
 }
 
 export function deleteLocalData(dataDir: string): { deleted: string[] } {
