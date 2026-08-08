@@ -37,7 +37,7 @@ const COMMANDS = [
 ];
 
 function bash(): string {
-  return `# Roflock completion for Bash\n_roflock() {\n  local cur=\"${'$'}{COMP_WORDS[COMP_CWORD]}\"\n  COMPREPLY=( $(compgen -W \"${COMMANDS.join(' ')}\" -- \"${'$'}cur\") )\n}\ncomplete -F _roflock roflock roleflock\n`;
+  return `# Roflock completion for Bash\n_roflock() {\n  local cur="${'$'}{COMP_WORDS[COMP_CWORD]}"\n  COMPREPLY=( $(compgen -W "${COMMANDS.join(' ')}" -- "${'$'}cur") )\n}\ncomplete -F _roflock roflock roleflock\n`;
 }
 
 function zsh(): string {
@@ -45,7 +45,7 @@ function zsh(): string {
 }
 
 function fish(): string {
-  return `# Roflock completion for Fish\ncomplete -c roflock -f -a \"${COMMANDS.join(' ')}\"\ncomplete -c roleflock -f -a \"${COMMANDS.join(' ')}\"\n`;
+  return `# Roflock completion for Fish\ncomplete -c roflock -f -a "${COMMANDS.join(' ')}"\ncomplete -c roleflock -f -a "${COMMANDS.join(' ')}"\n`;
 }
 
 export function runCompletion(args: string[], io: CliIo): number {
