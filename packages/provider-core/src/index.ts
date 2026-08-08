@@ -363,5 +363,22 @@ export class FakeProvider implements ProviderAdapter {
   }
 }
 
+/**
+ * A CLI path from the environment, with a PATH fallback.
+ *
+ * Honours the current `ROFLOCK_*` spelling and the legacy `ROLEFLOCK_*` one, as
+ * well as a provider's own conventional variable, so an operator who set any of
+ * them keeps working.
+ */
+export function readEnvBinary(name: string, fallback: string): string {
+  const suffix = name.replace(/^(ROFLOCK|ROLEFLOCK)_/, '');
+  return (
+    process.env[name] ??
+    process.env[`ROFLOCK_${suffix}`] ??
+    process.env[`ROLEFLOCK_${suffix}`] ??
+    fallback
+  );
+}
+
 export * from './driver.js';
 export * from './provider-driver.js';

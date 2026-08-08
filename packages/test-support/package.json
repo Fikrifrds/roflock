@@ -26,6 +26,7 @@
     "@roleflock/provider-claude": "workspace:*",
     "@roleflock/provider-codex": "workspace:*",
     "@roleflock/provider-custom": "workspace:*",
+    "@roleflock/provider-opencode": "workspace:*",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

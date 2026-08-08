@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readEnv } from '@roleflock/contracts';
 import { claudeDriver } from '@roleflock/provider-claude';
 import { codexDriver } from '@roleflock/provider-codex';
+import { openCodeDriver, resolveOpenCodeBinary } from '@roleflock/provider-opencode';
 import type { AgentDriver, AgentEvent } from '@roleflock/provider-core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runDriverConformance } from './driver-conformance.js';
@@ -27,6 +28,7 @@ import { runDriverConformance } from './driver-conformance.js';
 const LIVE = readEnv('LIVE_DRIVER_TESTS') === '1';
 
 function installed(binary: string): boolean {
+  if (binary.includes('/')) return existsSync(binary);
   try {
     execFileSync('command', ['-v', binary], { shell: '/bin/sh', stdio: 'ignore' });
     return true;
@@ -48,24 +50,39 @@ function workspace(): string {
 }
 
 /** Deliberately the smallest turn that still exercises the whole path. */
-function options(workspacePath: string) {
+function options(workspacePath: string, model?: string) {
   return {
     request: (overrides = {}) => ({
       invocationKey: 'inv_live_conformance',
       objective: 'Reply with exactly one word: ok',
       workspacePath,
+      ...(model === undefined ? {} : { model }),
       permissions: { workspaceWrite: true, network: false },
       ...overrides,
     }),
   };
 }
 
-const drivers: Array<[string, string, () => AgentDriver]> = [
-  ['claude', 'claude', () => claudeDriver()],
-  ['codex', 'codex', () => codexDriver()],
+/**
+ * `binary` is what the presence check looks for. OpenCode installs to
+ * `~/.opencode/bin`, which is often not on a non-login shell's PATH, so its
+ * entry resolves the same way the adapter does.
+ */
+const drivers: Array<[string, string, () => AgentDriver, string | undefined]> = [
+  ['claude', 'claude', () => claudeDriver(), undefined],
+  ['codex', 'codex', () => codexDriver(), undefined],
+  [
+    'opencode',
+    // Resolved the same way the adapter resolves it, so the presence check and
+    // the driver cannot disagree about whether OpenCode is installed.
+    resolveOpenCodeBinary(),
+    () => openCodeDriver(),
+    // A free model, so running the live suite does not bill anyone.
+    'opencode/deepseek-v4-flash-free',
+  ],
 ];
 
-describe.each(drivers)('the real %s CLI', (name, binary, build) => {
+describe.each(drivers)('the real %s CLI', (name, binary, build, model) => {
   const runnable = LIVE && installed(binary);
 
   it.skipIf(!runnable)('is detected and authenticated', async () => {
@@ -80,7 +97,7 @@ describe.each(drivers)('the real %s CLI', (name, binary, build) => {
   it.skipIf(!runnable)(
     'passes conformance',
     async () => {
-      expect(await runDriverConformance(build(), options(workspace()))).toEqual([]);
+      expect(await runDriverConformance(build(), options(workspace(), model))).toEqual([]);
     },
     120_000,
   );
@@ -89,7 +106,7 @@ describe.each(drivers)('the real %s CLI', (name, binary, build) => {
     'emits a coherent stream ending in a settled outcome',
     async () => {
       const events: AgentEvent[] = [];
-      for await (const event of build().start(options(workspace()).request())) {
+      for await (const event of build().start(options(workspace(), model).request())) {
         events.push(event);
       }
 
