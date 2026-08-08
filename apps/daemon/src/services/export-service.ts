@@ -146,6 +146,8 @@ export function deleteLocalData(dataDir: string): { deleted: string[] } {
     ...DATABASE_FILE_NAMES,
     'provider-secrets.key',
     'provider-secrets.json',
+    'runner-signing.key',
+    'runner-signing.json',
     'documents',
     'worktrees',
   ]) {

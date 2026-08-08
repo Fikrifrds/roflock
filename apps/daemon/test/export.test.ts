@@ -124,6 +124,9 @@ describe('export and data controls', () => {
     });
     expect(denied.statusCode).toBe(400);
 
+    await writeFile(join(dataDir, 'provider-secrets.key'), 'provider-secret');
+    await writeFile(join(dataDir, 'runner-signing.key'), 'signing-secret');
+
     const deleted = await app.inject({
       method: 'POST',
       url: '/api/data/delete',
@@ -132,5 +135,7 @@ describe('export and data controls', () => {
     });
     expect(deleted.statusCode).toBe(200);
     expect(existsSync(join(dataDir, 'roleflock.db'))).toBe(false);
+    expect(existsSync(join(dataDir, 'provider-secrets.key'))).toBe(false);
+    expect(existsSync(join(dataDir, 'runner-signing.key'))).toBe(false);
   });
 });

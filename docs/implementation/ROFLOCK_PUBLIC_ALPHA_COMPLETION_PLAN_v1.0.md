@@ -49,9 +49,10 @@ These findings take precedence over milestone completion claims.
 | RF-EVO-188 | complete | Explicit agent/check retry budgets must be positive integers at compile time; invalid values can no longer disappear at the runtime bridge.                                                                                                                        |
 | RF-EVO-189 | complete | Daemon launch, port-conflict, log, and token-rotation guidance now uses the public Roflock name and preferred env prefix while preserving legacy wire/data compatibility.                                                                                          |
 | RF-EVO-190 | complete | Live data backup uses SQLite's online backup API and a restore/integrity test; the daemon no longer copies the database and WAL sidecars at different moments.                                                                                                     |
+| RF-EVO-191 | complete | Confirmed operational-data deletion removes both provider credentials and runner-signing secret stores in addition to SQLite, documents, and task worktrees.                                                                                                       |
 
 The implementation order is 181 → 182 → 183 → 184 → 185 → 186 → 187 → 188 → 189
-→ 190.
+→ 190 → 191.
 Each ticket must preserve the single `runGraph` runtime and pass its targeted
 tests before a separate commit.
 
