@@ -263,6 +263,62 @@ describe('graph runtime', () => {
     expect(writes).toBe(bugFixGraph.maxLoopIterations + 1);
   });
 
+  it('resets everything downstream of a loop target so a re-run is not partly stale', async () => {
+    // writer → probe → gate → test → accept, with gate routing failures back to
+    // the writer. `probe` completed before the loop re-entry, so a re-run that
+    // kept its old result would report evidence gathered against code that no
+    // longer exists.
+    const looping = graph(
+      [
+        node('writer', [], { writer: true, maxAttempts: 2 }),
+        node('probe', ['writer'], { role: 'planner' }),
+        node('gate', ['probe'], { role: 'verifier' }),
+        node('test', ['gate'], { role: 'test', required: true }),
+        node('accept', ['test'], { role: 'accept', kind: 'human_approval' }),
+      ],
+      {
+        edges: [
+          { from: 'writer', to: 'probe', when: 'always' },
+          { from: 'probe', to: 'gate', when: 'always' },
+          { from: 'gate', to: 'test', when: 'always' },
+          { from: 'test', to: 'accept', when: 'always' },
+          { from: 'gate', to: 'writer', when: 'on_fail' },
+        ],
+      },
+    );
+
+    const runsPerNode = new Map<string, number>();
+    const observedAttempts: number[] = [];
+
+    const result = await runGraph(looping, async ({ node: n, attempt }) => {
+      const run = (runsPerNode.get(n.id) ?? 0) + 1;
+      runsPerNode.set(n.id, run);
+      if (n.id === 'probe') observedAttempts.push(attempt);
+      if (n.id === 'gate' && run === 1) throw new NodeFailure('needs work', 'verification_failed');
+      return `${n.id}:${run}`;
+    });
+
+    expect(result.state).toBe('completed');
+    expect(result.loopIterations).toBe(1);
+
+    // The descendant re-ran rather than staying completed from the first pass.
+    expect(runsPerNode.get('probe')).toBe(2);
+
+    // Its stale result was discarded, not kept alongside the fresh one.
+    const probeResults = result.results.filter((r) => r.nodeId === 'probe');
+    expect(probeResults).toHaveLength(1);
+    expect(probeResults[0]?.output).toBe('probe:2');
+
+    // Attempt counters reset with the state, so the re-run is attempt 1 again
+    // and does not silently consume the node's retry budget.
+    expect(observedAttempts).toEqual([1, 1]);
+    expect(probeResults[0]?.attempt).toBe(1);
+
+    // Nodes downstream of the failure only ever ran after the loop settled.
+    expect(runsPerNode.get('test')).toBe(1);
+    expect(runsPerNode.get('accept')).toBe(1);
+  });
+
   it('never schedules two writers at once', async () => {
     const parallel = graph(
       [
