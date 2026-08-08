@@ -1580,3 +1580,26 @@ the sandbox. The remaining three are the preview listener restriction and the
 same review-app package passes 7/7 outside the sandbox. Tests cover semantic
 source differences, action lowering, custom-human rejection, authored-command
 selection, approval rejection, and forced-restart recovery.
+
+---
+
+## 27. Public-alpha correction — arbitrary workflow IDs
+
+RF-EVO-183 removes `GraphMode` from the new-task execution boundary without
+widening the historical compatibility table. The template registry can contain
+any workflow ID, `graphVersionId` can version that stable string, and
+`resolveWorkflowGraph` resolves its current compiled graph. `GraphMode` remains
+appropriate for built-in recommendation and v1/v2/v3 hard-coded history only.
+
+`availableWorkflowGraphs()` merges current compiled templates with built-in
+fallbacks and includes custom entries. `/api/workflows` now uses that list, so
+Studio's existing data-driven selector exposes arbitrary workflows rather than
+silently hiding them. Task creation resolves the selected registry entry and
+stores its source, IR, and executable graph snapshot; all later execution and
+diagram reads use that pin.
+
+Verification includes a non-built-in `release_train.roflock`: it is loaded,
+listed by the API, selected for task creation, versioned as `release_train@3`,
+and persisted with an executable graph whose ID is `release_train`. Targeted
+workflow/template and API tests pass 13/13, with graph-core and daemon typechecks
+clean. Historical task resolution remains unchanged.

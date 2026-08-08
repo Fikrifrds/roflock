@@ -3,7 +3,11 @@ import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { ActiveExecution, Task } from '@roleflock/contracts';
-import { registeredWorkflowIr, registeredWorkflowSource } from '@roleflock/graph-core';
+import {
+  availableWorkflowGraphs,
+  registeredWorkflowIr,
+  registeredWorkflowSource,
+} from '@roleflock/graph-core';
 import { layoutGraph, toSvg } from '@roleflock/graph-ui';
 import { explainRun } from '@roleflock/evidence';
 import {
@@ -33,7 +37,6 @@ import {
   getWorkflowGraph,
   recommendWorkflow,
   resolveWorkflowGraph,
-  workflowGraphs,
   type WorkflowGraph,
 } from '@roleflock/graph-core';
 import { budgetStatus } from '@roleflock/usage-ledger';
@@ -529,7 +532,7 @@ export function registerApi(
   });
 
   app.get('/api/workflows', async () =>
-    Object.values(workflowGraphs).map((graph) => ({
+    availableWorkflowGraphs().map((graph) => ({
       id: graph.id,
       version: graph.version,
       label: graph.label,

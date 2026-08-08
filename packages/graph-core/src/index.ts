@@ -115,7 +115,7 @@ export interface WorkflowRecommendation {
 /** Bumped when the shape of a built-in template changes. */
 export const GRAPH_SCHEMA_VERSION = 3;
 
-export function graphVersionId(mode: GraphMode): string {
+export function graphVersionId(mode: string): string {
   return `${mode}@${GRAPH_SCHEMA_VERSION}`;
 }
 

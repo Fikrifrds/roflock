@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  availableWorkflowGraphs,
   getWorkflowGraph,
   registerWorkflowTemplates,
   resolveWorkflowGraph,
@@ -86,6 +87,8 @@ describe('loading built-in workflows from source', () => {
 
     expect(result.failures).toEqual([]);
     expect(result.loaded).toEqual(['odd']);
+    expect(availableWorkflowGraphs().map((graph) => graph.id)).toContain('odd');
+    expect(resolveWorkflowGraph('odd').version).toBe('odd@3');
   });
 
   it('registers nothing when there is no workflows directory', () => {

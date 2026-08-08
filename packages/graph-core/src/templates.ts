@@ -5,8 +5,8 @@ import {
   getWorkflowGraph,
   graphVersionId,
   parseGraphVersionId,
-  type GraphMode,
   type WorkflowGraph,
+  workflowGraphs,
 } from './index.js';
 
 /**
@@ -64,6 +64,22 @@ export function registeredWorkflowTemplates(): readonly WorkflowGraph[] {
   return [...registry.values()].map((template) => template.graph);
 }
 
+/** Current compiled templates plus built-in fallbacks not present in the registry. */
+export function availableWorkflowGraphs(): readonly WorkflowGraph[] {
+  const builtIns = Object.values(workflowGraphs).map((fallback) => {
+    const compiled = registry.get(fallback.id)?.graph;
+    return compiled === undefined
+      ? fallback
+      : { ...compiled, version: graphVersionId(compiled.id) };
+  });
+  const builtInIds = new Set(builtIns.map((graph) => graph.id));
+  const custom = [...registry.values()]
+    .map((template) => template.graph)
+    .filter((graph) => !builtInIds.has(graph.id))
+    .map((graph) => ({ ...graph, version: graphVersionId(graph.id) }));
+  return [...builtIns, ...custom];
+}
+
 /**
  * The Graph IR a template was compiled from, when there is one.
  *
@@ -97,7 +113,7 @@ export function resolveWorkflowGraph(modeOrVersion: string): WorkflowGraph {
   if (compiled !== undefined) {
     // Keep the legacy version id so persisted runs, event payloads and the
     // historical resolver all continue to agree on what this graph is called.
-    return { ...compiled, version: graphVersionId(mode as GraphMode) };
+    return { ...compiled, version: graphVersionId(mode) };
   }
 
   return getWorkflowGraph(modeOrVersion);

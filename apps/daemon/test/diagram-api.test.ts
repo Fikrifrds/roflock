@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { openMigratedDatabase, WorkflowSnapshotRepository } from '@roleflock/database';
 import { createServer } from '../src/server.js';
 import { DATABASE_FILE_NAME } from '../src/data-dir.js';
+import { loadWorkflowTemplates } from '../src/workflow-templates.js';
 import { authoriseTaskContract } from './contract-fixture.js';
 
 /**
@@ -21,6 +22,7 @@ const cleanup: Array<() => Promise<void>> = [];
 
 afterEach(async () => {
   while (cleanup.length > 0) await cleanup.pop()!();
+  loadWorkflowTemplates();
 });
 
 const headers = {
@@ -77,6 +79,58 @@ async function task(app: Awaited<ReturnType<typeof boot>>['app'], repoDir: strin
 }
 
 describe('the shared diagram endpoint', () => {
+  it('discovers and creates a task from a non-built-in workflow ID', async () => {
+    const { app, dataDir, repoDir } = await boot();
+    const workflowDir = await mkdtemp(join(tmpdir(), 'rf-custom-workflow-'));
+    cleanup.push(() => rm(workflowDir, { recursive: true, force: true }));
+    await writeFile(
+      join(workflowDir, 'release_train.roflock'),
+      `workflow release_train { version "1.0.0" }
+role implementer { write }
+agent Build { role implementer objective "prepare the release" }
+check Tests { run "npm test" required }
+human Accept
+flow { Build -> Tests
+       Tests.pass -> Accept }
+`,
+    );
+    expect(loadWorkflowTemplates(workflowDir)).toMatchObject({
+      loaded: ['release_train'],
+      failures: [],
+    });
+
+    const listed = await app.inject({ method: 'GET', url: '/api/workflows', headers });
+    expect((listed.json() as Array<{ id: string }>).map((workflow) => workflow.id)).toContain(
+      'release_train',
+    );
+    const project = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers,
+      payload: { path: repoDir },
+    });
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/tasks',
+      headers,
+      payload: {
+        projectId: (project.json() as { id: string }).id,
+        type: 'feature',
+        title: 'Prepare release',
+        brief: 'Use the custom workflow',
+        mode: 'release_train',
+      },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const taskId = (created.json() as { id: string }).id;
+    const db = openMigratedDatabase(join(dataDir, DATABASE_FILE_NAME));
+    const snapshot = new WorkflowSnapshotRepository(db).get(taskId)!;
+    expect(snapshot.graphVersionId).toBe('release_train@3');
+    expect(JSON.parse(snapshot.workflowGraphJson)).toMatchObject({ id: 'release_train' });
+    db.close();
+  });
+
   it('persists source, IR, and the executable graph when the task is created', async () => {
     const { app, dataDir, repoDir } = await boot();
     const taskId = await task(app, repoDir);
