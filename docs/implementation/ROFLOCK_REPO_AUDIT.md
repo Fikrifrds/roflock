@@ -542,6 +542,12 @@ field.
 
 ## 10. Risk register
 
+**How to read this.** Every row is a risk _with its mitigation_, recorded when it
+was identified — not a list of outstanding work. A struck-through row was later
+eliminated outright and says where. Rows added by later phases appear in that
+phase's section rather than here, so the register stays a record of what was known
+at each point rather than being rewritten.
+
 | #   | Risk                                                                                | Severity     | Mitigation                                                                       |
 | --- | ----------------------------------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------- |
 | 1   | IR bridge silently changes loop semantics (`maxAttempts` vs `LoopGroup`)            | **Critical** | Close gap #8 first; keep both concepts in R3; compatibility fixtures per §6.4    |
@@ -776,10 +782,10 @@ alongside the built-in `GraphMode` templates.
 
 ### New risks
 
-| #   | Risk                                                                                                                                      | Severity | Mitigation                                                                                                         |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
-| 15  | `dispatchRole` infers `verifier` versus `planner` from being downstream of a check; a workflow with an unusual shape could be mislabelled | Medium   | Only affects provider routing and phase display, never authority; R6's generic roles remove the inference entirely |
-| 16  | Two graph validators now exist — `validateGraphIR` and legacy `validateGraph` — and could drift                                           | Medium   | The bridge runs the legacy one and reports its errors as diagnostics, so drift surfaces as a bridge failure        |
+| #   | Risk                                                                                               | Severity | Mitigation                                                                                                                      |
+| --- | -------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 15  | `dispatchRole` infers `verifier` versus `planner` from graph position when a role declares no slot | Low      | R6 added `dispatch <slot>`, and a declaration always wins; inference remains only as the default for workflows that do not care |
+| 16  | Two graph validators now exist — `validateGraphIR` and legacy `validateGraph` — and could drift    | Medium   | The bridge runs the legacy one and reports its errors as diagnostics, so drift surfaces as a bridge failure                     |
 
 ---
 
