@@ -19,9 +19,5 @@ jobs:
       - run: pnpm build
       - run: pnpm lint
       - run: pnpm typecheck
-      # A runner has no provider CLIs to discover, so roles are pointed at the
-      # deterministic stand-in rather than left to fail on a missing binary.
       - run: pnpm test
-        env:
-          ROFLOCK_FORCE_FAKE: '1'
       - run: pnpm format:check

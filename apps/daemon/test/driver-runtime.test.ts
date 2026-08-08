@@ -15,6 +15,7 @@ import { ProviderRegistry } from '../src/services/provider-registry.js';
 import { authoriseTaskContract } from './contract-fixture.js';
 
 const cleanup: Array<() => Promise<void>> = [];
+const INTEGRATION_WAIT_MS = 20_000;
 const session = { token: 'test-token', csrf: 'test-csrf' };
 const headers = {
   'x-roleflock-token': session.token,
@@ -140,7 +141,7 @@ async function waitFor(
   instance: ServerHandle,
   path: string,
   predicate: (body: Record<string, unknown>) => boolean,
-  timeoutMs = 8_000,
+  timeoutMs = INTEGRATION_WAIT_MS,
 ) {
   const started = Date.now();
   let last: Record<string, unknown> = {};

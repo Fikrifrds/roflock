@@ -193,7 +193,7 @@ pnpm install --frozen-lockfile
 pnpm build
 pnpm lint
 pnpm typecheck
-ROFLOCK_FORCE_FAKE=1 pnpm test
+pnpm test
 pnpm format:check
 pnpm --dir apps/cli test:package
 pnpm build:playground:public

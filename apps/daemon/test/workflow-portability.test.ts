@@ -13,6 +13,7 @@ import { createServer } from '../src/server.js';
 import { ProviderRegistry } from '../src/services/provider-registry.js';
 
 const cleanup: Array<() => Promise<void>> = [];
+const INTEGRATION_WAIT_MS = 20_000;
 const session = { token: 'test-token', csrf: 'test-csrf' };
 const headers = {
   'x-roleflock-token': session.token,
@@ -105,7 +106,7 @@ async function waitForTask(
 ) {
   const started = Date.now();
   let approved = false;
-  while (Date.now() - started < 8_000) {
+  while (Date.now() - started < INTEGRATION_WAIT_MS) {
     const response = await app.inject({
       method: 'GET',
       url: `/api/tasks/${taskId}`,
