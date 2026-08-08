@@ -104,7 +104,7 @@ approvals, shared output semantics, and owned-daemon lifecycle remain below.
 | RF-HARNESS-002 | complete          | FakeDriver and public conformance runner exist.                                                                           |
 | RF-HARNESS-003 | complete          | Codex CLI integration has conformance and opt-in live validation.                                                         |
 | RF-HARNESS-004 | complete          | Claude Code integration has conformance and opt-in live validation.                                                       |
-| RF-HARNESS-005 | open              | No Pi driver or documented compatibility spike exists.                                                                    |
+| RF-HARNESS-005 | complete          | The Pi RPC/SDK spike selects process-isolated RPC, caps capability claims, and defines driver/conformance exit criteria.  |
 | RF-HARNESS-006 | complete          | OpenCode driver, conformance coverage, production registry wiring, and fail-closed stored-credential detection exist.     |
 | RF-HARNESS-007 | open              | Add copy-paste examples for invoking Roflock from existing harnesses.                                                     |
 | RF-HARNESS-008 | complete          | Accepted RFC-002 fixes stdio/local-user trust, exact tool scope, immutable runtime reuse, and external human approval.    |
