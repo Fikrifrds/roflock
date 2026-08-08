@@ -63,7 +63,10 @@ describe('Shell', () => {
     );
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      /results are not production verification/i,
+      /agent turns, code changes, and verification are scripted/i,
+    );
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /results are not production evidence/i,
     );
   });
 });

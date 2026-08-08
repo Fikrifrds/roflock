@@ -185,8 +185,10 @@ On reconnection Studio refetches state because events missed while disconnected
 are not replayed by the browser stream.
 
 When `ROFLOCK_FORCE_FAKE=1` (legacy fallback `ROLEFLOCK_FORCE_FAKE=1`) Studio
-shows **Simulation mode**. Scripted providers, changes, and checks are not
-production verification and must not be represented as launch evidence.
+shows **Simulation mode**. Agent turns, changes, and verification are scripted.
+Provider discovery can still report locally installed CLIs, but simulated run
+results are not production evidence and must not be represented as launch
+evidence.
 
 ### Production deployment boundary
 

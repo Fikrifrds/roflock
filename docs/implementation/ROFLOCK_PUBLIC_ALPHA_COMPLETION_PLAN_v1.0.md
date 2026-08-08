@@ -50,6 +50,7 @@ These findings take precedence over milestone completion claims.
 | RF-EVO-189 | complete | Daemon launch, port-conflict, log, and token-rotation guidance now uses the public Roflock name and preferred env prefix while preserving legacy wire/data compatibility.                                                                                          |
 | RF-EVO-190 | complete | Live data backup uses SQLite's online backup API and a restore/integrity test; the daemon no longer copies the database and WAL sidecars at different moments.                                                                                                     |
 | RF-EVO-191 | complete | Confirmed operational-data deletion removes both provider credentials and runner-signing secret stores in addition to SQLite, documents, and task worktrees.                                                                                                       |
+| RF-EVO-194 | complete | Simulation UI distinguishes scripted run execution from real local CLI discovery and never labels simulated output as production evidence.                                                                                                                         |
 
 The implementation order is 181 → 182 → 183 → 184 → 185 → 186 → 187 → 188 → 189
 → 190 → 191.

@@ -156,8 +156,8 @@ export function Shell({ children }: { children: ReactNode }) {
         </header>
         {runtime?.forcedProvider === 'fake' ? (
           <aside className="simulation-banner" role="alert">
-            <strong>Simulation mode.</strong> Providers, code changes, and tests are scripted;
-            results are not production verification.
+            <strong>Simulation mode.</strong> Agent turns, code changes, and verification are
+            scripted; results are not production evidence.
           </aside>
         ) : null}
         <main id="main" className="app-main">
