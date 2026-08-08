@@ -5,7 +5,7 @@ Root agent guidance. Sections 1–17 are the Roflock AI Coding Master Instructio
 
 ## Current phase
 
-**R0 and R1 are complete.** The baseline audit lives at
+**R0, R1 and R2 are complete.** The baseline audit lives at
 [`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md)
 and records the verification baseline, package classification, persisted
 compatibility surface, the risk register, and the R1 outcome. Read it before
@@ -18,8 +18,15 @@ _not_ renamed and why; check it before assuming an identifier is fair game.
 CLI distribution and harness interoperability are governed by
 [`docs/implementation/ROFLOCK_CLI_DISTRIBUTION_AND_HARNESS_INTEGRATION_v1.0.md`](docs/implementation/ROFLOCK_CLI_DISTRIBUTION_AND_HARNESS_INTEGRATION_v1.0.md).
 
-Next phase: **R2 — integrate Graph IR and the language** (`packages/graph-ir`,
-then `packages/language`).
+`.roflock` now compiles to canonical Graph IR and round-trips through the CLI
+(`roflock check|compile|hash|validate-ir`). Audit §13 records the decisions,
+the gaps carried forward, and the two new risks.
+
+Next phase: **R3 — Graph IR runtime bridge**. The single most important
+architectural milestone: compiled IR must execute through the _existing_
+`runGraph`, not a second runtime. Read audit §6.3 first — the per-node
+`maxAttempts` versus per-SCC `LoopGroup` mismatch is the sharpest edge, and the
+compiler now only emits the latter.
 
 ---
 

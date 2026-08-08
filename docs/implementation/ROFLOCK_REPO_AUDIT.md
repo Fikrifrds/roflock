@@ -1,7 +1,7 @@
 # Roflock Repository Audit
 
-**Status:** R0 baseline frozen; R1 outcome recorded in [§12](#12-r1-outcome--roflock-rebrand)
-**Tickets:** RF-EVO-001, RF-EVO-002, RF-EVO-003, RF-EVO-005 (+ R1 summary)
+**Status:** R0 baseline frozen; R1 recorded in §12, R2 in §13
+**Tickets:** RF-EVO-001, RF-EVO-002, RF-EVO-003, RF-EVO-005 (+ phase summaries)
 **Baseline commit:** `d5bcacb742c56af17cc2ed9cf79c7fbf94e45291`
 **Date:** 8 August 2026
 
@@ -628,3 +628,68 @@ Each of these looks like a rebrand target and is not one:
 | 10  | `print-url.mjs` and `diagnostics.mjs` duplicate `resolveDataDir()` because they run without the built workspace; they can drift                 | Medium   | Both carry a pointer comment to `apps/daemon/src/data-dir.ts`; a shared build-free module would remove it |
 | 11  | Data directory resolution is sticky — a user who creates `~/.roflock` by hand while running from `~/.roleflock` silently switches installations | Low      | Documented in README; resolution prefers the new directory only because a hand-created one signals intent |
 | 12  | Legacy env deprecation warnings are per-process, so a short-lived CLI invocation repeats them                                                   | Low      | Acceptable; the alternative is persisting notice state, which is worse                                    |
+
+---
+
+## 13. R2 outcome — Graph IR and the language
+
+R2 is complete. `.roflock` source compiles to canonical Graph IR, is validated,
+and round-trips through the CLI inside the real monorepo:
+
+```bash
+roflock check examples/bugfix.roflock
+roflock compile examples/bugfix.roflock -o bugfix.ir.json
+roflock validate-ir bugfix.ir.json
+```
+
+| Ticket             | Outcome                                                      |
+| ------------------ | ------------------------------------------------------------ |
+| RF-EVO-020/021     | `packages/graph-ir` — types, canonical hash, IR-02 validator |
+| RF-EVO-022/023     | `packages/language` — tokenizer, AST, parser, compiler       |
+| RF-EVO-024         | `examples/linear.roflock`, `examples/bugfix.roflock`         |
+| RF-EVO-025/026/027 | `roflock check`, `compile`, `hash`, `validate-ir`            |
+| RF-EVO-028         | Both packages join root build/lint/typecheck/test            |
+
+Verification after R2: build, lint, typecheck pass; **537 tests pass**, up from
+459 after R1 and 432 at baseline. Prettier's flagged set is still unchanged.
+
+### Decisions taken
+
+**One `language` package, not five.** RFC-001 §30 proposes splitting
+`language-core` / `-parser` / `-compiler` / `-formatter`. §3.1 of this audit
+chose to defer, and R2 confirmed it: the parser and compiler share the AST and
+diagnostics closely enough that a split would be wiring, not a boundary. Revisit
+when the LSP arrives — it is the first consumer that genuinely needs the parser
+without the compiler.
+
+**The compiler derives what the author does not write.** Outcome contracts come
+from node kind, entry nodes from SCC condensation, loop groups from the strongly
+connected component a `{ max N }` edge creates. This is the main reason the AST
+is a separate structure rather than IR with spans: an AST that already carried
+derived facts could not report a useful error about what was actually typed.
+
+**`max_cost N` was added to v0.1.** The validator warns (RF601) when a looping
+workflow declares no budget, and v0.1 originally had no way to satisfy it, so
+every realistic example shipped with a warning. It lowers to `onExceeded:
+'pause'` — hitting a ceiling is a question for the operator, not a reason to
+discard work already paid for.
+
+**Keywords are not reserved.** They are lexed as identifiers and given meaning
+by position, so a node may be called `Check` and adding a declaration keyword in
+v0.2 cannot break a workflow someone already wrote.
+
+### Known gaps carried into R3
+
+| Gap                                                                                                                                        | Consequence                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `graph-ir` reaches `node:crypto` through `@roleflock/contracts` for its digest                                                             | Not browser-safe; RF-EVO-150 must replace the digest for the Playground   |
+| No formatter (`roflock format`)                                                                                                            | RF-EVO-... under R2's "later"; required before a public language release  |
+| v0.1 has no syntax for goals, acceptance criteria, profiles, joins, routes, or events, though the IR models all of them                    | Hand-written IR can express more than source can; R4 may need more syntax |
+| `deriveLoops` builds one group per annotated edge; two `{ max N }` edges in one SCC would produce overlapping groups the validator rejects | Nested or multi-exit loops are not yet expressible                        |
+
+### New risks
+
+| #   | Risk                                                                                                                      | Severity | Mitigation                                                                                              |
+| --- | ------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------- |
+| 13  | The `maxAttempts`-per-node vs `LoopGroup`-per-SCC mismatch (risk #1) is now concrete — the compiler only emits the latter | **High** | R3 must map both; do not collapse them. `deriveLoops` is the single place the compiler's view is formed |
+| 14  | Source spans live in `debug`, excluded from the hash, so a stored IR document cannot always point back at source          | Low      | `uri` and `sourceHash` are recorded in `workflow.source`; the file itself is the source of truth        |
