@@ -5,7 +5,12 @@ Root agent guidance. Sections 1–17 are the Roflock AI Coding Master Instructio
 
 ## Current phase
 
-**R0 through R10 are complete.** Audit §19 has the phase-by-phase picture, §23 what R10 delivered and what stays deferred. The audit at
+**R0 through R10 have implementation outcomes, but public-alpha hardening is active.**
+The launch review reopened workflow pinning, semantic-lowering, runtime-driver,
+CLI distribution, harness, and release-gate work. The authoritative open-work
+status is now
+[`docs/implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md`](docs/implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md).
+Audit §19 has the phase-by-phase picture, §23 what R10 delivered and what stays deferred. The audit at
 [`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md)
 is the authority on what this repository contains. Read it before touching code:
 it supersedes the planning documents wherever they disagree with the checkout,
@@ -42,11 +47,16 @@ CLI distribution and harness interoperability are governed by
 
 ### Next
 
-**Finish R7**, then R8. The driver contract, the reference `FakeDriver` and the
-conformance suite are in; what remains is migrating the real adapters —
-`ProviderAdapter` compatibility wrapper first (RF-EVO-115), then Codex, Claude,
-and one of Pi/OpenCode. Each must pass `runDriverConformance` before its
-`ProviderAdapter` is retired, and not before.
+Follow the public-alpha completion plan in dependency order. First make workflow
+identity immutable and lower authored semantics faithfully; then remove the
+built-in workflow ceiling and move production turns onto `AgentDriver`. Complete
+distribution, runtime CLI, remaining harness/MCP work, documentation, and clean
+release gates after those correctness foundations are green.
+
+The driver contract, `FakeDriver`, conformance suite, and Codex, Claude, custom,
+and OpenCode drivers exist. `ProviderAdapter` remains a compatibility boundary;
+the production orchestrator has not yet completed its migration to
+`AgentDriver`. Pi remains an explicit open spike.
 
 The rule that matters more than any of them: **capability reporting must be
 truthful**. A driver that cannot prove remote cancellation must not report work
