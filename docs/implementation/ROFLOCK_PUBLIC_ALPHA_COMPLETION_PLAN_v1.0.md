@@ -64,7 +64,7 @@ The approved source for this stream is
 | RF-DIST-003 | partial  | Version/help/check pass from a clean installed tarball on macOS; the Linux and Windows matrix remains RF-DIST-012 work.                                               |
 | RF-DIST-004 | complete | `npm pack` produces a 30-entry, 726,766-byte tarball with bins, runtime chunks, daemon, five workflows, README, license, and no private runtime/workspace dependency. |
 | RF-DIST-005 | complete | A fresh npm install outside the monorepo passed version/help/check and ownership-proven daemon start/status/stop on port 4332; the reproducible CI gate lands in 012. |
-| RF-DIST-006 | open     | Implement truthful `roflock doctor`.                                                                                                                                  |
+| RF-DIST-006 | complete | `roflock doctor` verifies package/Node/Git/repository/worktree/daemon plus fresh driver auth and runnability; JSON and exit status are CI-safe.                       |
 | RF-DIST-007 | complete | `roflock drivers [doctor]` reports the daemon's production driver inventory and truthful runtime capabilities.                                                        |
 | RF-DIST-008 | complete | Driver text and JSON keep installed, registered/detected, authenticated, and runnable as four separate states.                                                        |
 | RF-DIST-009 | open     | Implement idempotent, non-destructive `roflock init`.                                                                                                                 |

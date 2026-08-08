@@ -18,7 +18,7 @@ interface DriverCapabilities {
   permissionControls: boolean;
 }
 
-interface ProviderInventoryItem {
+export interface ProviderInventoryItem {
   id: string;
   displayName: string;
   status: 'ready' | 'missing' | 'unauthenticated' | 'error';
