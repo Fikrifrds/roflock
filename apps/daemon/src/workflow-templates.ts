@@ -25,7 +25,14 @@ export interface TemplateLoadResult {
   failures: Array<{ id: string; reasons: string[] }>;
 }
 
-/** Walks up from this module looking for the repository's `workflows/` directory. */
+/**
+ * Finds the `.roflock` templates, in a package or in a checkout.
+ *
+ * A published package has nothing above `node_modules/@roflock/daemon` to walk
+ * up to, so the build bundles a copy into the package and that copy is checked
+ * first. Walking up still works in a checkout, where the repository copy is the
+ * one a developer is editing.
+ */
 function findWorkflowsDirectory(from: string): string | undefined {
   let current = from;
   for (let depth = 0; depth < 8; depth += 1) {
