@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { runApprovalCommand } from './approval-command.js';
+import { runCompletion } from './completion-command.js';
 import { runDaemonCommand } from './daemon-command.js';
 import { runDrivers } from './drivers-command.js';
 import { runDoctor } from './doctor-command.js';
@@ -10,9 +11,11 @@ import { runInit } from './init-command.js';
 import { runPassportCli } from './passport-command.js';
 import { runControl, type RuntimeControl } from './runtime-control-command.js';
 import { runEvents, runStatus } from './runtime-inspection-command.js';
+import { runLogs } from './runtime-inspection-command.js';
 import { runWorkflow } from './runtime-command.js';
 import { runStudio } from './studio-command.js';
 import { runTaskDecision, type TaskDecisionCommand } from './task-decision-command.js';
+import { runDryRun, runExplain } from './workflow-introspection-command.js';
 
 export interface CliIo {
   stdout(message: string): void;
@@ -47,12 +50,15 @@ Language
   render <file.roflock> [-o out]    Draw the workflow as a Mermaid diagram
   hash <file>                       Print a workflow's semantic hash
   validate-ir <file.ir.json>        Validate a Graph IR document
+  explain <file.roflock>             Explain compiled roles, nodes, gates, and loops
+  dry-run <file.roflock>             Validate and show the graph without starting anything
 
 Runtime
   run <file.roflock> --repo <path> --brief <text>
                                     Start an authored workflow on the local daemon
   status <run-id>                   Show the durable run projection
   events <run-id> [--after <seq>]   Show ordered durable runtime events
+  logs <run-id> [--follow]           Read events once or follow until terminal state
   pause <run-id>                    Pause the current execution
   resume <run-id>                   Resume a paused execution
   cancel <run-id>                   Cancel scheduling and interrupt selected drivers
@@ -75,6 +81,7 @@ Environment
   init [--dir <path>]                Create a safe, idempotent .roflock scaffold
   doctor                            Diagnose runtime, repository, daemon, and drivers
   drivers [doctor]                  Report detected drivers, auth, and capabilities
+  completion <shell>                Print Bash, Zsh, or Fish completion source
 
 Evidence
   evidence <task-id>                Explain a run from what was recorded
@@ -124,6 +131,7 @@ export function cliAutomationContract() {
       'run',
       'status',
       'events',
+      'logs',
       'pause',
       'resume',
       'cancel',
@@ -141,6 +149,9 @@ export function cliAutomationContract() {
       'evidence',
       'why',
       'passport',
+      'completion',
+      'explain',
+      'dry-run',
     ],
     nativeMachineOutput: {
       compile: 'canonical Graph IR JSON on stdout unless --out is supplied',
@@ -187,6 +198,9 @@ export function runCli(argv: string[], io: CliIo): number {
   if (command === 'hash') return runHash(rest, io);
   if (command === 'render') return runRender(rest, io);
   if (command === 'validate-ir') return runValidateIr(rest, io);
+  if (command === 'explain') return runExplain(rest, io);
+  if (command === 'dry-run') return runDryRun(rest, io);
+  if (command === 'completion') return runCompletion(rest, io);
   if (command === 'evidence') return runEvidence(rest, io);
   if (command === 'why') return runWhy(rest, io);
 
@@ -201,6 +215,7 @@ export async function runCliAsync(argv: string[], io: CliIo): Promise<number> {
   if (argv[0] === 'run') return runWorkflow(argv.slice(1), io);
   if (argv[0] === 'status') return runStatus(argv.slice(1), io);
   if (argv[0] === 'events') return runEvents(argv.slice(1), io);
+  if (argv[0] === 'logs') return runLogs(argv.slice(1), io);
   if (['pause', 'resume', 'cancel'].includes(argv[0] ?? '')) {
     return runControl(argv[0] as RuntimeControl, argv.slice(1), io);
   }

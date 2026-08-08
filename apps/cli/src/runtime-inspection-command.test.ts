@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ExitCode } from './exit-codes.js';
-import { runEvents, runStatus } from './runtime-inspection-command.js';
+import { runEvents, runLogs, runStatus } from './runtime-inspection-command.js';
 
 const directories: string[] = [];
 
@@ -134,5 +134,47 @@ describe('runtime inspection commands', () => {
       }),
     ).toBe(ExitCode.Usage);
     expect(missing.stderr).toEqual(['Run not found']);
+  });
+
+  it('follows durable logs until the run reaches a terminal task state', async () => {
+    const directory = sessionDir();
+    const events = [
+      {
+        id: 'event_1',
+        aggregateType: 'graph_run',
+        aggregateId: 'run_done',
+        sequence: 1,
+        eventType: 'run.completed',
+        payload: {},
+        metadata: {},
+        createdAt: '2026-08-09T00:00:00.000Z',
+      },
+    ];
+    const fetchMock = (async (url: string | URL | Request) => {
+      return new Response(
+        JSON.stringify(
+          String(url).includes('/events?')
+            ? events
+            : {
+                id: 'run_done',
+                taskId: 'task_done',
+                graphVersionId: 'release@3',
+                state: 'completed',
+                createdAt: '2026-08-09T00:00:00.000Z',
+                nodeCounts: { completed: 1 },
+              },
+        ),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+    const result = output();
+
+    expect(
+      await runLogs(['run_done', '--follow'], result.io, {
+        clientOptions: { dataDir: directory, fetch: fetchMock },
+        sleep: async () => undefined,
+      }),
+    ).toBe(ExitCode.Ok);
+    expect(result.stdout[0]).toContain('run.completed');
   });
 });

@@ -108,6 +108,22 @@ roflock render <workflow.roflock> --out <workflow.mmd>
 Emits Mermaid text using the same shared graph contract as Studio and the
 Playground.
 
+### `explain` and `dry-run`
+
+```bash
+roflock explain workflow.roflock
+roflock explain workflow.roflock --json
+roflock dry-run workflow.roflock
+roflock dry-run workflow.roflock --json
+```
+
+`explain` renders the compiled workflow identity, roles, nodes, bounded loops,
+writer effects, deterministic checks, and human gates. `dry-run` validates and
+reports the same exact Graph IR that a start would submit, but it does not
+register a project, contact the daemon, invoke a driver, run a command, modify a
+repository, or request approval. It is a compilation plan, not simulated
+execution.
+
 See the [language reference](../language/reference.md) for syntax and
 diagnostics.
 
@@ -179,7 +195,19 @@ Returns ordered durable events whose sequence is greater than `--after`.
 Persist the last processed sequence and resume from it; reconnecting does not
 require replaying or guessing transient output.
 
-`--after` must be a non-negative integer and is only valid for `events`.
+### `logs`
+
+```bash
+roflock logs <run-id>
+roflock logs <run-id> --after 42 --follow
+```
+
+`logs` reads the same durable event stream as `events`. With `--follow`, it polls
+from the cursor until the task reaches a terminal state and returns that state’s
+documented exit code. It never follows provider stdout or invents ephemeral log
+lines; persist the last sequence if an automation needs restartable consumption.
+
+`--after` must be a non-negative integer and is valid for `events` and `logs`.
 
 ## Controlling runs
 
@@ -311,6 +339,18 @@ The command exits 7 when no registered driver is runnable.
 
 Authentication remains owned by each harness CLI. See
 [authentication](../integrations/authentication.md).
+
+### `completion`
+
+```bash
+roflock completion bash >> ~/.bashrc
+roflock completion zsh >> ~/.zshrc
+roflock completion fish > ~/.config/fish/completions/roflock.fish
+```
+
+The generated static completion covers public command names for `roflock` and
+the deprecated `roleflock` alias. It does not inspect a repository, daemon, or
+provider.
 
 ## Evidence and passports
 

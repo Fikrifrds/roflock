@@ -33,22 +33,27 @@ interface InspectionOptions {
   runId: string;
   json: boolean;
   after: number;
+  follow: boolean;
   daemonUrl?: string;
   dataDir?: string;
 }
 
 class UsageError extends Error {}
 
-function parse(args: string[], command: 'status' | 'events'): InspectionOptions {
+function parse(args: string[], command: 'status' | 'events' | 'logs'): InspectionOptions {
   const positional: string[] = [];
   let json = false;
   let after = 0;
+  let follow = false;
   let daemonUrl: string | undefined;
   let dataDir: string | undefined;
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === '--json') json = true;
-    else if (['--after', '--daemon-url', '--data-dir'].includes(arg)) {
+    else if (arg === '--follow') {
+      if (command !== 'logs') throw new UsageError("Option '--follow' is only valid for logs");
+      follow = true;
+    } else if (['--after', '--daemon-url', '--data-dir'].includes(arg)) {
       if (arg === '--after' && command !== 'events') {
         throw new UsageError("Option '--after' is only valid for events");
       }
@@ -67,13 +72,14 @@ function parse(args: string[], command: 'status' | 'events'): InspectionOptions 
   }
   if (positional.length !== 1) {
     throw new UsageError(
-      `Usage: roflock ${command} <run-id>${command === 'events' ? ' [--after <sequence>]' : ''} [--json]`,
+      `Usage: roflock ${command} <run-id>${command === 'events' || command === 'logs' ? ' [--after <sequence>]' : ''}${command === 'logs' ? ' [--follow]' : ''} [--json]`,
     );
   }
   return {
     runId: positional[0]!,
     json,
     after,
+    follow,
     ...(daemonUrl === undefined ? {} : { daemonUrl }),
     ...(dataDir === undefined ? {} : { dataDir }),
   };
@@ -157,6 +163,62 @@ export async function runEvents(
       }
     }
     return ExitCode.Ok;
+  } catch (error) {
+    return emitRuntimeError(error, io, options.json);
+  }
+}
+
+function printEvents(runEvents: RunEvent[], options: InspectionOptions, io: CliIo): void {
+  if (options.json) io.stdout(JSON.stringify(runEvents));
+  else {
+    for (const event of runEvents) {
+      const payload = Object.keys(event.payload).length ? ` ${JSON.stringify(event.payload)}` : '';
+      io.stdout(`${event.sequence}\t${event.createdAt}\t${event.eventType}${payload}`);
+    }
+  }
+}
+
+function terminal(state: string): boolean {
+  return ['completed', 'failed', 'rejected', 'cancelled', 'interrupted'].includes(state);
+}
+
+export async function runLogs(
+  args: string[],
+  io: CliIo,
+  dependencies: {
+    clientOptions?: DaemonClientOptions;
+    sleep?: (milliseconds: number) => Promise<void>;
+  } = {},
+): Promise<number> {
+  let options: InspectionOptions;
+  try {
+    options = parse(args, 'logs');
+  } catch (error) {
+    return emitUsageError((error as Error).message, args, io);
+  }
+  const client = clientFor(options, dependencies);
+  const sleep =
+    dependencies.sleep ??
+    ((milliseconds) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  let cursor = options.after;
+  try {
+    while (true) {
+      const runEvents = await client.request<RunEvent[]>(
+        'GET',
+        `/api/runs/${encodeURIComponent(options.runId)}/events?after=${cursor}`,
+      );
+      printEvents(runEvents, options, io);
+      for (const event of runEvents) cursor = Math.max(cursor, event.sequence);
+      if (!options.follow) return ExitCode.Ok;
+
+      const projection = await client.request<RunProjection>(
+        'GET',
+        `/api/runs/${encodeURIComponent(options.runId)}`,
+      );
+      const state = projection.taskState ?? projection.state;
+      if (terminal(state)) return exitCodeForRun(state, projection.blockedReason);
+      await sleep(250);
+    }
   } catch (error) {
     return emitRuntimeError(error, io, options.json);
   }
