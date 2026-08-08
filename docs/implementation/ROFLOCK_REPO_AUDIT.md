@@ -1114,6 +1114,32 @@ against it at all — and a missing CLI is the most ordinary failure a driver ha
 The wrapper now catches an adapter throw and settles as `failed` with its
 reason, keeping the promise that a run emits events and ends in `settled`.
 
+### Verified against the real CLIs (RF-EVO-117, RF-EVO-119)
+
+Codex and Claude Code were installed on the machine this migration was done on,
+so conformance ran against the real binaries. Both pass. Claude's actual stream
+is `started → usage → output → settled(completed)`.
+
+The live suite is doubly gated — CLI present _and_
+`ROFLOCK_LIVE_DRIVER_TESTS=1` — because each run spends a real provider turn. A
+suite that quietly bills someone on every `pnpm test` is one people stop
+running.
+
+**It found a real bug immediately.** Codex reports why a turn failed on
+_stdout_, as a JSON event; stderr carries only incidental notices. The adapter
+read stderr, so a run that failed on an exhausted quota reported "Reading
+additional input from stdin..." — and `classifyProviderFailure` saw that text
+rather than the real reason.
+
+Quota is the one failure kind that changes routing rather than wording: the
+router parks an exhausted provider+model and moves on. Misclassified as
+`unknown`, it kept retrying something that could not succeed until the window
+reset. Fixed, and confirmed against a genuinely quota-exhausted account.
+
+The live stream test does not assert success. A real account can be out of
+quota, and a run that fails _for a stated reason_ is a correct outcome — what
+must hold is that the stream is coherent and explains itself.
+
 ### A claim corrected
 
 The wrapper's write guard was first described as permission _enforcement_. It is
@@ -1130,7 +1156,7 @@ both what the guard catches and what it does not.
 | ---------------------- | ------------------------------------------------------------ |
 | ~~RF-EVO-115~~         | Done — `providerDriver()` passes the full conformance suite  |
 | ~~RF-EVO-116/118/121~~ | Done — Codex, Claude and compatible drivers pass conformance |
-| RF-EVO-120             | OpenCode driver                                              |
+| RF-EVO-120             | OpenCode driver — not installed on any machine tested so far |
 | RF-EVO-123/124         | Session/resume and usage events on real drivers              |
 
 These need real CLI integration and cannot be proven with fixtures alone. Per
