@@ -131,7 +131,7 @@ become a second runtime or an approval bypass.
 | RF-EVO-180  | complete | Visible Roflock launch UI and isolated responsive Playground; commit `5d8b69a`.                                                                            |
 | RF-DOCS-001 | complete | The user-first docs index and architecture guide define surfaces, immutable identity, single runtime, trust, and compatibility.                            |
 | RF-DOCS-002 | complete | The implemented-language reference covers exact 0.1 syntax, nodes, outcomes, loops, effects, authority, diagnostics, and immutable version/hash semantics. |
-| RF-DOCS-003 | open     | CLI reference including install, commands, JSON, exit codes, and troubleshooting.                                                                          |
+| RF-DOCS-003 | complete | The shipped CLI reference covers artifact/source install, every command and option, JSON streams, IDs, exits, env compatibility, MCP, and troubleshooting. |
 | RF-DOCS-004 | open     | Local runtime/operator guide: configuration, data, recovery, approvals, evidence, and upgrades.                                                            |
 | RF-DOCS-005 | open     | Playground and Studio guides, including deployment and local handoff boundaries.                                                                           |
 | RF-DOCS-006 | open     | Driver authoring/conformance guide and Codex, Claude, OpenCode, Pi status.                                                                                 |

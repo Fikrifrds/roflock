@@ -10,6 +10,7 @@ plans and RoleFlock-era documents remain available as design history.
 | -------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | [Architecture](architecture.md)                                                        | One-runtime pipeline, trust boundaries, package map |
 | [Language reference](language/reference.md)                                            | Exact `.roflock` 0.1 syntax and semantics           |
+| [CLI reference](cli/reference.md)                                                      | Install, commands, JSON, exits, troubleshooting     |
 | [Public-alpha completion](implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md) | Exact readiness authority and release gates         |
 | [Control-surface API](integrations/control-surface-api.md)                             | Authenticated local client integration              |
 | [Harness invocation](integrations/harness-invocation.md)                               | Codex, Claude Code, OpenCode, Pi/shell entry points |
@@ -19,9 +20,9 @@ plans and RoleFlock-era documents remain available as design history.
 | [Playground boundary](security/playground-local-runtime.md)                            | Why the public site cannot run local agents         |
 | [Crash recovery](crash-recovery.md)                                                    | Operator recovery and safe continuation             |
 
-Complete CLI, runtime/operator, Studio/Playground, driver-authoring,
+Runtime/operator, Studio/Playground, driver-authoring,
 contributor/governance/release, and executable quick-start guides are tracked as
-RF-DOCS-003 through RF-DOCS-008 in the completion plan and linked here as they
+RF-DOCS-004 through RF-DOCS-008 in the completion plan and linked here as they
 land.
 
 ## Public contracts
