@@ -1046,3 +1046,70 @@ the _names_ did not loosen the _enforcement_, which was the whole risk.
 | RF-EVO-096 | `ArtifactTypeMismatch` / `MissingArtifactProducer` diagnostics        |
 | RF-EVO-097 | Producer-after-consumer detection in `validateGraphIR`                |
 | RF-EVO-098 | `LoopGroup.policy.requireNewEvidence`, defaulted true by the compiler |
+
+---
+
+## 18. R7 progress — AgentDriver (partial)
+
+The contract, the reference driver and the conformance suite are in.
+Verification: build, lint, typecheck pass; **672 tests pass**.
+
+### Landed
+
+| Ticket         | Outcome                                                    |
+| -------------- | ---------------------------------------------------------- |
+| RF-EVO-110/111 | `AgentDriver` and `DriverCapabilities` in `provider-core`  |
+| RF-EVO-112/113 | `AgentRunRequest`, `AgentEvent`                            |
+| RF-EVO-114     | `FakeDriver` plus `runDriverConformance` in `test-support` |
+| RF-EVO-122     | Cancellation truthfulness, enforced by conformance         |
+
+### The decision worth remembering
+
+`cancellation` is a four-value capability, not a boolean, because the difference
+between them is money. `local-process` means a process here was killed and says
+nothing about a request already in flight to a paid API. Only `remote-confirmed`
+permits telling a user their work stopped. `stopIsConfirmable` makes that a
+function rather than a convention, and conformance fails any driver that reports
+a stop it cannot prove.
+
+`detected` and `authenticated` stay separate for the same class of reason: an
+installed CLI nobody logged into is common, and calling it ready sends a run to
+a provider that will refuse it.
+
+### Not done
+
+| Ticket          | Remaining work                                                        |
+| --------------- | --------------------------------------------------------------------- |
+| RF-EVO-115      | `ProviderAdapter` compatibility wrapper exercised against conformance |
+| RF-EVO-116..121 | Codex, Claude, OpenCode and generic HTTP driver migrations            |
+| RF-EVO-123/124  | Session/resume and usage events on real drivers                       |
+
+These need real CLI integration and cannot be proven with fixtures alone. Per
+the plan, `ProviderAdapter` compatibility is not removed until the equivalent
+driver passes conformance — so nothing is currently at risk from this being
+incomplete.
+
+---
+
+## 19. Where the migration stands
+
+| Phase | State       | Substance                                                           |
+| ----- | ----------- | ------------------------------------------------------------------- |
+| R0    | done        | Baseline frozen, 26 packages classified, risk register              |
+| R1    | done        | Rebrand with no destructive rename; ~/.roleflock still works        |
+| R2    | done        | `graph-ir` + `language`; `.roflock` compiles and round-trips        |
+| R3    | done        | Compiled IR executes on the **existing** runtime                    |
+| R4    | done        | All five built-in workflows are source, at exact parity             |
+| R5    | done        | Durable loop budget, stable invocation identity, restart recovery   |
+| R6    | done        | Generic roles without weakening coding authority                    |
+| R7    | partial     | Driver contract and conformance; real driver migrations outstanding |
+| R8    | not started | Evidence and provenance unification                                 |
+| R9    | not started | Browser playground                                                  |
+| R10   | not started | Studio                                                              |
+
+Tests: 432 at baseline → **672**. Prettier's flagged set is 65 tracked files,
+three fewer than baseline, with nothing added.
+
+The architectural spine is complete: source → IR → validation → bridge →
+one runtime, with durable state and honest recovery beneath it. R8 through R10
+are product surfaces built on that spine rather than changes to it.

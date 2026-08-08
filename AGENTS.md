@@ -5,7 +5,7 @@ Root agent guidance. Sections 1–17 are the Roflock AI Coding Master Instructio
 
 ## Current phase
 
-**R0 through R6 are complete.** The audit at
+**R0 through R6 are complete; R7 is partial.** Audit §19 has the whole picture. The audit at
 [`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md)
 is the authority on what this repository contains. Read it before touching code:
 it supersedes the planning documents wherever they disagree with the checkout,
@@ -37,24 +37,20 @@ CLI distribution and harness interoperability are governed by
 
 ### Next
 
-**R7 — AgentDriver.** Formalise the working provider adapters into a public
-driver contract: `DriverCapabilities`, `AgentRunRequest`, `AgentEvent`,
-health/auth/detect, start, optional resume, truthful interrupt, usage, and a
-conformance suite every driver must pass.
+**Finish R7**, then R8. The driver contract, the reference `FakeDriver` and the
+conformance suite are in; what remains is migrating the real adapters —
+`ProviderAdapter` compatibility wrapper first (RF-EVO-115), then Codex, Claude,
+and one of Pi/OpenCode. Each must pass `runDriverConformance` before its
+`ProviderAdapter` is retired, and not before.
 
-Order matters — fake driver first, so graph semantics stay testable without
-provider uncertainty, then Codex, Claude, and one of Pi/OpenCode. Do not remove
-working `ProviderAdapter` compatibility until the equivalent driver passes
-conformance.
+The rule that matters more than any of them: **capability reporting must be
+truthful**. A driver that cannot prove remote cancellation must not report work
+as stopped. Conformance enforces it; do not add an exception.
 
-The invariant to hold above all: capability reporting must be truthful. If a
-driver cannot prove remote cancellation, Roflock must not claim the remote work
-has stopped.
-
-Two debts still open: the shipped workflow templates declare no `authority`, so
-Role Protocol gates remain unused (§15 risk 19); and `workflows/` is found by
-walking up from the daemon module, which will not survive npm packaging
-(§15 risk 18, RF-DIST-001).
+Open debts, none blocking: shipped templates declare no `authority`, so Role
+Protocol gates stay unused (§15 risk 19); `workflows/` is located by walking up
+from the daemon module and will not survive npm packaging (§15 risk 18,
+RF-DIST-001); and resuming past an approval gate re-asks the human (§16).
 
 ---
 
