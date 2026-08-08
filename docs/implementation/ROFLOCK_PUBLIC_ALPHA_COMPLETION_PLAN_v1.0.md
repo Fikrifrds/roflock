@@ -65,22 +65,22 @@ tests before a separate commit.
 The approved source for this stream is
 `ROFLOCK_CLI_DISTRIBUTION_AND_HARNESS_INTEGRATION_v1.0.md`.
 
-| Ticket      | State    | Evidence or remaining work                                                                                                                                             |
-| ----------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RF-DIST-001 | complete | The public `roflock` package bundles every internal workspace dependency and carries only Fastify plus `better-sqlite3` in its install closure.                        |
-| RF-DIST-002 | complete | Package-relative `roflock` and deprecated `roleflock` bins resolve correctly; the installed CLI locates its bundled daemon from a shared output chunk.                 |
-| RF-DIST-003 | partial  | Version/help/check pass from a clean installed tarball on macOS; the Linux and Windows matrix remains RF-DIST-012 work.                                                |
-| RF-DIST-004 | complete | Latest package smoke produced a 41-entry, 1,459,886-byte tarball with CLI/MCP bins, daemon, Studio, workflows, README/license, and no private workspace dependency.    |
-| RF-DIST-005 | complete | A fresh npm install outside the monorepo passed version/help/check and ownership-proven daemon start/status/stop on port 4332; the reproducible CI gate lands in 012.  |
-| RF-DIST-006 | complete | `roflock doctor` verifies package/Node/Git/repository/worktree/daemon plus fresh driver auth and runnability; JSON and exit status are CI-safe.                        |
-| RF-DIST-007 | complete | `roflock drivers [doctor]` reports the daemon's production driver inventory and truthful runtime capabilities.                                                         |
-| RF-DIST-008 | complete | Driver text and JSON keep installed, registered/detected, authenticated, and runnable as four separate states.                                                         |
-| RF-DIST-009 | complete | `roflock init` creates a credential-free four-file scaffold, is byte-idempotent, preflights all conflicts, and never overwrites user content.                          |
-| RF-DIST-010 | complete | `roflock help --json` publishes the versioned stream/command/native-output contract; success and error JSON behavior is tested.                                        |
-| RF-DIST-011 | complete | Public exit-code/HTTP/run-state mapping exists; unknown run states fail closed and command/error mappings have contract tests.                                         |
-| RF-DIST-012 | complete | GitHub-hosted OIDC publishing has no long-lived npm token, enforces tag/version identity, and follows a three-OS packed-install workflow plus full release gates.      |
-| RF-DIST-013 | open     | Add and execute the alpha release checklist; actual publish remains an operator action.                                                                                |
-| RF-DIST-014 | complete | The npm artifact bundles Studio, resolves it package-relatively, has no remote font request, and `roflock studio` proves a clean-installed authenticated HTTP handoff. |
+| Ticket      | State    | Evidence or remaining work                                                                                                                                               |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| RF-DIST-001 | complete | The public `roflock` package bundles every internal workspace dependency and carries only Fastify plus `better-sqlite3` in its install closure.                          |
+| RF-DIST-002 | complete | Package-relative `roflock` and deprecated `roleflock` bins resolve correctly; the installed CLI locates its bundled daemon from a shared output chunk.                   |
+| RF-DIST-003 | partial  | The complete clean-installed package smoke passes on macOS; the configured GitHub matrix has not run on Linux or Windows because the candidate branch is not pushed.     |
+| RF-DIST-004 | complete | Latest package smoke produced a 41-entry, 1,460,062-byte tarball with CLI/MCP bins, daemon, Studio, workflows, README/license, and no private workspace dependency.      |
+| RF-DIST-005 | complete | A fresh npm install outside the monorepo passed version/help/check and ownership-proven daemon start/status/stop on port 4332; the reproducible CI gate lands in 012.    |
+| RF-DIST-006 | complete | `roflock doctor` verifies package/Node/Git/repository/worktree/daemon plus fresh driver auth and runnability; JSON and exit status are CI-safe.                          |
+| RF-DIST-007 | complete | `roflock drivers [doctor]` reports the daemon's production driver inventory and truthful runtime capabilities.                                                           |
+| RF-DIST-008 | complete | Driver text and JSON keep installed, registered/detected, authenticated, and runnable as four separate states.                                                           |
+| RF-DIST-009 | complete | `roflock init` creates a credential-free four-file scaffold, is byte-idempotent, preflights all conflicts, and never overwrites user content.                            |
+| RF-DIST-010 | complete | `roflock help --json` publishes the versioned stream/command/native-output contract; success and error JSON behavior is tested.                                          |
+| RF-DIST-011 | complete | Public exit-code/HTTP/run-state mapping exists; unknown run states fail closed and command/error mappings have contract tests.                                           |
+| RF-DIST-012 | complete | GitHub-hosted OIDC publishing has no long-lived npm token, enforces tag/version identity, and follows a three-OS packed-install workflow plus full release gates.        |
+| RF-DIST-013 | complete | The alpha checklist records all local evidence and keeps push, three-OS CI, npm ownership/OIDC, signed tag, registry verification, GitHub Release, and deploy unchecked. |
+| RF-DIST-014 | complete | The npm artifact bundles Studio, resolves it package-relatively, has no remote font request, and `roflock studio` proves a clean-installed authenticated HTTP handoff.   |
 
 The package strategy must be decided from a clean install, not from workspace
 symlinks. Internal packages may be published together or bundled into the CLI,
@@ -193,3 +193,8 @@ The final report will include:
 - supported and unsupported driver capabilities;
 - security boundaries and residual risks;
 - operator actions still required to publish or deploy.
+
+The executed checklist is
+[`docs/release/public-alpha-checklist.md`](../release/public-alpha-checklist.md).
+The repository-side candidate is ready, while release gate 9 remains externally
+pending until the configured Linux and Windows jobs run on a pushed commit.
