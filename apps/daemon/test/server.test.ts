@@ -260,7 +260,7 @@ describe('daemon boundary', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { product: string; version: string; platform: string };
-    expect(body.product).toBe('RoleFlock');
+    expect(body.product).toBe('Roflock');
     expect(body.version).toMatch(/^\d+\.\d+\.\d+$/);
     expect(body.platform).toBeTruthy();
   });

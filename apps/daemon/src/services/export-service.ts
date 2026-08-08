@@ -107,7 +107,7 @@ export function buildDiagnosticsExport(db: SqliteDb, dataDir: string): Diagnosti
   const worktreesDir = join(dataDir, 'worktrees');
   return redact({
     exportedAt: new Date().toISOString(),
-    product: 'RoleFlock',
+    product: 'Roflock',
     version: '0.1.0',
     host: '127.0.0.1',
     dataDirPresent: existsSync(dataDir),

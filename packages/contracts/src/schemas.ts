@@ -312,7 +312,7 @@ export type CreateProjectCommand = z.infer<typeof CreateProjectCommandSchema>;
 
 export const HealthResponseSchema = z.object({
   status: z.literal('ok'),
-  product: z.literal('RoleFlock'),
+  product: z.literal('Roflock'),
   version: z.string(),
   host: z.string(),
   port: z.number(),

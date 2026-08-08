@@ -113,10 +113,10 @@ export function buildTaskHandoff(
     .join(' ');
   const prompt = shellQuote(
     [
-      `RoleFlock handoff ${manifest.hash}.`,
+      `Roflock handoff ${manifest.hash}.`,
       `Task ${task.id}; contract ${contract.hash}; approved plan ${plan.hash}.`,
       `Work only on branch ${worktree.branchName} in this workspace.`,
-      'Execute the approved plan exactly. Return scope or decision changes to the RoleFlock planner.',
+      'Execute the approved plan exactly. Return scope or decision changes to the Roflock planner.',
     ].join(' '),
   );
   const inWorkspace = `cd ${shellQuote(worktree.path)} && ${environment}`;

@@ -28,7 +28,7 @@ export function getLocalVersion(): VersionInfo {
   } catch {
     // keep fallback
   }
-  return { product: 'RoleFlock', version, platform: process.platform };
+  return { product: 'Roflock', version, platform: process.platform };
 }
 
 export async function checkForUpdates(): Promise<UpdateCheckResult> {

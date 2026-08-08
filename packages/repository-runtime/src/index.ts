@@ -253,7 +253,7 @@ export async function prepareTaskWorkspace(
 
   if (status && currentBranch !== branchName) {
     throw new DirtyWorkingTreeError(
-      'Project folder has uncommitted changes. Commit, stash, or discard them before starting a RoleFlock task here.',
+      'Project folder has uncommitted changes. Commit, stash, or discard them before starting a Roflock task here.',
     );
   }
 

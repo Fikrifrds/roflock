@@ -735,7 +735,7 @@ export class Orchestrator {
       worktreePath: input.worktreePath,
       taskId: task.id,
       baseCommit: input.baseCommit,
-      message: `RoleFlock verification subject for task ${task.id}`,
+      message: `Roflock verification subject for task ${task.id}`,
     });
     const repositoryRoot = await resolveRepositoryRoot(input.worktreePath);
     const identity = await this.ensureRunnerIdentity();
@@ -1537,7 +1537,7 @@ export class Orchestrator {
         const prompt =
           role === 'verifier'
             ? [
-                `VERIFIER for RoleFlock task "${task.title}" (read-only). Do not modify files.`,
+                `VERIFIER for Roflock task "${task.title}" (read-only). Do not modify files.`,
                 node.objective ? `Authored objective: ${node.objective}` : '',
                 "Judge whether the writer's change actually satisfies the brief.",
                 'End your reply with exactly one line:',
@@ -1548,7 +1548,7 @@ export class Orchestrator {
                 compiled.promptBlock,
               ].join('\n')
             : [
-                `PLANNER for RoleFlock task "${task.title}" (read-only).`,
+                `PLANNER for Roflock task "${task.title}" (read-only).`,
                 'Do not modify files.',
                 node.objective ? `Authored objective: ${node.objective}` : '',
                 node.focus ? `Your independent swarm assignment: ${node.focus}` : '',
@@ -1930,7 +1930,7 @@ export class Orchestrator {
               });
             }
           } else {
-            const content = `# RoleFlock simulation artefact\n\nThis file demonstrates the workflow only. It is not a verified source-code fix.\n\nBrief: ${task.brief}\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nMode: simulation\n`;
+            const content = `# Roflock simulation artefact\n\nThis file demonstrates the workflow only. It is not a verified source-code fix.\n\nBrief: ${task.brief}\nExpected: ${task.expectedBehaviour ?? 'n/a'}\nActual: ${task.actualBehaviour ?? 'n/a'}\nMode: simulation\n`;
             await writeFile(join(worktreePath, relativeTarget), content);
           }
 

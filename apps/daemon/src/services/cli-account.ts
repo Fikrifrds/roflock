@@ -222,7 +222,7 @@ export async function runProviderAuthAction(
       providerId,
       command: '',
       launched: false,
-      detail: 'This provider does not support CLI login from RoleFlock.',
+      detail: 'This provider does not support CLI login from Roflock.',
     };
   }
 

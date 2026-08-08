@@ -34,7 +34,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, db: SqliteDb, bus: 
     if (body.targetRole === 'executor') {
       return reply.code(409).send({
         code: 'RAW_FEEDBACK_EXECUTOR_FORBIDDEN',
-        error: 'Raw feedback can never target executor; RoleFlock routes it to a decision owner.',
+        error: 'Raw feedback can never target executor; Roflock routes it to a decision owner.',
       });
     }
     const idempotencyKey = request.headers['idempotency-key'];

@@ -91,7 +91,7 @@ describe('export and data controls', () => {
       headers,
     });
     expect(diagnostics.statusCode).toBe(200);
-    expect((diagnostics.json() as { product: string }).product).toBe('RoleFlock');
+    expect((diagnostics.json() as { product: string }).product).toBe('Roflock');
   });
 
   it('backs up and deletes local data with confirmation', async () => {

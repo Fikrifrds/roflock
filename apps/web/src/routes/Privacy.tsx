@@ -79,7 +79,7 @@ export function Privacy() {
             onClick={() => {
               if (
                 !window.confirm(
-                  'Delete all local Roflock data (database, documents, worktrees)? Repository folders on disk are kept.',
+                  'Delete the local database, documents, worktrees, provider secrets, and runner-signing keys? Git repositories, backups, logs, and this browser session are kept.',
                 )
               ) {
                 return;

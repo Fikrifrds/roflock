@@ -212,7 +212,7 @@ export function registerApi(
   app.get('/api/health', async () => ({
     ok: true,
     status: 'ok',
-    product: 'RoleFlock',
+    product: 'Roflock',
     version: '0.1.0',
     host: runtime.host,
     port: runtime.port,
@@ -1690,7 +1690,7 @@ export function registerApi(
           inputTokens: summary.inputTokens,
           outputTokens: summary.outputTokens,
           models: usage.summarizeByProviderAndModel(provider.id),
-          note: 'RoleFlock local token meter, attributed to this provider and model.',
+          note: 'Roflock local token meter, attributed to this provider and model.',
         },
       };
     });
@@ -1785,7 +1785,7 @@ export function registerApi(
           inputTokens: summary.inputTokens,
           outputTokens: summary.outputTokens,
           models: usage.summarizeByProviderAndModel(id),
-          note: 'RoleFlock local token meter, attributed to this provider and model.',
+          note: 'Roflock local token meter, attributed to this provider and model.',
         },
       };
     } catch {
@@ -1903,7 +1903,7 @@ export function registerApi(
     const summary = usage.summarize(taskId);
     return {
       scope: 'local-daemon',
-      note: 'Local RoleFlock usage only. Actual and shadow costs are never combined into one bill.',
+      note: 'Local Roflock usage only. Actual and shadow costs are never combined into one bill.',
       entries: usage.listByTask(taskId),
       summary: {
         ...summary,
@@ -2035,7 +2035,7 @@ export function registerApi(
     const body = request.body as { confirm?: string };
     if (body.confirm !== 'DELETE_LOCAL_DATA') {
       return reply.code(400).send({
-        error: 'Send { "confirm": "DELETE_LOCAL_DATA" } to wipe local RoleFlock data',
+        error: 'Send { "confirm": "DELETE_LOCAL_DATA" } to wipe local Roflock data',
       });
     }
     audit.append({
@@ -2050,7 +2050,8 @@ export function registerApi(
     const result = deleteLocalData(dataDir);
     return {
       ...result,
-      note: 'Local SQLite, documents, and worktrees were wiped. Restart the daemon to continue.',
+      note:
+        'Local SQLite, documents, worktrees, and Roflock-owned secret stores were wiped. Backups, logs, and session authentication were retained. Restart the daemon to continue.',
     };
   });
   app.get('/api/version', async () => getLocalVersion());

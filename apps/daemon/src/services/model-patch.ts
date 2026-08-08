@@ -241,7 +241,7 @@ export async function buildPatchWriterContext(worktree: string, brief: string): 
   let total = 0;
   for (const { path, content } of readable.slice(0, 48)) {
     const clipped =
-      content.length > 12_000 ? `${content.slice(0, 12_000)}\n[truncated by RoleFlock]\n` : content;
+      content.length > 12_000 ? `${content.slice(0, 12_000)}\n[truncated by Roflock]\n` : content;
     const section = `--- ${path} ---\n${clipped}`;
     if (total + section.length > 100_000) break;
     sections.push(section);
