@@ -34,6 +34,7 @@
     "@roleflock/provider-core": "workspace:*",
     "@roleflock/provider-cursor": "workspace:*",
     "@roleflock/provider-custom": "workspace:*",
+    "@roleflock/provider-opencode": "workspace:*",
     "@roleflock/repository-runtime": "workspace:*",
     "@roleflock/role-protocol": "workspace:*",
     "@roleflock/role-recommender": "workspace:*",

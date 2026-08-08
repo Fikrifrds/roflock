@@ -30,7 +30,8 @@ import {
 import { compileContext, ROLE_CONTRACTS, type RoleId } from '@roleflock/context-compiler';
 import { getWorkflowGraph, recommendWorkflow, workflowGraphs } from '@roleflock/graph-core';
 import { budgetStatus } from '@roleflock/usage-ledger';
-import { EFFORT_LEVELS, isEffort } from '@roleflock/provider-core';
+import { EFFORT_LEVELS, isEffort, stopIsConfirmable } from '@roleflock/provider-core';
+import { shippedDriverCancellation } from '../services/cancellation.js';
 import {
   DirtyWorkingTreeError,
   initializeEmptyRepository,
@@ -200,6 +201,20 @@ export function registerApi(
    * httpOnly cookie (so EventSource works without putting the token in a URL) and
    * the CSRF value. It must never hand out the token itself.
    */
+  /**
+   * What stopping a run can actually promise.
+   *
+   * Reported rather than assumed by the UI, because the answer is a property of
+   * the driver and will change when one can confirm a remote stop. Until then a
+   * "Stop" button that implies the work ceased is describing something nobody
+   * observed: killing the local CLI says nothing about a request already in
+   * flight to a paid API, which keeps running and keeps billing.
+   */
+  app.get('/api/runtime/cancellation', async () => {
+    const capability = await shippedDriverCancellation();
+    return { capability, confirmable: stopIsConfirmable(capability) };
+  });
+
   app.get('/api/runtime/info', async (_request, reply) => {
     reply.setCookie('roleflock_token', session.token, {
       httpOnly: true,

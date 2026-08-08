@@ -10,6 +10,7 @@ import { VerificationSpecPanel } from '../components/VerificationSpecPanel.js';
 import { VerificationVerdictPanel } from '../components/VerificationVerdictPanel.js';
 import { ChangePassportPanel } from '../components/ChangePassportPanel.js';
 import { TaskHandoffPanel } from '../components/TaskHandoffPanel.js';
+import { StopTruthfulness } from '../components/StopTruthfulness.js';
 import { GraphRunView } from '../components/GraphRunView.js';
 import { WorkflowSource } from '../components/WorkflowSource.js';
 import { LiveTurn } from '../components/LiveTurn.js';
@@ -382,11 +383,12 @@ export function TaskDetail() {
                   <button
                     type="button"
                     className="danger"
-                    title="Kill the active process immediately"
+                    title="Kills the local process at once; remote work is not confirmed stopped"
                     onClick={() => void action('force-terminate')}
                   >
                     Force stop
                   </button>
+                  <StopTruthfulness />
                 </>
               ) : null}
               {task.state === 'paused' ? (
