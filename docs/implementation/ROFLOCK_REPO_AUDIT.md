@@ -1004,3 +1004,45 @@ business, not this gate's.
 | 20  | `loop_attempts` rows attach to the node run that _triggered_ the loop; if that run's row is missing the attempt is not recorded | Medium   | The orchestrator keeps `lastNodeRunId`, but a node that never opened a run would be silently uncounted           |
 | 21  | ~~An invocation found under an existing key is reported but does not stop the node~~                                            | Closed   | RF-EVO-086: `outcome_unknown` routes nowhere and the run stops as `interrupted` for a human to resolve (ADR-010) |
 | 22  | Semantic hash reaches the key only for compiled templates; built-ins pass `undefined`                                           | Low      | Intentional and distinguished from any hash; built-ins have no source to change                                  |
+
+---
+
+## 17. R6 outcome — generic roles
+
+R6 is complete. A workflow may name its roles anything and still receive every
+coding guarantee: the writer lease, the unbypassable required check, the bounded
+repair loop, and Role Protocol artifact gates for roles that ask for them.
+
+Verification: build, lint, typecheck pass; **661 tests pass**.
+
+### What changed
+
+Audit risk 15 is closed. The runtime adapter inferred a role's dispatch slot
+from its access mode and position in the graph. That inference is right often
+enough to stay as the default, and wrong often enough that a workflow needed a
+way to override it — `dispatch <slot>` is that way, and a declaration always
+wins.
+
+Dispatch lives in the `roflock.coding/v1` extension rather than in
+`RoleDefinition`. Core Graph IR knows nothing about verifiers, and putting a
+coding convention into the role type would have made every non-coding workflow
+carry it. The RFC's extension rules then earn their keep: a host that does not
+understand the coding pack rejects the document instead of executing less than
+it says.
+
+### What did not change
+
+`ROLE_AUTHORITY_MATRIX` is untouched and remains the coding authority profile.
+Roles stay ungated unless they declare `authority`, and a custom role that opts
+in still fails at the artifact gate before any work is paid for. Generalising
+the _names_ did not loosen the _enforcement_, which was the whole risk.
+
+### Already satisfied by earlier phases
+
+| Ticket     | Where it landed                                                       |
+| ---------- | --------------------------------------------------------------------- |
+| RF-EVO-091 | `RoleDefinition` in `graph-ir` since R2                               |
+| RF-EVO-094 | `ArtifactType` and `Port` since R2                                    |
+| RF-EVO-096 | `ArtifactTypeMismatch` / `MissingArtifactProducer` diagnostics        |
+| RF-EVO-097 | Producer-after-consumer detection in `validateGraphIR`                |
+| RF-EVO-098 | `LoopGroup.policy.requireNewEvidence`, defaulted true by the compiler |

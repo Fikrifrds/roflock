@@ -5,7 +5,7 @@ Root agent guidance. Sections 1–17 are the Roflock AI Coding Master Instructio
 
 ## Current phase
 
-**R0 through R5 are complete.** The audit at
+**R0 through R6 are complete.** The audit at
 [`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md)
 is the authority on what this repository contains. Read it before touching code:
 it supersedes the planning documents wherever they disagree with the checkout,
@@ -37,20 +37,24 @@ CLI distribution and harness interoperability are governed by
 
 ### Next
 
-**R6 — generic roles and typed artifacts.** Make the language and runtime
-generic without losing coding governance: arbitrary `RoleId`, a `RoleDefinition`
-schema, artifact types with consumes/produces ports, static port validation, and
-a legacy adapter so `ROLE_AUTHORITY_MATRIX` survives as a coding profile.
+**R7 — AgentDriver.** Formalise the working provider adapters into a public
+driver contract: `DriverCapabilities`, `AgentRunRequest`, `AgentEvent`,
+health/auth/detect, start, optional resume, truthful interrupt, usage, and a
+conformance suite every driver must pass.
 
-Audit §14 risk 15 is the thing R6 removes: `dispatchRole` currently infers
-verifier-versus-planner from graph position. Exit criterion is that a graph can
-use custom roles while every existing planner/executor/verifier authority test
-stays green.
+Order matters — fake driver first, so graph semantics stay testable without
+provider uncertainty, then Codex, Claude, and one of Pi/OpenCode. Do not remove
+working `ProviderAdapter` compatibility until the equivalent driver passes
+conformance.
 
-Two smaller debts worth clearing when convenient: the shipped workflow templates
-declare no `authority`, so Role Protocol artifact gates are still unused
-(§15 risk 19); and `workflows/` is located by walking up from the daemon module,
-which will not survive npm packaging (§15 risk 18, RF-DIST-001).
+The invariant to hold above all: capability reporting must be truthful. If a
+driver cannot prove remote cancellation, Roflock must not claim the remote work
+has stopped.
+
+Two debts still open: the shipped workflow templates declare no `authority`, so
+Role Protocol gates remain unused (§15 risk 19); and `workflows/` is found by
+walking up from the daemon module, which will not survive npm packaging
+(§15 risk 18, RF-DIST-001).
 
 ---
 
