@@ -1113,3 +1113,43 @@ three fewer than baseline, with nothing added.
 The architectural spine is complete: source → IR → validation → bridge →
 one runtime, with durable state and honest recovery beneath it. R8 through R10
 are product surfaces built on that spine rather than changes to it.
+
+---
+
+## 20. R8 outcome — evidence and provenance
+
+`packages/evidence` was the 8-line stub §9.3 flagged. It now answers the
+question the whole product exists to answer — _why should I believe this change
+is safe?_ — from records written while the run happened.
+
+Verification: build, lint, typecheck pass; **681 tests pass**.
+
+### The design rule
+
+**A missing link is shown, not omitted.** An explanation that quietly skips the
+verification step reads like a run that needed no tests, which is precisely the
+impression evidence exists to prevent. Every question in the chain appears
+whether or not it was answered; gaps are listed by name; and the output ends by
+saying that an absent record is not evidence of absence of a problem.
+
+The chain is fixed in order — authorised, planned, changed, verified, reviewed,
+accepted, disclosed — so the shape of the answer does not vary with the shape of
+the run. A reader learns where to look once.
+
+### Two smaller decisions
+
+`roflock evidence` exits 0 even with holes in the chain. Gaps are the answer,
+not a command failure; exiting non-zero would make a script treat an honest
+report as a broken tool.
+
+Both commands read the local database directly rather than going through the
+daemon. Evidence that needs a service running to be read is evidence that
+disappears exactly when someone most needs it.
+
+### Not done
+
+Existing delivery-assurance depth — Change Contract, Execution Plan,
+Verification Specification, Change Passport — is _cited_ by the explanation but
+not yet unified into one artifact provenance model (RF-EVO-130's fuller form).
+The chain reads those tables directly. That is enough to explain a run and not
+enough to replay one, and the difference should not be overstated.
