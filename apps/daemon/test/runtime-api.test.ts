@@ -96,6 +96,38 @@ describe('runtime CLI API', () => {
     expect(body.graphRunId).toBeTruthy();
     expect(body.semanticHash).toMatch(/^sha256:[0-9a-f]{64}$/);
 
+    const status = await app.inject({
+      method: 'GET',
+      url: `/api/runs/${body.graphRunId}`,
+      headers,
+    });
+    expect(status.statusCode).toBe(200);
+    expect(status.json()).toMatchObject({
+      id: body.graphRunId,
+      taskId: body.taskId,
+      graphVersionId: 'cli_smoke@3',
+    });
+    expect(status.json()).toHaveProperty('nodeCounts');
+
+    const eventResponse = await app.inject({
+      method: 'GET',
+      url: `/api/runs/${body.graphRunId}/events?after=0`,
+      headers,
+    });
+    expect(eventResponse.statusCode).toBe(200);
+    const runtimeEvents = eventResponse.json() as Array<{
+      aggregateId: string;
+      sequence: number;
+      eventType: string;
+      payload: unknown;
+    }>;
+    expect(runtimeEvents.length).toBeGreaterThan(0);
+    expect(runtimeEvents[0]).toMatchObject({
+      aggregateId: body.graphRunId,
+      sequence: 1,
+    });
+    expect(runtimeEvents[0]).toHaveProperty('payload');
+
     const db = openMigratedDatabase(join(dataDir, DATABASE_FILE_NAME));
     const snapshot = new WorkflowSnapshotRepository(db).get(body.taskId)!;
     expect(snapshot.source).toBe(source);
@@ -136,5 +168,24 @@ describe('runtime CLI API', () => {
     });
     expect(invalid.statusCode).toBe(422);
     expect(invalid.json()).toMatchObject({ code: 'WORKFLOW_INVALID' });
+
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/runs/missing',
+          headers,
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/runs/missing/events',
+          headers,
+        })
+      ).statusCode,
+    ).toBe(404);
   });
 });

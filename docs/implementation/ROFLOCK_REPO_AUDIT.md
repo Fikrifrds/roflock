@@ -1719,3 +1719,22 @@ forwarding, human output, JSON output, and exit-code mapping. CLI tests pass
 passes 12/12. The full daemon suite passes 194/197 inside the sandbox; its only
 three failures are listener-denied preview cases, and the complete preview file
 passes 7/7 outside the sandbox. Daemon, database, and CLI typechecks are clean.
+
+---
+
+## 32. Public-alpha runtime CLI — durable inspection
+
+RF-CLI-002 stabilises run inspection at the daemon boundary and adds
+`roflock status <run-id>` plus `roflock events <run-id>`. Status no longer
+exposes a nullable raw SQLite row: it returns camel-cased run identity,
+timestamps, blocked detail, and node-state counts, or an explicit 404. Events
+are read from the append-only `EventStore`, return parsed typed envelopes, and
+support `--after <sequence>` so operators and harnesses can resume consumption
+without replaying the complete history. An invalid cursor fails closed.
+
+Both commands authenticate through the same local session contract as `run`.
+Human output stays compact; `--json` emits the exact projection or event array
+without explanatory text on stdout. Tests prove stable status identity, parsed
+event payloads, ordered sequence/cursor behavior, missing-run handling, JSON
+round trips, and CLI request construction. The focused CLI inspection set
+passes 3/3 and runtime API tests pass 2/2, with daemon and CLI typechecks clean.

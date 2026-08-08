@@ -3,6 +3,7 @@ import { ExitCode } from './exit-codes.js';
 import { runEvidence, runWhy } from './evidence-command.js';
 import { runCheck, runCompile, runHash, runRender, runValidateIr } from './language-commands.js';
 import { runPassportCli } from './passport-command.js';
+import { runEvents, runStatus } from './runtime-inspection-command.js';
 import { runWorkflow } from './runtime-command.js';
 
 export interface CliIo {
@@ -38,6 +39,8 @@ Language
 Runtime
   run <file.roflock> --repo <path> --brief <text>
                                     Start an authored workflow on the local daemon
+  status <run-id>                   Show the durable run projection
+  events <run-id> [--after <seq>]   Show ordered durable runtime events
 
 Evidence
   evidence <task-id>                Explain a run from what was recorded
@@ -104,5 +107,7 @@ export function runCli(argv: string[], io: CliIo): number {
 /** Async entry point for commands that communicate with the local daemon. */
 export async function runCliAsync(argv: string[], io: CliIo): Promise<number> {
   if (argv[0] === 'run') return runWorkflow(argv.slice(1), io);
+  if (argv[0] === 'status') return runStatus(argv.slice(1), io);
+  if (argv[0] === 'events') return runEvents(argv.slice(1), io);
   return runCli(argv, io);
 }

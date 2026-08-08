@@ -21,6 +21,7 @@ import {
   ConcurrencyPolicyRepository,
   DisclosureGrantRepository,
   EvidenceRepository,
+  EventStore,
   LocalKnowledgeRepository,
   PriceCardRepository,
   ProviderConnectionRepository,
@@ -131,6 +132,7 @@ export function registerApi(
     approvalGrants = new ApprovalGrantRepository(db),
     disclosureGrants = new DisclosureGrantRepository(db),
     evidence = new EvidenceRepository(db),
+    events = new EventStore(db),
     usage = new UsageRepository(db),
     providerConnections = new ProviderConnectionRepository(db),
     concurrencyPolicies = new ConcurrencyPolicyRepository(db),
@@ -1366,18 +1368,41 @@ export function registerApi(
         : undefined,
     };
   });
-  app.get(
-    '/api/runs/:id',
-    async (request) =>
-      db
-        .prepare('SELECT * FROM graph_runs WHERE id = ?')
-        .get((request.params as { id: string }).id) ?? null,
-  );
-  app.get('/api/runs/:id/events', async (request) =>
-    db
-      .prepare('SELECT * FROM events WHERE aggregate_id = ? ORDER BY sequence')
-      .all((request.params as { id: string }).id),
-  );
+  app.get('/api/runs/:id', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    const row = db.prepare('SELECT * FROM graph_runs WHERE id = ?').get(id) as
+      Record<string, unknown> | undefined;
+    if (!row) return reply.code(404).send({ error: 'Run not found' });
+    const nodeCounts = db
+      .prepare(
+        `SELECT state, COUNT(*) AS count FROM node_runs
+         WHERE graph_run_id = ? GROUP BY state ORDER BY state`,
+      )
+      .all(id) as Array<{ state: string; count: number }>;
+    return {
+      id: String(row.id),
+      taskId: String(row.task_id),
+      graphVersionId: String(row.graph_version_id),
+      state: String(row.state),
+      startedAt: row.started_at ? String(row.started_at) : undefined,
+      completedAt: row.completed_at ? String(row.completed_at) : undefined,
+      createdAt: String(row.created_at),
+      blockedRole: row.blocked_role ? String(row.blocked_role) : undefined,
+      blockedReason: row.blocked_reason ? String(row.blocked_reason) : undefined,
+      blockedDetail: row.blocked_detail ? String(row.blocked_detail) : undefined,
+      nodeCounts: Object.fromEntries(nodeCounts.map((entry) => [entry.state, entry.count])),
+    };
+  });
+  app.get('/api/runs/:id/events', async (request, reply) => {
+    const id = (request.params as { id: string }).id;
+    const exists = db.prepare('SELECT 1 FROM graph_runs WHERE id = ?').get(id);
+    if (!exists) return reply.code(404).send({ error: 'Run not found' });
+    const after = Number((request.query as { after?: string }).after ?? 0);
+    if (!Number.isInteger(after) || after < 0) {
+      return reply.code(400).send({ error: 'after must be a non-negative integer' });
+    }
+    return events.list(id, after);
+  });
   app.get(
     '/api/runs/:id/active-execution',
     async (request) =>
