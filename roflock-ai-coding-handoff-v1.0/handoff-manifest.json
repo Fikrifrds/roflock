@@ -1,0 +1,13 @@
+{
+  "package": "roflock-ai-coding-handoff",
+  "version": "1.0",
+  "date": "2026-08-08",
+  "target_repository": "https://github.com/Fikrifrds/roflock",
+  "strategy": "evolve-existing-repository",
+  "first_phase": "R0 audit and freeze baseline",
+  "core_rule": "KEEP -> ADAPT -> GENERALIZE -> REPLACE",
+  "primary_instruction": "AI_CODING_MASTER_INSTRUCTION.md",
+  "implementation_plan": "docs/implementation/ROFLOCK_EVOLUTION_IMPLEMENTATION_PLAN_v1.0.md",
+  "mapping": "docs/implementation/ROFLOCK_EXISTING_REPO_MAPPING_v1.0.md",
+  "backlog": "docs/implementation/ROFLOCK_MIGRATION_BACKLOG_v1.0.md"
+}
