@@ -19,8 +19,17 @@ describe('Playground launch URL', () => {
     ).toBe('https://roflock.com/play');
   });
 
-  it('rejects relative and executable URL schemes', () => {
+  it('rejects relative, executable, insecure, and loopback production URLs', () => {
     expect(resolvePlaygroundUrl({ VITE_PLAYGROUND_URL: '/playground/' })).toBeUndefined();
     expect(resolvePlaygroundUrl({ VITE_PLAYGROUND_URL: 'javascript:alert(1)' })).toBeUndefined();
+    expect(
+      resolvePlaygroundUrl({ DEV: false, VITE_PLAYGROUND_URL: 'http://roflock.test/play' }),
+    ).toBeUndefined();
+    expect(
+      resolvePlaygroundUrl({ DEV: false, VITE_PLAYGROUND_URL: 'https://127.0.0.1:4178/play' }),
+    ).toBeUndefined();
+    expect(
+      resolvePlaygroundUrl({ DEV: false, VITE_PLAYGROUND_URL: 'https://localhost/play' }),
+    ).toBeUndefined();
   });
 });

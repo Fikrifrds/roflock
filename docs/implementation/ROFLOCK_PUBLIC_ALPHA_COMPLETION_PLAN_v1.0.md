@@ -98,22 +98,22 @@ approvals, shared output semantics, and owned-daemon lifecycle remain below.
 
 ## 5. Harness and ecosystem status
 
-| Ticket         | State at baseline | Evidence or remaining work                                                                                                  |
-| -------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| RF-HARNESS-001 | complete          | AgentDriver scope is implemented and documented.                                                                            |
-| RF-HARNESS-002 | complete          | FakeDriver and public conformance runner exist.                                                                             |
-| RF-HARNESS-003 | complete          | Codex CLI integration has conformance and opt-in live validation.                                                           |
-| RF-HARNESS-004 | complete          | Claude Code integration has conformance and opt-in live validation.                                                         |
-| RF-HARNESS-005 | complete          | The Pi RPC/SDK spike selects process-isolated RPC, caps capability claims, and defines driver/conformance exit criteria.    |
-| RF-HARNESS-006 | complete          | OpenCode driver, conformance coverage, production registry wiring, and fail-closed stored-credential detection exist.       |
-| RF-HARNESS-007 | complete          | Copy-paste Codex/Claude/OpenCode MCP and shell-harness examples preserve daemon, source, and approval boundaries.           |
-| RF-HARNESS-008 | complete          | Accepted RFC-002 fixes stdio/local-user trust, exact tool scope, immutable runtime reuse, and external human approval.      |
-| RF-HARNESS-009 | complete          | Packed `roflock-mcp` exposes check/compile/run/status/events; protocol smoke proves no approval or rejection tool.          |
-| RF-HARNESS-010 | complete          | Authenticated `/api/control/v1` discovers the stable runtime/control contract; integration guide and boundary test exist.   |
-| RF-HARNESS-011 | open              | Run one workflow under two execution profiles in portability E2E.                                                           |
-| RF-HARNESS-012 | complete          | Cancellation truthfulness is tested at driver and Studio wording boundaries.                                                |
-| RF-HARNESS-013 | complete          | The auth guide maps shipped harness probes and ownership, BYOK scope, Pi status, secret handling, and explicit non-support. |
-| RF-HARNESS-014 | partial           | Studio now fails closed on Playground URLs; the complete browser-to-local-runtime security design is still required.        |
+| Ticket         | State at baseline | Evidence or remaining work                                                                                                    |
+| -------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| RF-HARNESS-001 | complete          | AgentDriver scope is implemented and documented.                                                                              |
+| RF-HARNESS-002 | complete          | FakeDriver and public conformance runner exist.                                                                               |
+| RF-HARNESS-003 | complete          | Codex CLI integration has conformance and opt-in live validation.                                                             |
+| RF-HARNESS-004 | complete          | Claude Code integration has conformance and opt-in live validation.                                                           |
+| RF-HARNESS-005 | complete          | The Pi RPC/SDK spike selects process-isolated RPC, caps capability claims, and defines driver/conformance exit criteria.      |
+| RF-HARNESS-006 | complete          | OpenCode driver, conformance coverage, production registry wiring, and fail-closed stored-credential detection exist.         |
+| RF-HARNESS-007 | complete          | Copy-paste Codex/Claude/OpenCode MCP and shell-harness examples preserve daemon, source, and approval boundaries.             |
+| RF-HARNESS-008 | complete          | Accepted RFC-002 fixes stdio/local-user trust, exact tool scope, immutable runtime reuse, and external human approval.        |
+| RF-HARNESS-009 | complete          | Packed `roflock-mcp` exposes check/compile/run/status/events; protocol smoke proves no approval or rejection tool.            |
+| RF-HARNESS-010 | complete          | Authenticated `/api/control/v1` discovers the stable runtime/control contract; integration guide and boundary test exist.     |
+| RF-HARNESS-011 | open              | Run one workflow under two execution profiles in portability E2E.                                                             |
+| RF-HARNESS-012 | complete          | Cancellation truthfulness is tested at driver and Studio wording boundaries.                                                  |
+| RF-HARNESS-013 | complete          | The auth guide maps shipped harness probes and ownership, BYOK scope, Pi status, secret handling, and explicit non-support.   |
+| RF-HARNESS-014 | complete          | Playground is browser-only with zero-fetch coverage; production links fail closed, and a future handoff threat design exists. |
 
 MCP is an adapter over existing compiler/runtime/control contracts. It must not
 become a second runtime or an approval bypass.

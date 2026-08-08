@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Playground } from '../src/Playground.js';
 import { EXAMPLES } from '../src/examples.js';
 import { decodeShareLink, encodeShareLink } from '../src/share.js';
@@ -14,6 +14,17 @@ import { decodeShareLink, encodeShareLink } from '../src/share.js';
 const VALID = EXAMPLES.find((example) => example.id === 'linear')!.source;
 
 describe('compiling in the browser', () => {
+  it('never calls a daemon or network API while compiling and changing examples', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network forbidden'));
+    render(<Playground initialSource={VALID} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Verified bug fix' }));
+    await userEvent.clear(screen.getByLabelText('Workflow source'));
+
+    expect(fetch).not.toHaveBeenCalled();
+    fetch.mockRestore();
+  });
+
   it('draws the graph for a workflow that compiles', () => {
     render(<Playground initialSource={VALID} />);
 

@@ -1,7 +1,11 @@
-# RoleFlock local-first and delivery-assurance threat model
+# Roflock local-first and delivery-assurance threat model
 
 **Scope:** Phase 0 daemon + web UI on a single developer machine.  
 **Assumption:** The operator trusts their OS user account; untrusted code may exist in registered repositories and provider prompts.
+
+The separately hosted public Playground has no local runtime bridge in public
+alpha. Its boundary and the requirements for any future explicit handoff are
+defined in [Public Playground and local runtime boundary](./playground-local-runtime.md).
 
 Delivery-assurance controls from ADR-014 through ADR-019 are target requirements unless a
 section explicitly says they are implemented. The current beta must not represent planned
@@ -69,16 +73,16 @@ The target architecture adds protected assets:
 
 Required boundaries:
 
-| Boundary | Threat | Required control |
-|---|---|---|
-| Contract drafter ↔ contract authority | Model authorises its own interpretation | Separate authority identity, immutable authorised version, exact hash approval |
-| Planner ↔ executor | Executor silently changes plan | Artifact-gated execution, pinned plan hash, allowed-path/action enforcement |
-| Feedback source ↔ executor | Raw feedback bypasses planner | Persist, classify, and route feedback to planner or contract authority |
-| Writer worktree ↔ verifier workspace | Writer controls evidence environment | Clean result-commit workspace, frozen checks, no writer credentials |
-| Evidence store ↔ passport issuer | Database is changed before export | Event-time chained integrity, subject validation, protected signing identity |
-| Local issuer ↔ organisation consumer | Local self-signature is mistaken for independent trust | Explicit assurance level and organisation trust roots |
-| Passport ↔ Git result | Passport is replayed for another commit | Bind base/result/tree/diff digests and invalidate status on new commit |
-| Role recommender ↔ provider catalogue | Ineligible model is selected | Deterministic hard constraints, versioned profiles, audited override |
+| Boundary                              | Threat                                                 | Required control                                                               |
+| ------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| Contract drafter ↔ contract authority | Model authorises its own interpretation                | Separate authority identity, immutable authorised version, exact hash approval |
+| Planner ↔ executor                    | Executor silently changes plan                         | Artifact-gated execution, pinned plan hash, allowed-path/action enforcement    |
+| Feedback source ↔ executor            | Raw feedback bypasses planner                          | Persist, classify, and route feedback to planner or contract authority         |
+| Writer worktree ↔ verifier workspace  | Writer controls evidence environment                   | Clean result-commit workspace, frozen checks, no writer credentials            |
+| Evidence store ↔ passport issuer      | Database is changed before export                      | Event-time chained integrity, subject validation, protected signing identity   |
+| Local issuer ↔ organisation consumer  | Local self-signature is mistaken for independent trust | Explicit assurance level and organisation trust roots                          |
+| Passport ↔ Git result                 | Passport is replayed for another commit                | Bind base/result/tree/diff digests and invalidate status on new commit         |
+| Role recommender ↔ provider catalogue | Ineligible model is selected                           | Deterministic hard constraints, versioned profiles, audited override           |
 
 ### Untrusted model output
 

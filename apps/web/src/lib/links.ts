@@ -21,7 +21,13 @@ export function resolvePlaygroundUrl(env: PlaygroundEnvironment): string | undef
   if (configured) {
     try {
       const url = new URL(configured);
-      if (url.protocol === 'https:' || url.protocol === 'http:') return url.toString();
+      if (env.DEV && (url.protocol === 'https:' || url.protocol === 'http:')) {
+        return url.toString();
+      }
+      // A production shortcut is a public-site boundary, not a way to point
+      // browser code back at loopback. HTTPS also prevents source/share links
+      // being modified in transit before they reach the browser compiler.
+      if (url.protocol === 'https:' && !isLoopbackHost(url.hostname)) return url.toString();
     } catch {
       // Invalid configuration fails closed: the UI hides the shortcut instead
       // of sending an operator to a broken or unsafe destination.
@@ -29,6 +35,11 @@ export function resolvePlaygroundUrl(env: PlaygroundEnvironment): string | undef
   }
 
   return env.DEV ? 'http://127.0.0.1:5174/' : undefined;
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const normalized = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  return normalized === 'localhost' || normalized === '::1' || normalized.startsWith('127.');
 }
 
 const viteEnv = (
