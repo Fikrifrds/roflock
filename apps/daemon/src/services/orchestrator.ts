@@ -1568,24 +1568,57 @@ export class Orchestrator {
           riskClass: 'medium',
           stateHash: baseCommit,
         });
-        const autoApproved = this.tryGrantAutoApproval(confirmation, task.projectId);
-        this.confirmations.create(autoApproved.request);
-        if (autoApproved.skipped) {
+        // A decision already given for this exact state still stands.
+        //
+        // Resuming after a restart re-enters the graph at this node, and asking
+        // the same person the same question about the same commit adds nothing —
+        // it just makes recovery tedious enough to avoid. The reuse is bound to
+        // `stateHash`: if the base commit moved, the earlier approval no longer
+        // covers what is being proposed and must be asked again.
+        const alreadyDecided = this.confirmations
+          .listByTask(task.id)
+          .find(
+            (candidate) =>
+              candidate.status === 'approved' &&
+              candidate.requestType === confirmation.requestType &&
+              candidate.stateHash === confirmation.stateHash,
+          );
+        if (alreadyDecided !== undefined) {
+          this.appendEvent(task.id, 'confirmation.reused', {
+            graphRunId,
+            nodeRunId,
+            confirmationId: alreadyDecided.id,
+            stateHash: alreadyDecided.stateHash,
+          });
           this.evidence.addFinding({
             id: randomUUID(),
             taskId: task.id,
             nodeRunId,
             severity: 'info',
-            summary: 'Reviewer confirmation auto-approved via grant',
-            details: confirmation.rationale,
+            summary: 'Reviewer confirmation carried over from an earlier approval',
+            details: `Approved for the same state (${alreadyDecided.stateHash}); not re-asked on resume.`,
             createdAt: now(),
           });
         } else {
-          this.setTaskState(task.id, 'awaiting_confirmation');
-          this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation', route);
-          this.bus.publish('approval.requested', autoApproved.request);
-          const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
-          if (decision === 'rejected') throw new Error('Confirmation rejected');
+          const autoApproved = this.tryGrantAutoApproval(confirmation, task.projectId);
+          this.confirmations.create(autoApproved.request);
+          if (autoApproved.skipped) {
+            this.evidence.addFinding({
+              id: randomUUID(),
+              taskId: task.id,
+              nodeRunId,
+              severity: 'info',
+              summary: 'Reviewer confirmation auto-approved via grant',
+              details: confirmation.rationale,
+              createdAt: now(),
+            });
+          } else {
+            this.setTaskState(task.id, 'awaiting_confirmation');
+            this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation', route);
+            this.bus.publish('approval.requested', autoApproved.request);
+            const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
+            if (decision === 'rejected') throw new Error('Confirmation rejected');
+          }
         }
       } else if (role === 'writer') {
         await this.assertDocumentConflictsResolved(
