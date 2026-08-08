@@ -30,6 +30,7 @@
     "prepack": "node scripts/build-package.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:package": "node scripts/package-smoke.mjs",
     "clean": "rm -rf dist *.tsbuildinfo",
     "passport": "node apps/cli/dist/bin/roflock.js passport"
   },

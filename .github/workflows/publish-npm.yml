@@ -1,0 +1,39 @@
+name: Publish npm
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  validate-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+        env:
+          ROFLOCK_FORCE_FAKE: '1'
+      - run: pnpm format:check
+      - run: node apps/cli/scripts/package-smoke.mjs
+      - if: github.event_name == 'push'
+        run: node scripts/verify-release-tag.mjs
+        working-directory: apps/cli
+      - if: github.event_name == 'push'
+        run: npm publish
+        working-directory: apps/cli

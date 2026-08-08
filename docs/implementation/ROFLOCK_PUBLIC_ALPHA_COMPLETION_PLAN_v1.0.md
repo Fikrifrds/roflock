@@ -62,7 +62,7 @@ The approved source for this stream is
 | RF-DIST-001 | complete | The public `roflock` package bundles every internal workspace dependency and carries only Fastify plus `better-sqlite3` in its install closure.                       |
 | RF-DIST-002 | complete | Package-relative `roflock` and deprecated `roleflock` bins resolve correctly; the installed CLI locates its bundled daemon from a shared output chunk.                |
 | RF-DIST-003 | partial  | Version/help/check pass from a clean installed tarball on macOS; the Linux and Windows matrix remains RF-DIST-012 work.                                               |
-| RF-DIST-004 | complete | `npm pack` produces a 30-entry, 726,766-byte tarball with bins, runtime chunks, daemon, five workflows, README, license, and no private runtime/workspace dependency. |
+| RF-DIST-004 | complete | Latest package smoke produced a 36-entry, 739,317-byte tarball with bins, runtime chunks, daemon, workflows, README/license, and no private workspace dependency.     |
 | RF-DIST-005 | complete | A fresh npm install outside the monorepo passed version/help/check and ownership-proven daemon start/status/stop on port 4332; the reproducible CI gate lands in 012. |
 | RF-DIST-006 | complete | `roflock doctor` verifies package/Node/Git/repository/worktree/daemon plus fresh driver auth and runnability; JSON and exit status are CI-safe.                       |
 | RF-DIST-007 | complete | `roflock drivers [doctor]` reports the daemon's production driver inventory and truthful runtime capabilities.                                                        |
@@ -70,7 +70,7 @@ The approved source for this stream is
 | RF-DIST-009 | complete | `roflock init` creates a credential-free four-file scaffold, is byte-idempotent, preflights all conflicts, and never overwrites user content.                         |
 | RF-DIST-010 | open     | Define and test machine-readable output for automation commands.                                                                                                      |
 | RF-DIST-011 | partial  | Exit constants exist; command-level mapping and public documentation are incomplete.                                                                                  |
-| RF-DIST-012 | open     | Add trusted-publishing-ready npm workflow with pack/install gates and no secret-bearing dry run.                                                                      |
+| RF-DIST-012 | complete | GitHub-hosted OIDC publishing has no long-lived npm token, enforces tag/version identity, and follows a three-OS packed-install workflow plus full release gates.     |
 | RF-DIST-013 | open     | Add and execute the alpha release checklist; actual publish remains an operator action.                                                                               |
 
 The package strategy must be decided from a clean install, not from workspace
