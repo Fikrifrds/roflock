@@ -1382,24 +1382,37 @@ It **refuses** for a task pinned to a hard-coded template rather than improvisin
 Those have no IR, and laying one out anyway would mean guessing at what the run
 actually does. A 409 that explains itself beats a diagram nobody can trust.
 
+### The Code and Diagram panes (RF-EVO-171, RF-EVO-172)
+
+Studio could run a `.roflock` workflow without ever showing it. It now shows
+both halves of the Code | Diagram pairing, and both come from the daemon rather
+than being reconstructed in the browser: the source is the file on disk — a
+regenerated one could disagree with what the operator is editing — and the
+diagram is the shared layout rendered by `graph-ui`.
+
+`toSvg` moved the drawing into `graph-ui` as a **string** rather than a React
+component, and the Playground's own renderer was deleted rather than left
+alongside it. Two renderers is the divergence that package exists to prevent, and
+the first attempt at this shipped with exactly that — corrected in the following
+commit. A string keeps `graph-ui` framework-free and makes the drawing assertable:
+that both the happy path and the failure route appear is a test, not something
+eyeballed.
+
+A task pinned to a hard-coded template has no IR and no source, and the view says
+so rather than drawing something plausible.
+
 ### Deliberately not done
 
 `apps/web`'s `GraphRunView` — 582 lines of working operational UI, with provider
-and model display, attempt counts and failure routes — is untouched. The migration
-plan's Stream I is explicit that working operational screens are not rebuilt until
-the shared contracts are ready. This is the contract; adopting it is a separate
-change with its own review, and doing both at once would mean a rewrite whose
-regressions nobody could isolate.
+and model display, attempt counts and failure routes — is untouched, and still
+rendered above the new panes. The migration plan's Stream I is explicit that
+working operational screens are not rebuilt until the shared contracts are ready.
+Those contracts now exist and are proven; replacing the view is a later change
+with its own review, and doing both at once would mean a rewrite whose regressions
+nobody could isolate.
 
-The remaining Studio work (RF-EVO-171, 173..179) is UI: the Code and Run panes,
-the Evidence view, approval inbox integration, driver and permission display,
-pause/stop truthfulness in the interface, and reconnect handling. Everything
-underneath is in place and tested:
-
-| Studio needs             | Where it already exists                        |
-| ------------------------ | ---------------------------------------------- |
-| One graph model          | `graph-ui`, served at `/api/tasks/:id/diagram` |
-| Browser-safe compiler    | §21                                            |
-| Deterministic run state  | §16 — `loadGraphRun` projects a run's history  |
-| Evidence that names gaps | §20 — `explainRun`                             |
-| Truthful cancellation    | §18 — `stopIsConfirmable`                      |
+The remaining Studio work is interface polish on tested foundations: the Run and
+Events pane (RF-EVO-173), Evidence view wiring to `explainRun` (174 — a route
+already exists), approval inbox integration (175 — a route already exists), driver
+and permission display (176), pause/stop truthfulness in the UI (177), and
+reconnect handling (178).
