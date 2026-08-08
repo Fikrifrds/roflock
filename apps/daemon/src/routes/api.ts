@@ -257,6 +257,39 @@ export function registerApi(
       ...(runtime.ownerId === undefined ? {} : { ownerId: runtime.ownerId }),
     };
   });
+  app.get('/api/control/v1', async () => ({
+    apiVersion: '1.0',
+    product: 'Roflock',
+    transport: 'authenticated-loopback-http',
+    authentication: {
+      sessionFile: 'session.json in the active Roflock data directory (mode 0600)',
+      tokenHeader: 'x-roleflock-token',
+      csrfHeader: 'x-roleflock-csrf',
+      csrfRequiredFor: ['POST'],
+      tokenInUrl: false,
+    },
+    operations: {
+      runtimeInfo: { method: 'GET', path: '/api/runtime/info' },
+      workflows: { method: 'GET', path: '/api/workflows' },
+      registerProject: { method: 'POST', path: '/api/projects' },
+      startRun: { method: 'POST', path: '/api/runtime/runs' },
+      status: { method: 'GET', path: '/api/runs/{runId}' },
+      events: { method: 'GET', path: '/api/runs/{runId}/events?after={sequence}' },
+      pause: { method: 'POST', path: '/api/runs/{runId}/pause' },
+      resume: { method: 'POST', path: '/api/runs/{runId}/resume' },
+      cancel: { method: 'POST', path: '/api/runs/{runId}/cancel' },
+      approvals: { method: 'GET', path: '/api/approvals?runId={runId}' },
+      approval: { method: 'GET', path: '/api/approvals/{approvalId}' },
+      decideApproval: { method: 'POST', path: '/api/approvals/{approvalId}/{approve|reject}' },
+      eventStream: { method: 'GET', path: '/api/events/stream' },
+    },
+    semantics: {
+      sourceOfTruth: '.roflock → Graph IR → existing runGraph runtime',
+      eventOrdering: 'sequence is monotonic within one run aggregate',
+      approval: 'one explicit pending approval ID; no approve-all operation',
+      cancellation: '/api/tasks/{taskId}/cancellation reports the active driver guarantee',
+    },
+  }));
   app.get('/api/events/stream', async (request, reply) => {
     reply.hijack();
     reply.raw.writeHead(200, {
