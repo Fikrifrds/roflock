@@ -82,6 +82,14 @@ export interface WorkflowGraph {
   maxConcurrency: number;
   /** Total re-entries into any loop, across the whole run. */
   maxLoopIterations: number;
+  /**
+   * Semantic identity of the compiled graph this was bridged from.
+   *
+   * Absent on the built-in TypeScript templates, whose version id is their
+   * whole identity. Present on a compiled one, so editing `.roflock` source
+   * changes the identity even though the version id does not.
+   */
+  semanticHash?: string;
 }
 
 export interface WorkflowRecommendation {

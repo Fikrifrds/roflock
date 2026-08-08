@@ -392,6 +392,7 @@ export function graphIrToWorkflowGraph(ir: GraphIR): BridgeResult {
     edges: legacyEdges,
     maxConcurrency: ir.policies.concurrency?.maxParallelNodes ?? widestParallelism(ordered),
     maxLoopIterations,
+    ...(ir.workflow.semanticHash === undefined ? {} : { semanticHash: ir.workflow.semanticHash }),
   };
 
   if (diagnostics.length > 0) return { diagnostics };

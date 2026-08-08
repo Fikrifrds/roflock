@@ -11,6 +11,8 @@ export interface InvocationRecord {
   outcome?: string;
   errorJson?: string;
   disclosureManifestId?: string;
+  /** Stable identity for this turn; see `stableInvocationKey`. */
+  idempotencyKey?: string;
 }
 
 export class InvocationRepository {
@@ -20,8 +22,8 @@ export class InvocationRepository {
     this.db
       .prepare(
         `INSERT INTO invocations
-          (id, node_run_id, provider_connection_id, configured_model_id, status, started_at, completed_at, outcome, error_json, disclosure_manifest_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, node_run_id, provider_connection_id, configured_model_id, status, started_at, completed_at, outcome, error_json, disclosure_manifest_id, idempotency_key)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.id,
@@ -34,8 +36,37 @@ export class InvocationRepository {
         record.outcome ?? null,
         record.errorJson ?? null,
         record.disclosureManifestId ?? null,
+        record.idempotencyKey ?? null,
       );
     return record;
+  }
+
+  /**
+   * The turn already recorded under this identity, if any.
+   *
+   * A resumed run uses this to tell work that was already paid for from work
+   * that never started. An entry whose outcome is OUTCOME_UNKNOWN is
+   * deliberately still returned: unknown is not permission to repeat.
+   */
+  findByIdempotencyKey(key: string): InvocationRecord | undefined {
+    const row = this.db.prepare('SELECT * FROM invocations WHERE idempotency_key = ?').get(key) as
+      Record<string, unknown> | undefined;
+    if (row === undefined) return undefined;
+    return {
+      id: String(row['id']),
+      nodeRunId: String(row['node_run_id']),
+      providerConnectionId: String(row['provider_connection_id']),
+      configuredModelId: String(row['configured_model_id']),
+      status: String(row['status']),
+      startedAt: String(row['started_at']),
+      ...(row['completed_at'] == null ? {} : { completedAt: String(row['completed_at']) }),
+      ...(row['outcome'] == null ? {} : { outcome: String(row['outcome']) }),
+      ...(row['error_json'] == null ? {} : { errorJson: String(row['error_json']) }),
+      ...(row['disclosure_manifest_id'] == null
+        ? {}
+        : { disclosureManifestId: String(row['disclosure_manifest_id']) }),
+      idempotencyKey: key,
+    };
   }
 
   updateStatus(
@@ -56,8 +87,7 @@ export class InvocationRepository {
 
   get(id: string): InvocationRecord | undefined {
     const row = this.db.prepare(`SELECT * FROM invocations WHERE id = ?`).get(id) as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     return row ? mapInvocation(row) : undefined;
   }
 

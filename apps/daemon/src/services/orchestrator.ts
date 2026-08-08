@@ -52,9 +52,11 @@ import {
   type SqliteDb,
 } from '@roleflock/database';
 import { runCommand, CommandError, parseCommandArgv } from '@roleflock/command-runner';
-import { readEnv } from '@roleflock/contracts';
+import { readEnv, stableInvocationKey } from '@roleflock/contracts';
+import { OUTCOME_UNKNOWN } from '@roleflock/run-control';
 import {
   graphVersionId,
+  registeredWorkflowTemplates,
   resolveWorkflowGraph,
   validateGraph,
   type GraphMode,
@@ -1106,6 +1108,9 @@ export class Orchestrator {
     // failing node used to leave both of them on `running` for good, and the run
     // graph reads exactly those rows — so the UI kept showing a node at work
     // under a task it already called failed.
+    // Recorded so a paid turn is never mistaken across a workflow edit: a
+    // `.roflock` change produces a new graph under the same version id.
+    const graphSemanticHash = graphSemanticHashOf(graph);
     const openRuns = new Map<string, { nodeRunId: string; invocationId: string }>();
     // The node that triggered a loop has already closed its run by the time the
     // edge is taken, so its id is kept here to attach the attempt record to.
@@ -1114,6 +1119,8 @@ export class Orchestrator {
     const executeNode = async ({
       node,
       completed,
+      attempt,
+      loopIteration,
     }: NodeContext): Promise<{
       role: string;
       nodeRunId: string;
@@ -1166,7 +1173,30 @@ export class Orchestrator {
       this.assertBudget(task);
 
       const nodeRunId = randomUUID();
-      const invocationId = randomUUID();
+      // Identity, not a fresh id. A resumed run has to tell a turn that was
+      // already paid for from one that never started, and a random id per
+      // attempt makes that unanswerable — so the safe-looking choice becomes
+      // "run it again", which bills the provider twice for one result.
+      const invocationKey = stableInvocationKey({
+        taskId: task.id,
+        graphVersionId: graph.version,
+        ...(graphSemanticHash === undefined ? {} : { semanticHash: graphSemanticHash }),
+        nodeId: node.id,
+        attempt,
+        loopIteration,
+      });
+      const alreadyRecorded = this.invocations.findByIdempotencyKey(invocationKey);
+      if (alreadyRecorded !== undefined) {
+        // Unknown is not permission to repeat (ADR-010). Surfacing it stops the
+        // node and asks for a human decision rather than silently re-spending.
+        this.appendEvent(task.id, 'invocation.already_recorded', {
+          graphRunId,
+          nodeId: node.id,
+          invocationKey,
+          outcome: alreadyRecorded.outcome ?? OUTCOME_UNKNOWN,
+        });
+      }
+      const invocationId = alreadyRecorded?.id ?? randomUUID();
       this.db
         .prepare(
           'INSERT INTO node_runs (id, graph_run_id, node_key, state, started_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -1197,14 +1227,17 @@ export class Orchestrator {
         fallbackUsed: route?.fallbackUsed,
       });
 
-      this.invocations.create({
-        id: invocationId,
-        nodeRunId,
-        providerConnectionId: route?.providerId ?? 'deterministic',
-        configuredModelId: route?.modelId ?? 'command-runner',
-        status: 'running',
-        startedAt: now(),
-      });
+      if (alreadyRecorded === undefined) {
+        this.invocations.create({
+          id: invocationId,
+          nodeRunId,
+          providerConnectionId: route?.providerId ?? 'deterministic',
+          configuredModelId: route?.modelId ?? 'command-runner',
+          status: 'running',
+          startedAt: now(),
+          idempotencyKey: invocationKey,
+        });
+      }
 
       const workflowContext = (node.authorityRole === 'executor' ? [] : completed).flatMap(
         (result) => {
@@ -2619,6 +2652,18 @@ export function parseVerifierVerdict(output: string | undefined): VerifierVerdic
 }
 
 const GRAPH_MODES: readonly GraphMode[] = ['direct', 'fast', 'standard', 'bug_fix', 'critical'];
+
+/**
+ * The semantic identity of the graph a run is executing, when it has one.
+ *
+ * Built-in TypeScript templates have no compiled source and therefore no hash;
+ * their version id is their whole identity. A compiled template carries one, so
+ * editing the source produces a different key even though the version id is
+ * unchanged.
+ */
+function graphSemanticHashOf(graph: WorkflowGraph): string | undefined {
+  return registeredWorkflowTemplates().find((template) => template.id === graph.id)?.semanticHash;
+}
 
 /**
  * Pins a task to the graph version it was created with. Tasks written before
