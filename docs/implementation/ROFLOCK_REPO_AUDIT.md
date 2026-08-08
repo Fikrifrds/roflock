@@ -1153,3 +1153,41 @@ Verification Specification, Change Passport — is _cited_ by the explanation bu
 not yet unified into one artifact provenance model (RF-EVO-130's fuller form).
 The chain reads those tables directly. That is enough to explain a run and not
 enough to replay one, and the difference should not be overstated.
+
+---
+
+## 21. R9 progress — browser-safe compiler (partial)
+
+RF-EVO-150 is done and it was R9's only true blocker. `graph-ir` carried one
+import of `node:crypto` via `@roleflock/contracts`, which made the package — and
+the compiler above it — unimportable in a browser.
+
+It now has a portable SHA-256 and no platform dependency at all. `language`
+never had one, so the whole authoring path is browser-safe:
+
+```text
+.roflock source → tokenizer → parser → compiler → Graph IR → validator
+```
+
+Verification: build, lint, typecheck pass; **700 tests pass**.
+
+### Why the digest had to be byte-identical
+
+Not merely correct. A hash that differed from `node:crypto` would have silently
+invalidated every recorded invocation identity instead of failing loudly, so it
+is tested three ways: published NIST vectors, agreement with `node:crypto`
+across block boundaries and multi-byte UTF-8, and canonical-JSON agreement with
+the shared implementation in `contracts`. `examples/bugfix.roflock` still hashes
+to `sha256:4129e2ba…`, exactly as before the swap.
+
+### Not done
+
+The Playground itself — shell, editor, live diagnostics, graph rendering,
+examples, simulation, share links (RF-EVO-151..159). That is a web application,
+not a change to the spine, and it now has everything it needs from the packages
+below it.
+
+One constraint it must honour, from the PRD and the distribution plan: the
+public Playground gets no shell, filesystem, credential or agent-process access.
+Compilation and diagnostics run in the browser; real execution stays in the
+local runtime.
