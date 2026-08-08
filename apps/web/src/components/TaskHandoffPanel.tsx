@@ -39,7 +39,7 @@ export function TaskHandoffPanel({ task }: { task: Task }) {
   return (
     <Section
       title="Agent handoff"
-      description="Continue in your preferred coding tool without dropping RoleFlock's task, contract, plan, branch, or workspace identity."
+      description="Continue in your preferred coding tool without dropping Roflock's task, contract, plan, branch, or workspace identity."
       className="task-handoff-panel"
     >
       {error ? (

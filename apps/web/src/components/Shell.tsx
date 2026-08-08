@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { UnauthorizedError, type RuntimeInfo } from '../lib/api.js';
 import { api, queryClient } from '../lib/client.js';
+import { PLAYGROUND_URL } from '../lib/links.js';
 import { TaskInbox } from './TaskInbox.js';
 
 type Connection = 'connecting' | 'live' | 'reconnecting' | 'closed' | 'unauthorized' | 'error';
@@ -28,9 +29,9 @@ function Unauthorized() {
     <main>
       <section className="hero">
         <p>SESSION REQUIRED</p>
-        <h1>Open RoleFlock from the daemon&rsquo;s URL.</h1>
+        <h1>Open Roflock from the daemon&rsquo;s URL.</h1>
         <p className="lede">
-          This browser has no RoleFlock session token. The daemon prints a one-time link when it
+          This browser has no Roflock session token. The daemon prints a one-time link when it
           starts; open that link and the token is stored for next time.
         </p>
         <pre className="code-block">pnpm url</pre>
@@ -85,8 +86,8 @@ export function Shell({ children }: { children: ReactNode }) {
         Skip to content
       </a>
       <aside className="activity-rail">
-        <Link className="rail-mark" to="/" aria-label="RoleFlock home">
-          RF
+        <Link className="rail-mark" to="/" aria-label="Roflock home">
+          RO
         </Link>
         <nav aria-label="Primary">
           <NavLink to="/" end aria-label="Task inbox" title="Task inbox">
@@ -104,6 +105,18 @@ export function Shell({ children }: { children: ReactNode }) {
           <NavLink to="/knowledge" aria-label="Knowledge" title="Knowledge">
             <span aria-hidden="true">◎</span>
           </NavLink>
+          {PLAYGROUND_URL ? (
+            <a
+              className="rail-external"
+              href={PLAYGROUND_URL}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open Roflock Playground"
+              title="Open Roflock Playground"
+            >
+              <span aria-hidden="true">▶</span>
+            </a>
+          ) : null}
         </nav>
         <nav className="rail-bottom" aria-label="Configuration">
           <NavLink to="/roles" aria-label="Agent roles" title="Agent roles">
@@ -121,7 +134,7 @@ export function Shell({ children }: { children: ReactNode }) {
       <div className="workbench">
         <header className="workbench-bar">
           <Link className="wordmark" to="/">
-            ROLE<span>FLOCK</span>
+            RO<span>FLOCK</span>
           </Link>
           <div className="workbench-principle">
             <span className="principle-dot" />

@@ -9,7 +9,7 @@ export type RuntimeInfo = {
 
 export class UnauthorizedError extends Error {
   constructor() {
-    super('This browser has no RoleFlock session token.');
+    super('This browser has no Roflock session token.');
     this.name = 'UnauthorizedError';
   }
 }

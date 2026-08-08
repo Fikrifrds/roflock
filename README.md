@@ -12,6 +12,7 @@ around it: workflow definition, graph orchestration, role assignment, retry
 budgets, verification, worktree coordination, policy, approvals, and evidence.
 
 - Local UI (dev): http://127.0.0.1:5173
+- Browser Playground (dev): http://127.0.0.1:5174
 - Local daemon: http://127.0.0.1:4178
 - Licence: [Apache-2.0](LICENSE)
 
@@ -35,10 +36,11 @@ tests today**:
 - Localhost-only bind, file-delivered session token, CSRF, origin allow-list, no shell endpoint
 - Version/update check without repository data
 
-The parts that make it _Roflock_ are **not built yet**: the `.roflock` language,
-the compiler, canonical Graph IR, the public AgentDriver contract, and the
-Playground. Workflows are still hard-coded TypeScript graphs. Do not read the
-positioning above as a description of shipped features.
+The parts that make it _Roflock_ are now implemented: the `.roflock` language,
+compiler, canonical Graph IR, public AgentDriver contract, and browser Playground.
+The migration audit records the remaining product limit: existing workflow
+templates can be edited and executed, but a brand-new workflow name is not yet
+accepted by task creation.
 
 Where the migration stands, and what is being preserved rather than rewritten:
 [`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md).
@@ -72,6 +74,9 @@ pnpm dev
 
 # Terminal 2 — Vite UI
 pnpm dev:web
+
+# Terminal 3 — browser-safe workflow Playground
+pnpm dev:playground
 ```
 
 **Open the URL the daemon prints**, not a bare `localhost`:
@@ -84,6 +89,25 @@ Vite dev UI:    http://127.0.0.1:5173/?rft=<token>
 That `rft` parameter is the one-time handoff of the session token. The UI stores it
 and strips it from the address bar; after the first visit a plain
 `http://127.0.0.1:5173` works. Lost the link? Run `pnpm url`.
+
+The Playground is deliberately separate from the local daemon. Open
+`http://127.0.0.1:5174` or use the Playground shortcut in the Roflock dashboard.
+It compiles in the browser and has no filesystem, shell, credentials, or daemon access.
+
+For a production Studio build, configure the separately deployed Playground with an
+absolute URL:
+
+```bash
+# Build the public static app with asset URLs rooted at /play/.
+pnpm build:playground:public
+
+# After deploying apps/playground/dist to https://roflock.com/play/:
+VITE_PLAYGROUND_URL=https://roflock.com/play/ pnpm --filter @roleflock/web build
+```
+
+If that variable is absent or invalid, Studio hides the Playground shortcut instead of
+falling back to the daemon origin. This is deliberate: a same-origin Playground could
+inherit the local session and would no longer be browser-only.
 
 The token lives in `<data dir>/session.json` (mode `0600`) and is stable across
 restarts, so the link keeps working. `ROFLOCK_ROTATE_TOKEN=1 pnpm dev` mints a new

@@ -246,8 +246,7 @@ export function TaskDetail() {
               <h3>The code change was not tested yet</h3>
               <p className="hint">
                 This repository has no configured verification command or Node test script. Choose a
-                command below, then RoleFlock will retry from verification without repeating the
-                work.
+                command below, then Roflock will retry from verification without repeating the work.
               </p>
               <label>
                 Verification command

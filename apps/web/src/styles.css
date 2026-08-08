@@ -1149,6 +1149,15 @@ textarea.compact {
   color: #d7e2df;
 }
 
+.activity-rail nav a.rail-external {
+  color: #a8cf85;
+}
+
+.activity-rail nav a.rail-external:hover {
+  background: #a8cf8514;
+  color: #c6e7a7;
+}
+
 .activity-rail nav a.active {
   background: #1d292b;
   color: var(--accent);

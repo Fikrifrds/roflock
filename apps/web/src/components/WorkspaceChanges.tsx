@@ -31,7 +31,7 @@ export function WorkspaceChanges({ task }: { task: Task }) {
     `/api/tasks/${task.id}/workspace`,
   );
   const [selectedKey, setSelectedKey] = useState('');
-  const [message, setMessage] = useState(`RoleFlock: ${task.title}`);
+  const [message, setMessage] = useState(`Roflock: ${task.title}`);
   const [busy, setBusy] = useState('');
   const [feedback, setFeedback] = useState('');
   const selections = useMemo<FileSelection[]>(
@@ -283,7 +283,7 @@ export function WorkspaceChanges({ task }: { task: Task }) {
           {busy === 'push' ? 'Pushing…' : `Push ${workspace.branchName}`}
         </button>
         <p className="git-help">
-          Push is always explicit. RoleFlock never publishes or merges this branch silently.
+          Push is always explicit. Roflock never publishes or merges this branch silently.
         </p>
         {feedback ? (
           <p className="action-feedback" role="status">

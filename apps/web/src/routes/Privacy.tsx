@@ -29,7 +29,7 @@ export function Privacy() {
       <PageHeader
         eyebrow="Local-first control"
         title="Privacy & local data"
-        description="RoleFlock operational data stays on this machine. Backups and exports are explicit; deleting RoleFlock data never deletes your Git repositories."
+        description="Roflock operational data stays on this machine. Backups and exports are explicit; deleting Roflock data never deletes your Git repositories."
       />
       <Section
         title="Data controls"
@@ -64,7 +64,7 @@ export function Privacy() {
               void run(async () => {
                 downloadJson(
                   await api.request<unknown>('/api/diagnostics/export'),
-                  'roleflock-diagnostics.json',
+                  'roflock-diagnostics.json',
                 );
                 return 'Downloaded redacted diagnostics';
               })
@@ -79,7 +79,7 @@ export function Privacy() {
             onClick={() => {
               if (
                 !window.confirm(
-                  'Delete all local RoleFlock data (database, documents, worktrees)? Repository folders on disk are kept.',
+                  'Delete all local Roflock data (database, documents, worktrees)? Repository folders on disk are kept.',
                 )
               ) {
                 return;

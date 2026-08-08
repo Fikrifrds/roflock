@@ -139,7 +139,7 @@ export function RoleRecommendationPanel({ task }: { task: Task }) {
     return (
       <Section
         title="Suggested role roster"
-        description="RoleFlock can assign planner, executor, and verifier from versioned capability evidence."
+        description="Roflock can assign planner, executor, and verifier from versioned capability evidence."
       >
         {error ? (
           <p className="error" role="alert">

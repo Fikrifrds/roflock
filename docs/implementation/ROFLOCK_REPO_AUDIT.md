@@ -1496,3 +1496,23 @@ suite should not be read as evidence the real CLIs were exercised.
 through testing-library. Visual design — layout, hierarchy, whether these panels
 read well beside each other on a real screen — is not something I can check, and
 none of it has been looked at by a person.
+
+---
+
+## 24. Post-R10 launch UI — Roflock and the isolated Playground
+
+RF-EVO-180 completes the visible product rename in Studio while preserving the
+wire headers, persisted paths, package namespace, and other compatibility
+contracts listed in §12. Export filenames and operator-facing copy now say
+Roflock; compatibility identifiers remain deliberately unchanged.
+
+The Playground has a responsive standalone layout and a production build rooted
+at `/play/`. Studio links to it only when `VITE_PLAYGROUND_URL` is an absolute
+HTTP(S) URL. Production has no same-origin fallback: if the variable is absent
+or invalid, the link is hidden so browser-only code cannot accidentally inherit
+the daemon session and local API origin.
+
+Verification: Web and Playground tests, targeted typechecks, full build, browser
+production previews for Studio and `/play/`, and `git diff --check`. The public
+deployment itself remains an operator action; the repository produces the static
+artifact but does not claim that a domain has been deployed.

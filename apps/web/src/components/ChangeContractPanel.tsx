@@ -248,7 +248,7 @@ export function ChangeContractPanel({ task }: { task: Task }) {
 
           <fieldset className="contract-fieldset">
             <legend>Acceptance criteria</legend>
-            <p className="hint">Every criterion must name how RoleFlock will verify it.</p>
+            <p className="hint">Every criterion must name how Roflock will verify it.</p>
             <div className="contract-list">
               {draft.criteria.map((criterion) => (
                 <article className="criterion-card" key={criterion.id}>

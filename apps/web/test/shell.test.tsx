@@ -19,7 +19,7 @@ describe('Shell', () => {
       </Shell>,
     );
 
-    expect(await screen.findByText(/Open RoleFlock from the daemon/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Open Roflock from the daemon/i)).toBeInTheDocument();
     expect(screen.getByText('pnpm url')).toBeInTheDocument();
     expect(screen.queryByText('protected')).not.toBeInTheDocument();
   });
@@ -36,6 +36,10 @@ describe('Shell', () => {
 
     expect(screen.getByText('protected')).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Primary' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Roflock Playground' })).toHaveAttribute(
+      'href',
+      expect.stringContaining('5174'),
+    );
     expect(screen.getByRole('link', { name: 'Skip to content' })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Connected'));
   });

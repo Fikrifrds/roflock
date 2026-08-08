@@ -376,6 +376,14 @@ Existing pinned graph runs remain supported.
 
 **R10 exit:** Code + Diagram + Run + Evidence is the flagship local product experience.
 
+### RF-EVO-180 — launch UI and isolated public Playground
+
+- finish the visible RoleFlock → Roflock product copy without renaming persisted compatibility contracts;
+- give the browser Playground a responsive production layout;
+- expose the Playground from Studio only through an explicit absolute URL in production;
+- build the static Playground with `/play/` asset paths;
+- verify both the hidden-link and configured-link production cases.
+
 ---
 
 # Later / not part of migration critical path

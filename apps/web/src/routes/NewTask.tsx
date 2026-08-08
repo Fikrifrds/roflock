@@ -84,7 +84,7 @@ export function NewTask() {
       <PageHeader
         eyebrow="New work"
         title="Create a governed task"
-        description="Define the outcome and guardrails. RoleFlock will choose the smallest workflow that can plan, implement, test, and verify it safely."
+        description="Define the outcome and guardrails. Roflock will choose the smallest workflow that can plan, implement, test, and verify it safely."
       >
         <ol className="composer-progress" aria-label="Task creation steps">
           <li className="active">
@@ -274,7 +274,7 @@ export function NewTask() {
                   <strong>{recommendation?.label ?? 'Choosing workflow…'}</strong>
                   <p>
                     {recommendation?.rationale ??
-                      'RoleFlock is matching the workflow to your intent and risk.'}
+                      'Roflock is matching the workflow to your intent and risk.'}
                   </p>
                 </div>
                 <span className="status-pill ok">Recommended</span>

@@ -158,7 +158,7 @@ export function Roles() {
       <PageHeader
         eyebrow="Flock configuration"
         title="Agent roles"
-        description="Order the provider and model candidates for each responsibility. RoleFlock uses the first healthy candidate and preserves explicit fallbacks."
+        description="Order the provider and model candidates for each responsibility. Roflock uses the first healthy candidate and preserves explicit fallbacks."
       />
       <Section
         title="Routing roster"

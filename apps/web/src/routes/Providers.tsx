@@ -285,7 +285,7 @@ export function Providers() {
 
         <Section title="Add OpenAI-compatible provider">
           <p className="lede">
-            Optional. Point RoleFlock at a local or remote OpenAI-compatible endpoint for reviewer.
+            Optional. Point Roflock at a local or remote OpenAI-compatible endpoint for reviewer.
           </p>
           <form className="stack" onSubmit={(event) => void onRegister(event)}>
             <Field label="Display name" htmlFor="provider-name">

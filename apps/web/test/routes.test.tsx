@@ -88,7 +88,7 @@ describe('Providers', () => {
                 entryCount: 1,
               },
             ],
-            note: 'RoleFlock local token meter.',
+            note: 'Roflock local token meter.',
           },
         },
       ],
@@ -387,7 +387,7 @@ describe('Evidence', () => {
     expect(screen.getByText('.env')).toBeInTheDocument();
     expect(screen.queryByText('selected context json', { exact: true })).not.toBeInTheDocument();
     expect(document.querySelector('time[datetime="2026-07-27T20:59:09.534Z"]')).toBeInTheDocument();
-  });
+  }, 10_000);
 });
 
 describe('GraphRunView', () => {

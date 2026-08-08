@@ -114,7 +114,7 @@ export function Evidence() {
             type="button"
             className="quiet"
             onClick={() =>
-              void exportJson(`/api/tasks/${id}/export/evidence`, `roleflock-evidence-${id}.json`)
+              void exportJson(`/api/tasks/${id}/export/evidence`, `roflock-evidence-${id}.json`)
             }
           >
             Export evidence bundle
@@ -123,7 +123,7 @@ export function Evidence() {
             type="button"
             className="quiet"
             onClick={() =>
-              void exportJson(`/api/tasks/${id}/export/audit`, `roleflock-audit-${id}.json`)
+              void exportJson(`/api/tasks/${id}/export/audit`, `roflock-audit-${id}.json`)
             }
           >
             Export audit pack

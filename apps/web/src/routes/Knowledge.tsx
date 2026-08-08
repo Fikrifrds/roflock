@@ -47,7 +47,7 @@ export function Knowledge() {
       <PageHeader
         eyebrow="Curated context"
         title="Knowledge"
-        description="Manage the conventions and decisions RoleFlock may include in agent context. Candidate notes remain private until published."
+        description="Manage the conventions and decisions Roflock may include in agent context. Candidate notes remain private until published."
       />
       <Section
         title="Add knowledge"

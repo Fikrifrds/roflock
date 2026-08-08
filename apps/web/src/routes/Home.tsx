@@ -5,6 +5,7 @@ import { TaskCard } from '../components/TaskCard.js';
 import { Empty, Metric, PageHeader, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { formatTaskState, formatTokenCount, formatUsage } from '../lib/format.js';
+import { PLAYGROUND_URL } from '../lib/links.js';
 import type { Approval, Task } from '../types.js';
 
 export function Home() {
@@ -54,6 +55,11 @@ export function Home() {
             <Link className="buttonish" to="/tasks/new">
               <span aria-hidden="true">＋</span> New task
             </Link>
+            {PLAYGROUND_URL ? (
+              <a className="quiet buttonish" href={PLAYGROUND_URL} target="_blank" rel="noreferrer">
+                <span aria-hidden="true">▶</span> Playground
+              </a>
+            ) : null}
           </>
         }
       >
@@ -142,7 +148,7 @@ export function Home() {
         </article>
 
         <article className="delivery-panel">
-          <p className="eyebrow">RoleFlock assurance</p>
+          <p className="eyebrow">Roflock assurance</p>
           <h2>Every change follows a visible path</h2>
           <ol className="delivery-path">
             {['Plan', 'Approve', 'Implement', 'Test', 'Verify', 'Accept'].map((step, index) => (

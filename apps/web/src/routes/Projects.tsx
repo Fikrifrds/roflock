@@ -30,11 +30,11 @@ export function Projects() {
       <PageHeader
         eyebrow="Repositories"
         title="Projects"
-        description="Register local Git repositories. Every task checks out a RoleFlock branch in that project folder."
+        description="Register local Git repositories. Every task checks out a Roflock branch in that project folder."
       />
       <Section
         title="Add repository"
-        description="RoleFlock resolves and validates the path before creating any task workspace."
+        description="Roflock resolves and validates the path before creating any task workspace."
         className="surface-section"
       >
         <form
@@ -53,7 +53,7 @@ export function Projects() {
               );
               setNotice(
                 project.gitInitialized
-                  ? `${project.name} was added. RoleFlock initialized Git with an empty first commit.`
+                  ? `${project.name} was added. Roflock initialized Git with an empty first commit.`
                   : `${project.name} was added.`,
               );
               setPath('');
@@ -68,7 +68,7 @@ export function Projects() {
           <Field
             label="Local path"
             htmlFor="repo-path"
-            hint="Tasks edit files in this folder on a RoleFlock branch. Keep the working tree clean before starting."
+            hint="Tasks edit files in this folder on a Roflock branch. Keep the working tree clean before starting."
           >
             {({ id, describedBy }) => (
               <div className="path-row">

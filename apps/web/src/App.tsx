@@ -37,7 +37,7 @@ export function App() {
       <Shell>
         <Section title="Before you start">
           <p className="lede">
-            RoleFlock stays on your machine. Confirm these points, then add a project and create a
+            Roflock stays on your machine. Confirm these points, then add a project and create a
             task.
           </p>
           <ul className="claim-list">

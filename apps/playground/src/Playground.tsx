@@ -4,6 +4,7 @@ import { compile } from '@roleflock/language';
 import { useMemo, useState } from 'react';
 import { DEFAULT_EXAMPLE, EXAMPLES } from './examples.js';
 import { encodeShareLink } from './share.js';
+import './styles.css';
 
 /**
  * The public Playground.
@@ -44,55 +45,83 @@ export function Playground({ initialSource = DEFAULT_EXAMPLE.source }: Playgroun
   const layout = useMemo(() => (result.ir ? layoutGraph(result.ir) : undefined), [result.ir]);
 
   return (
-    <main
-      style={{
-        fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-        padding: 20,
-        maxWidth: 1200,
-        margin: '0 auto',
-      }}
-    >
-      <header>
-        <h1 style={{ fontSize: 22, margin: 0 }}>Roflock Playground</h1>
-        <p style={{ color: '#475569', marginTop: 6 }}>
-          Write a workflow, see the graph it compiles to. Everything runs in this tab — nothing is
-          uploaded, and nothing here can run an agent.
-        </p>
+    <main className="playground-shell">
+      <header className="playground-header">
+        <div className="playground-brand">
+          <span className="playground-mark" aria-hidden="true">
+            RO
+          </span>
+          <span>
+            <strong>ROFLOCK</strong>
+            <small>AI coding teams as code</small>
+          </span>
+        </div>
+        <div className="playground-safety" aria-label="Playground safety">
+          <span className="safety-dot" />
+          <span>Browser-only</span>
+          <span className="safety-divider" aria-hidden="true" />
+          <span>No daemon access</span>
+        </div>
       </header>
 
-      <section aria-label="Examples" style={{ margin: '14px 0' }}>
+      <section className="playground-hero">
+        <div>
+          <p className="playground-eyebrow">Language playground</p>
+          <h1>Shape the workflow before it runs.</h1>
+          <p className="playground-lede">
+            Write a <code>.roflock</code> workflow and see the exact graph it compiles to. Nothing
+            is uploaded, and nothing here can run an agent.
+          </p>
+        </div>
+        <div className="playground-hero-note">
+          <span className="hero-note-number">01</span>
+          <span>Source → Graph IR → Validation</span>
+        </div>
+      </section>
+
+      <section className="example-toolbar" aria-label="Examples">
+        <div className="toolbar-label">
+          <span className="toolbar-kicker">Start from a pattern</span>
+          <span>Change the source anytime</span>
+        </div>
         {EXAMPLES.map((example) => (
           <button
             key={example.id}
             type="button"
+            className="example-button"
             onClick={() => setSource(example.source)}
             title={example.summary}
-            style={{ marginRight: 8, padding: '6px 10px' }}
+            aria-pressed={source === example.source}
           >
             {example.title}
           </button>
         ))}
         <button
           type="button"
+          className="share-button"
           onClick={() => {
             void navigator.clipboard
               ?.writeText(encodeShareLink(source, window.location.href.split('#')[0] ?? ''))
               .then(() => setCopied(true))
               .catch(() => setCopied(false));
           }}
-          style={{ padding: '6px 10px' }}
         >
-          {copied ? 'Link copied' : 'Copy share link'}
+          <span aria-hidden="true">↗</span> {copied ? 'Link copied' : 'Copy share link'}
         </button>
       </section>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
-        <section aria-label="Source">
-          <label htmlFor="source" style={{ display: 'block', fontSize: 13, marginBottom: 6 }}>
-            Workflow source
-          </label>
+      <div className="playground-grid">
+        <section className="playground-panel editor-panel" aria-label="Source">
+          <div className="panel-heading">
+            <div>
+              <span className="panel-kicker">Authoring surface</span>
+              <h2>Workflow source</h2>
+            </div>
+            <code>playground.roflock</code>
+          </div>
           <textarea
             id="source"
+            aria-label="Workflow source"
             value={source}
             onChange={(event) => {
               setSource(event.target.value);
@@ -100,27 +129,46 @@ export function Playground({ initialSource = DEFAULT_EXAMPLE.source }: Playgroun
             }}
             spellCheck={false}
             rows={26}
-            style={{ width: '100%', fontFamily: 'ui-monospace, monospace', fontSize: 12.5 }}
           />
+          <div className="editor-footer">
+            <span>Edits compile as you type</span>
+            <span className="editor-status">
+              <span className="status-dot" />
+              Local only
+            </span>
+          </div>
         </section>
 
-        <section aria-label="Result">
-          <h2 style={{ fontSize: 14, margin: '0 0 6px' }}>
-            {errors.length > 0 ? 'Does not compile' : 'Compiles'}
-          </h2>
+        <section className="playground-panel result-panel" aria-label="Result">
+          <div className="panel-heading">
+            <div>
+              <span className="panel-kicker">Canonical output</span>
+              <h2>Compiled graph</h2>
+            </div>
+            <span className={`compile-status ${errors.length > 0 ? 'invalid' : 'valid'}`}>
+              <span className="status-dot" />
+              {errors.length > 0 ? 'Does not compile' : 'Compiles'}
+            </span>
+          </div>
 
           {/* Diagnostics first. A diagram drawn from stale IR beside a list of
               errors would suggest the errors are cosmetic. */}
           {result.diagnostics.length > 0 ? (
-            <ul aria-label="Diagnostics" style={{ paddingLeft: 18, margin: '0 0 12px' }}>
+            <ul className="diagnostics" aria-label="Diagnostics">
               {result.diagnostics.map((diagnostic, index) => (
                 <li
                   key={`${diagnostic.code}-${index}`}
-                  style={{ color: diagnostic.severity === 'error' ? '#b91c1c' : '#b45309' }}
+                  className={
+                    diagnostic.severity === 'error' ? 'diagnostic-error' : 'diagnostic-warning'
+                  }
                 >
-                  <code>{diagnostic.code}</code>
-                  {diagnostic.span ? ` line ${diagnostic.span.start.line}: ` : ': '}
-                  {diagnostic.message}
+                  <span className="diagnostic-code">
+                    <code>{diagnostic.code}</code>
+                  </span>
+                  <span>
+                    {diagnostic.span ? `line ${diagnostic.span.start.line}: ` : ''}
+                    {diagnostic.message}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -128,7 +176,7 @@ export function Playground({ initialSource = DEFAULT_EXAMPLE.source }: Playgroun
 
           {layout ? (
             <>
-              <p style={{ fontSize: 12, color: '#475569', margin: '0 0 8px' }}>
+              <div className="graph-meta">
                 {layout.nodes.length} nodes · {layout.edges.length} edges ·{' '}
                 {layout.loops.length === 0
                   ? 'no repair loop'
@@ -138,35 +186,43 @@ export function Playground({ initialSource = DEFAULT_EXAMPLE.source }: Playgroun
                           `loop of ${loop.nodeIds.length} bounded at ${loop.maxAttempts} attempts`,
                       )
                       .join(', ')}
-              </p>
+              </div>
               {/* Drawn by graph-ui, the same renderer Studio and `roflock
                   render` use — a second implementation here would be the
                   divergence that package exists to prevent. The markup comes
                   from our own renderer over compiled IR, and every label it
                   embeds is escaped. */}
-              <div
-                aria-label="Workflow diagram"
-                dangerouslySetInnerHTML={{ __html: toSvg(layout) }}
-              />
-              <p style={{ fontSize: 11, color: '#64748b' }}>
+              <div className="diagram-frame">
+                <div
+                  aria-label="Workflow diagram"
+                  dangerouslySetInnerHTML={{ __html: toSvg(layout) }}
+                />
+              </div>
+              <p className="diagram-caption">
                 Solid lines are the path a successful run takes. Dashed lines are typed failure
                 routes. A bold border marks the one node that may write.
               </p>
             </>
           ) : (
-            <p style={{ color: '#64748b', fontSize: 13 }}>
+            <p className="empty-graph">
               No graph yet — fix the errors above. Roflock never draws a partial graph, because half
               a workflow means something different from the whole one.
             </p>
           )}
 
           {isExecutable(result.diagnostics) && warnings.length > 0 ? (
-            <p style={{ fontSize: 12, color: '#b45309' }}>
+            <p className="compile-note">
               This would run. The warnings above are worth reading anyway.
             </p>
           ) : null}
         </section>
       </div>
+      <footer className="playground-footer">
+        <span>
+          <strong>Roflock</strong> compiles the same source used by the runtime and CLI.
+        </span>
+        <span>Share links stay in the URL fragment — never sent to a server.</span>
+      </footer>
     </main>
   );
 }
