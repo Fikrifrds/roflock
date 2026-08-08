@@ -1,9 +1,14 @@
-# Roflock Repository Audit (Phase R0)
+# Roflock Repository Audit
 
-**Status:** Baseline frozen — no runtime behaviour changed by this document
-**Tickets:** RF-EVO-001, RF-EVO-002, RF-EVO-003, RF-EVO-005
+**Status:** R0 baseline frozen; R1 outcome recorded in [§12](#12-r1-outcome--roflock-rebrand)
+**Tickets:** RF-EVO-001, RF-EVO-002, RF-EVO-003, RF-EVO-005 (+ R1 summary)
 **Baseline commit:** `d5bcacb742c56af17cc2ed9cf79c7fbf94e45291`
 **Date:** 8 August 2026
+
+Sections 1–11 describe the repository **as frozen at the baseline commit** and are
+not rewritten as work lands — a baseline that drifts is not a baseline. Later
+phases append a section and, where a specific statement has since become wrong,
+add a marked amendment in place. Sections 1.1 and 2 carry such amendments.
 
 This document answers the R0 exit question:
 
@@ -48,6 +53,12 @@ but it MUST NOT be folded into a ticket that changes behaviour — the master
 instruction forbids mixing formatting with semantic commits. Until that cleanup
 lands, every milestone check compares the _set_ of flagged files against this
 baseline list rather than asserting exit code 0.
+
+> **Amended after R1.** The set is now 66 tracked files, not 68.
+> `roleflock.config.example.yaml` left it by being renamed and rewritten
+> (RF-EVO-014) and `apps/daemon/src/services/export-service.ts` by being
+> reformatted as part of RF-EVO-013. Nothing was newly added. Compare against
+> the current set, and treat any addition as a regression.
 
 ### 1.2 Working tree state at baseline
 
@@ -96,6 +107,14 @@ has **no external consumers**, which resolves RF-EVO-015 in advance: the namespa
 rename is a pure internal refactor with zero compatibility obligation. It is
 therefore _safe_ but still _churny_, so it stays sequenced after runtime
 integration per the implementation plan.
+
+> **Amended after R1.** The CLI Distribution plan makes the CLI a permanent
+> product surface published to npm as `roflock` or `@roflock/cli`. That does not
+> create a backwards-compatibility obligation — there is still nothing to break —
+> but it does give the rename a **deadline**: the published package must not
+> carry the old namespace, so RF-EVO-015 has to land before the first publish
+> (RF-DIST-012). The executable name is the user-facing contract and was
+> decoupled from the package name in R1, so the two can be sequenced separately.
 
 Only two `bin` entries exist: root `package.json` and `apps/cli/package.json`,
 both mapping the name `roleflock` to `./apps/cli/dist/cli.js`. The CLI today does
@@ -562,3 +581,50 @@ change is one added test.
    package split before the vertical slice is green.
 3. Before R5, resolve the `database` layering question from §4.2 with an ADR —
    and re-scope R5 against what §9.1 shows already exists.
+
+---
+
+## 12. R1 outcome — Roflock rebrand
+
+R1 is complete. Nothing was renamed by search-and-replace; every item was
+decided against the §5 compatibility surface.
+
+| Ticket                      | Outcome                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| RF-EVO-010                  | README leads with Roflock positioning and names the unbuilt parts explicitly                                        |
+| RF-EVO-011, RF-DIST-002/003 | `roflock` executable with `--help`/`--version`; `roleflock` warns and keeps working                                 |
+| RF-EVO-012                  | `readEnv()` resolves `ROFLOCK_*` with a `ROLEFLOCK_*` fallback across ten variables; child processes get both names |
+| RF-EVO-013                  | Data directory is _resolved_, never moved; database filename centralised                                            |
+| RF-EVO-014                  | `roflock.config.example.yaml`, both locations documented                                                            |
+| RF-EVO-015                  | Resolved by §2 — deferred, now with a publish deadline                                                              |
+| RF-EVO-016                  | Apache-2.0 LICENSE, NOTICE, SECURITY.md, expanded CONTRIBUTING                                                      |
+
+Verification after R1: build, lint, typecheck pass; **459 tests pass**, up from
+the 432 baseline. Prettier's flagged set shrank by two and gained nothing.
+
+### What R1 deliberately did not rename
+
+Each of these looks like a rebrand target and is not one:
+
+- **`ROLEFLOCK_CHECK_*` / `ROLEFLOCK_PASSPORT_*`** in `github-protection-gate`
+  are published GitHub status-check codes, not environment variables. Users'
+  branch protection rules match on these strings; renaming them silently breaks
+  a merge gate.
+- **`x-roleflock-token`, `x-roleflock-csrf`, `roleflock_token` cookie** are a
+  wire protocol between `apps/web` and the daemon. Renaming them is a
+  coordinated two-sided change and needs its own ticket.
+- **`roleflock.db`** and its `-wal`/`-shm` siblings. Renaming the directory only
+  requires resolution to look in two places; renaming the database means moving
+  a live file that a daemon may hold open. The name is now a single constant, so
+  the change is one edit whenever it is judged worth the risk.
+- **Change Passport media types** (`application/vnd.roleflock.change-passport+json`).
+  Users may hold exported passports carrying these strings.
+- **Root package `name`** and the `@roleflock/*` namespace — RF-EVO-015.
+
+### New risks introduced by R1
+
+| #   | Risk                                                                                                                                            | Severity | Mitigation                                                                                                |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| 10  | `print-url.mjs` and `diagnostics.mjs` duplicate `resolveDataDir()` because they run without the built workspace; they can drift                 | Medium   | Both carry a pointer comment to `apps/daemon/src/data-dir.ts`; a shared build-free module would remove it |
+| 11  | Data directory resolution is sticky — a user who creates `~/.roflock` by hand while running from `~/.roleflock` silently switches installations | Low      | Documented in README; resolution prefers the new directory only because a hand-created one signals intent |
+| 12  | Legacy env deprecation warnings are per-process, so a short-lived CLI invocation repeats them                                                   | Low      | Acceptable; the alternative is persisting notice state, which is worse                                    |

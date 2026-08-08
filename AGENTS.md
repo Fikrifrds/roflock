@@ -5,13 +5,21 @@ Root agent guidance. Sections 1–17 are the Roflock AI Coding Master Instructio
 
 ## Current phase
 
-**R0 is complete.** The baseline audit lives at
+**R0 and R1 are complete.** The baseline audit lives at
 [`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md)
 and records the verification baseline, package classification, persisted
-compatibility surface, and the risk register. Read it before touching code —
-it supersedes the planning docs wherever they disagree with the checkout.
+compatibility surface, the risk register, and the R1 outcome. Read it before
+touching code — it supersedes the planning docs wherever they disagree with the
+checkout.
 
-Next phase: **R1 — safe Roflock rebrand**.
+R1 renamed nothing by search-and-replace. Audit §12 lists what was deliberately
+_not_ renamed and why; check it before assuming an identifier is fair game.
+
+CLI distribution and harness interoperability are governed by
+[`docs/implementation/ROFLOCK_CLI_DISTRIBUTION_AND_HARNESS_INTEGRATION_v1.0.md`](docs/implementation/ROFLOCK_CLI_DISTRIBUTION_AND_HARNESS_INTEGRATION_v1.0.md).
+
+Next phase: **R2 — integrate Graph IR and the language** (`packages/graph-ir`,
+then `packages/language`).
 
 ---
 
