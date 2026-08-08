@@ -44,6 +44,12 @@ importers:
       '@roleflock/change-passport':
         specifier: workspace:*
         version: link:../../packages/change-passport
+      '@roleflock/graph-ir':
+        specifier: workspace:*
+        version: link:../../packages/graph-ir
+      '@roleflock/language':
+        specifier: workspace:*
+        version: link:../../packages/language
     devDependencies:
       typescript:
         specifier: ^5.8.3
@@ -394,6 +400,19 @@ importers:
       '@roleflock/role-protocol':
         specifier: workspace:*
         version: link:../role-protocol
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@24.13.3)(jsdom@29.1.1)(supports-color@7.2.0)(tsx@4.23.1)
+
+  packages/language:
+    dependencies:
+      '@roleflock/graph-ir':
+        specifier: workspace:*
+        version: link:../graph-ir
     devDependencies:
       typescript:
         specifier: ^5.8.3

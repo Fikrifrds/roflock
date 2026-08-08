@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { ExitCode } from './exit-codes.js';
+import { runCheck, runCompile, runHash, runValidateIr } from './language-commands.js';
 import { runPassportCli } from './passport-command.js';
 
 export interface CliIo {
@@ -25,8 +26,16 @@ const HELP = `roflock — AI coding teams as code.
 Usage
   roflock <command> [options]
 
-Commands
+Language
+  check <file.roflock>              Compile and validate a workflow
+  compile <file.roflock> [-o out]   Emit canonical Graph IR
+  hash <file>                       Print a workflow's semantic hash
+  validate-ir <file.ir.json>        Validate a Graph IR document
+
+Evidence
   passport verify <passport.json>   Verify a signed Change Passport offline
+
+Other
   help                              Show this message
   version                           Print the Roflock version
 
@@ -35,8 +44,9 @@ Options
   -v, --version                     Print the Roflock version
 
 Roflock runs entirely on your machine and never requires a Roflock Cloud
-account. Workflow authoring and run commands arrive with the language and
-runtime surfaces; only the commands listed above exist today.
+account. The commands above are compiler-side only: they read and analyse a
+workflow without starting a run, spawning a provider, or touching a repository.
+Run commands arrive with the runtime surface.
 
 Exit codes
   0 success                 4 run failed
@@ -68,6 +78,11 @@ export function runCli(argv: string[], io: CliIo): number {
   if (command === 'passport') {
     return runPassportCli([command, ...rest], io);
   }
+
+  if (command === 'check') return runCheck(rest, io);
+  if (command === 'compile') return runCompile(rest, io);
+  if (command === 'hash') return runHash(rest, io);
+  if (command === 'validate-ir') return runValidateIr(rest, io);
 
   io.stderr(`Unknown command: ${command}`);
   io.stderr("Run 'roflock --help' to see the available commands.");

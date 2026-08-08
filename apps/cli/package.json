@@ -15,7 +15,9 @@
     "passport": "node apps/cli/dist/bin/roflock.js passport"
   },
   "dependencies": {
-    "@roleflock/change-passport": "workspace:*"
+    "@roleflock/change-passport": "workspace:*",
+    "@roleflock/graph-ir": "workspace:*",
+    "@roleflock/language": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

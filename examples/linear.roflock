@@ -1,0 +1,34 @@
+# The smallest workflow that still proves something.
+#
+# One agent changes the code, one deterministic check decides whether it worked,
+# and a human accepts. No loop: if the check fails, the run fails.
+
+workflow Linear {
+  version "1.0.0"
+  description "Write, verify, accept"
+}
+
+role implementer {
+  write
+  requires "coding.write"
+}
+
+agent Builder {
+  role implementer
+  objective "Make the requested change"
+}
+
+check Tests {
+  run "npm test"
+  required
+}
+
+human Accept {
+  title "Accept the change"
+  decisions approve, reject
+}
+
+flow {
+  Builder -> Tests
+  Tests.pass -> Accept
+}

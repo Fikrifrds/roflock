@@ -1,0 +1,58 @@
+# Verified bug fix with a bounded repair loop.
+#
+# The check is `required`, so acceptance cannot be reached without it passing.
+# `{ max 3 }` bounds the repair loop: the compiler turns that one annotation
+# into a loop group covering Builder and Tests, with Tests as the verifier whose
+# verdict decides whether another attempt is warranted.
+
+workflow BugFix {
+  version "1.0.0"
+  description "Repair a defect and prove it with a deterministic check"
+
+  # Repeated model work needs a ceiling. Hitting it pauses for the operator
+  # rather than discarding work already paid for.
+  max_cost 5
+}
+
+role implementer {
+  write
+  requires "coding.write"
+}
+
+role critic {
+  readonly
+  requires "coding.review"
+}
+
+artifact Patch
+artifact ReviewReport
+
+agent Builder {
+  role implementer
+  objective "Find the root cause and make the smallest safe fix"
+  produces Patch
+}
+
+check Tests {
+  run "npm test"
+  required
+}
+
+agent Reviewer {
+  role critic
+  objective "Review the change for correctness and scope"
+  consumes Patch
+  produces ReviewReport
+}
+
+human Accept {
+  title "Accept the verified fix"
+  decisions approve, reject
+}
+
+flow {
+  Builder -> Tests
+  Tests.pass -> Reviewer
+  Tests.fail -> Builder { max 3 }
+  Reviewer -> Accept
+}
