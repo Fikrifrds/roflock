@@ -8,6 +8,7 @@ import { Empty, Section } from '../components/primitives.js';
 import { api, useData } from '../lib/client.js';
 import { downloadJson, formatTimestamp, formatValue, parseJsonField } from '../lib/format.js';
 import type { EvidenceBundle, GraphRunView, Task, Usage } from '../types.js';
+import { EvidenceChain } from '../components/EvidenceChain.js';
 
 export function Evidence() {
   const { id = '' } = useParams();
@@ -73,6 +74,9 @@ export function Evidence() {
   return (
     <Shell>
       <TaskWorkspaceHeader task={task} activeView="evidence" />
+
+      {/* The chain first: what is missing decides how much the rest is worth. */}
+      <EvidenceChain taskId={id} />
       <TaskJourney task={task} runView={runView} />
       <Section
         title="Evidence ledger"

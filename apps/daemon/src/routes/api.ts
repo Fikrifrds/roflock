@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ActiveExecution, Task } from '@roleflock/contracts';
 import { registeredWorkflowIr, registeredWorkflowSource } from '@roleflock/graph-core';
 import { layoutGraph, toSvg } from '@roleflock/graph-ui';
+import { explainRun } from '@roleflock/evidence';
 import {
   AuditRepository,
   ApprovalGrantRepository,
@@ -1533,6 +1534,20 @@ export function registerApi(
       layout: layoutGraph(ir, { state }),
       svg: toSvg(layoutGraph(ir, { state })),
     };
+  });
+
+  /**
+   * The evidence chain, with its gaps named.
+   *
+   * Distinct from the bundle below, which lists what exists. This answers "why
+   * should I believe this change is safe?" — and the difference that matters is
+   * that it reports what is *missing*. A view built only from the bundle shows a
+   * run with no verification as a run that needed none.
+   */
+  app.get('/api/evidence/tasks/:taskId/chain', async (request, reply) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    if (!tasks.get(taskId)) return reply.code(404).send({ error: 'Task not found' });
+    return explainRun(db, taskId);
   });
 
   app.get('/api/evidence/tasks/:taskId', async (request) =>
