@@ -24,6 +24,10 @@ import type { ProviderAdapter, ProviderModel } from './index.js';
  * cancellation is `local-process` and never better — killing that process says
  * nothing about a request already in flight to a paid API, and claiming
  * otherwise is the one lie the conformance suite exists to catch.
+ *
+ * Permission enforcement is **delegated**, not performed here. The envelope
+ * handed to the adapter is what confines it; this wrapper adds only an early
+ * refusal for objectives that plainly need write access. See `start`.
  */
 
 export interface ProviderDriverOptions {
@@ -88,12 +92,18 @@ export class ProviderBackedDriver implements AgentDriver {
       else request.signal.addEventListener('abort', () => controller.abort(), { once: true });
     }
 
-    // Permissions are a ceiling. An adapter cannot be trusted to enforce a
-    // restriction the envelope never told it about, so a write objective under
-    // a read-only envelope is refused here rather than sent and hoped about.
+    // An early refusal for objectives that plainly need write access, so a
+    // clearly-misrouted turn costs nothing.
+    //
+    // This is a *guard, not the enforcement*. It matches words, and an
+    // objective like "refactor billing" sails past it. What actually confines
+    // the adapter is the permission envelope below — empty `allowedPaths`,
+    // `allowCommands: false` — enforced by the CLI's own sandbox. Treating this
+    // regex as the boundary would be exactly the mistake of putting a security
+    // control in text matching.
     if (
       !request.permissions.workspaceWrite &&
-      /\bwrite|edit|modify|patch\b/i.test(request.objective)
+      /\b(write|edit|modify|patch)\b/i.test(request.objective)
     ) {
       yield {
         type: 'settled',

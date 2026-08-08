@@ -205,3 +205,51 @@ describe('the wrapper is pessimistic about what it promises', () => {
     });
   });
 });
+
+describe('what the permission guard does and does not do', () => {
+  async function objectiveReaching(adapterEvents: InvocationEvent[], objective: string) {
+    let reached: InvocationRequest | undefined;
+    const driver = providerDriver(
+      adapter(adapterEvents, {
+        // eslint-disable-next-line @typescript-eslint/require-await
+        async *invoke(input: InvocationRequest): AsyncIterable<InvocationEvent> {
+          reached = input;
+          for (const event of adapterEvents) yield event;
+        },
+      }),
+    );
+    await collect(
+      driver.start({
+        ...request,
+        objective,
+        permissions: { workspaceWrite: false, network: false },
+      }),
+    );
+    return reached;
+  }
+
+  const completed: InvocationEvent[] = [{ type: 'invocation.completed', output: 'ok' }];
+
+  it.each(['modify the payment module', 'write a file', 'edit the config', 'patch the bug'])(
+    'refuses %j before the adapter is invoked',
+    async (objective) => {
+      expect(await objectiveReaching(completed, objective)).toBeUndefined();
+    },
+  );
+
+  it.each(['refactor billing', 'improve the payment module', 'clean up the module'])(
+    'lets %j through, because word matching is not a security boundary',
+    async (objective) => {
+      const reached = await objectiveReaching(completed, objective);
+
+      // This is the honest limit of the guard. What actually confines the
+      // adapter is the envelope it receives, enforced by the CLI sandbox.
+      expect(reached).toBeDefined();
+      expect(reached?.permissionEnvelope).toEqual({
+        worktree: '/tmp/worktree',
+        allowedPaths: [],
+        allowCommands: false,
+      });
+    },
+  );
+});

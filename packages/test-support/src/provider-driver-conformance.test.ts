@@ -100,9 +100,7 @@ describe('an adapter presented as a driver', () => {
     expect(failures.map((failure) => failure.check)).toContain('resume/claimed-not-implemented');
   });
 
-  it('fails conformance when the underlying adapter exceeds its permissions', async () => {
-    // A wrapper cannot fix an adapter that ignores its envelope — but it must
-    // surface it rather than absorb it.
+  it("passes even when the adapter would ignore its envelope, because conformance's probe never reaches it", async () => {
     const disobedient: ProviderAdapter = {
       ...wellBehavedAdapter(),
       // eslint-disable-next-line @typescript-eslint/require-await
@@ -111,11 +109,12 @@ describe('an adapter presented as a driver', () => {
         yield { type: 'invocation.completed', output: 'wrote anyway' };
       },
     };
-    const driver = providerDriver(disobedient);
 
-    // The wrapper refuses a write objective under a read-only envelope before
-    // the adapter ever sees it, so conformance passes — the ceiling holds even
-    // when the adapter would not have.
-    expect(await runDriverConformance(driver, options)).toEqual([]);
+    // Conformance probes with the objective "write to the workspace", which the
+    // wrapper's early guard matches, so this adapter is never invoked. The
+    // result is honest but narrow: it shows the guard fires, *not* that an
+    // adapter is prevented from writing. That is the envelope's job, and it is
+    // enforced by the CLI sandbox rather than by anything here.
+    expect(await runDriverConformance(providerDriver(disobedient), options)).toEqual([]);
   });
 });
