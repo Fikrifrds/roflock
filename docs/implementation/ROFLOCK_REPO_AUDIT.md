@@ -1516,3 +1516,35 @@ Verification: Web and Playground tests, targeted typechecks, full build, browser
 production previews for Studio and `/play/`, and `git diff --check`. The public
 deployment itself remains an operator action; the repository produces the static
 artifact but does not claim that a domain has been deployed.
+
+---
+
+## 25. Public-alpha correction — immutable workflow snapshots
+
+RF-EVO-181 corrects the task pinning claim recorded during R4/R5. A compatibility
+version such as `bug_fix@3` identifies the runtime schema generation, but it does
+not uniquely identify mutable `.roflock` template contents. Resolving that label
+through the current registry could therefore change an existing task's graph and
+semantic hash after an edit or daemon restart.
+
+Migration 035 adds one immutable workflow snapshot per task. New task creation
+stores the authored source, canonical Graph IR, exact lowered `WorkflowGraph`,
+semantic hash, and a SHA-256 integrity hash in the same SQLite transaction as the
+task. Runtime, graph, and diagram reads prefer that snapshot; corruption fails
+closed instead of falling back to the current registry. Invocation identity now
+uses the semantic hash carried by the graph actually loaded, not a graph with the
+same display ID found in mutable registry state.
+
+Databases upgraded from earlier builds cannot reconstruct source that changed
+before this migration existed. Their tasks are frozen once at first upgraded
+boot: v1/v2 tasks retain hard-coded historical graphs, while current-version
+tasks retain the last semantics resolvable during that boot. This limitation is
+explicit and does not affect tasks created after migration 035.
+
+Verification covers repository immutability and cascade deletion, source/IR/graph
+capture through the task API, template mutation after task creation, snapshot
+integrity failure, and one-time upgrade backfill. Database tests pass 58/58;
+targeted daemon snapshot/template/diagram tests pass 18/18. The full daemon suite
+passes 183 non-listener tests in the sandbox, and the seven preview-listener
+tests pass outside it; the three sandbox failures are the known local-listener
+restriction rather than product failures.

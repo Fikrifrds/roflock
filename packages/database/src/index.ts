@@ -13,6 +13,8 @@ export {
 export type { TaskProjection } from './reducers/task-reducer.js';
 export { ProjectRepository } from './repositories/project-repository.js';
 export { TaskRepository } from './repositories/task-repository.js';
+export { WorkflowSnapshotRepository } from './repositories/workflow-snapshot-repository.js';
+export type { WorkflowSnapshotRecord } from './repositories/workflow-snapshot-repository.js';
 export { ConfirmationRepository } from './repositories/confirmation-repository.js';
 export { ApprovalGrantRepository } from './repositories/approval-grant-repository.js';
 export type { CreateApprovalGrantInput } from './repositories/approval-grant-repository.js';

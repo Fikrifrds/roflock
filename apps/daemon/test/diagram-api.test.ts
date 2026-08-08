@@ -3,7 +3,9 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { openMigratedDatabase, WorkflowSnapshotRepository } from '@roleflock/database';
 import { createServer } from '../src/server.js';
+import { DATABASE_FILE_NAME } from '../src/data-dir.js';
 import { authoriseTaskContract } from './contract-fixture.js';
 
 /**
@@ -46,7 +48,7 @@ async function boot() {
     await rm(dataDir, { recursive: true, force: true });
     await rm(repoDir, { recursive: true, force: true });
   });
-  return { app: instance.app, repoDir };
+  return { app: instance.app, dataDir, repoDir };
 }
 
 async function task(app: Awaited<ReturnType<typeof boot>>['app'], repoDir: string) {
@@ -75,6 +77,23 @@ async function task(app: Awaited<ReturnType<typeof boot>>['app'], repoDir: strin
 }
 
 describe('the shared diagram endpoint', () => {
+  it('persists source, IR, and the executable graph when the task is created', async () => {
+    const { app, dataDir, repoDir } = await boot();
+    const taskId = await task(app, repoDir);
+    const db = openMigratedDatabase(join(dataDir, DATABASE_FILE_NAME));
+    const snapshot = new WorkflowSnapshotRepository(db).get(taskId);
+
+    expect(snapshot?.source).toContain('workflow bug_fix');
+    expect(JSON.parse(snapshot!.graphIrJson!)).toMatchObject({ workflow: { id: 'bug_fix' } });
+    expect(JSON.parse(snapshot!.workflowGraphJson)).toMatchObject({
+      id: 'bug_fix',
+      version: snapshot!.graphVersionId,
+      semanticHash: snapshot!.semanticHash,
+    });
+    expect(snapshot?.graphSnapshotHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    db.close();
+  });
+
   it('serves the shared layout for a compiled workflow', async () => {
     const { app, repoDir } = await boot();
     const taskId = await task(app, repoDir);

@@ -21,6 +21,7 @@ import {
   QuotaSnapshotRepository,
   TaskRepository,
   UsageRepository,
+  WorkflowSnapshotRepository,
   WorktreeRepository,
   type KnowledgeState,
   type KnowledgeType,
@@ -28,7 +29,13 @@ import {
   type SqliteDb,
 } from '@roleflock/database';
 import { compileContext, ROLE_CONTRACTS, type RoleId } from '@roleflock/context-compiler';
-import { getWorkflowGraph, recommendWorkflow, workflowGraphs } from '@roleflock/graph-core';
+import {
+  getWorkflowGraph,
+  recommendWorkflow,
+  resolveWorkflowGraph,
+  workflowGraphs,
+  type WorkflowGraph,
+} from '@roleflock/graph-core';
 import { budgetStatus } from '@roleflock/usage-ledger';
 import { EFFORT_LEVELS, isEffort, stopIsConfirmable } from '@roleflock/provider-core';
 import { shippedDriverCancellation } from '../services/cancellation.js';
@@ -95,6 +102,7 @@ import { registerOutcomeObservationRoutes } from './outcome-observations.js';
 import { evaluateContractStartGate } from '../services/contract-start-gate.js';
 import { findTaskPathCollisions } from '../services/path-collision.js';
 import { buildTaskHandoff } from '../services/task-handoff.js';
+import { workflowIrFromSnapshot, workflowSnapshotRecord } from '../services/workflow-snapshot.js';
 
 export function registerApi(
   app: FastifyInstance,
@@ -111,6 +119,7 @@ export function registerApi(
 ): void {
   const projects = new ProjectRepository(db),
     tasks = new TaskRepository(db),
+    workflowSnapshots = new WorkflowSnapshotRepository(db),
     changeContracts = new ChangeContractRepository(db),
     approvals = new ConfirmationRepository(db),
     approvalGrants = new ApprovalGrantRepository(db),
@@ -356,10 +365,9 @@ export function registerApi(
         type: (body.type ?? 'bug_fix') as Parameters<typeof recommendWorkflow>[0]['type'],
         risk: body.risk,
       }).mode;
-    let workflowGraphVersionId: string;
+    let workflowGraph: WorkflowGraph;
     try {
-      // Pin the task to a versioned graph so its shape cannot change mid-run.
-      workflowGraphVersionId = getWorkflowGraph(mode).version;
+      workflowGraph = resolveWorkflowGraph(mode);
     } catch {
       return reply.code(400).send({ error: `Unknown workflow mode: ${mode}` });
     }
@@ -371,7 +379,7 @@ export function registerApi(
       brief: body.brief,
       risk: body.risk ?? 'medium',
       state: 'ready',
-      workflowGraphVersionId,
+      workflowGraphVersionId: workflowGraph.version,
       budgetPolicyId: 'local-default',
       contractRequirement: 'required',
       expectedBehaviour: body.expectedBehaviour,
@@ -382,7 +390,19 @@ export function registerApi(
       createdAt: now(),
       updatedAt: now(),
     };
-    tasks.upsert(task);
+    const ir = registeredWorkflowIr(mode);
+    const source = registeredWorkflowSource(mode);
+    const snapshot = workflowSnapshotRecord({
+      taskId: task.id,
+      graph: workflowGraph,
+      ...(ir === undefined ? {} : { ir }),
+      ...(source === undefined ? {} : { source }),
+      createdAt: task.createdAt,
+    });
+    db.transaction(() => {
+      tasks.upsert(task);
+      workflowSnapshots.create(snapshot);
+    })();
     bus.publish('task.created', task);
     return reply.code(201).send(task);
   });
@@ -531,7 +551,7 @@ export function registerApi(
 
     let graph;
     try {
-      graph = resolveTaskGraph(task);
+      graph = resolveTaskGraph(task, workflowSnapshots.get(task.id));
     } catch (error) {
       return reply
         .code(409)
@@ -1553,8 +1573,20 @@ export function registerApi(
     const task = tasks.get(taskId);
     if (!task) return reply.code(404).send({ error: 'Task not found' });
 
-    const graph = resolveTaskGraph(task);
-    const ir = registeredWorkflowIr(graph.version);
+    const snapshot = workflowSnapshots.get(task.id);
+    let graph: WorkflowGraph;
+    let ir;
+    try {
+      graph = resolveTaskGraph(task, snapshot);
+      ir =
+        snapshot === undefined
+          ? registeredWorkflowIr(graph.version)
+          : workflowIrFromSnapshot(snapshot);
+    } catch (error) {
+      return reply.code(409).send({
+        error: error instanceof Error ? error.message : 'Invalid workflow snapshot',
+      });
+    }
     if (ir === undefined) {
       return reply.code(409).send({
         error: 'No compiled workflow for this task',
@@ -1588,7 +1620,10 @@ export function registerApi(
       // The source as it is on disk, not a reconstruction — a regenerated one
       // would be a second rendering of the same graph and could disagree with
       // the file the operator is editing.
-      source: registeredWorkflowSource(graph.version) ?? null,
+      source:
+        snapshot === undefined
+          ? (registeredWorkflowSource(graph.version) ?? null)
+          : (snapshot.source ?? null),
       semanticHash: ir.workflow.semanticHash ?? null,
       layout: layoutGraph(ir, { state }),
       svg: toSvg(layoutGraph(ir, { state })),

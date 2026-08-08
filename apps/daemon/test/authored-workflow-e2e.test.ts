@@ -2,7 +2,23 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolveWorkflowGraph } from '@roleflock/graph-core';
+import type { Task } from '@roleflock/contracts';
+import {
+  migrate,
+  openDatabase,
+  TaskRepository,
+  WorkflowSnapshotRepository,
+} from '@roleflock/database';
+import {
+  registeredWorkflowIr,
+  registeredWorkflowSource,
+  resolveWorkflowGraph,
+} from '@roleflock/graph-core';
+import { resolveTaskGraph } from '../src/services/orchestrator.js';
+import {
+  backfillWorkflowSnapshots,
+  workflowSnapshotRecord,
+} from '../src/services/workflow-snapshot.js';
 import { loadWorkflowTemplates } from '../src/workflow-templates.js';
 
 /**
@@ -114,5 +130,108 @@ describe('a workflow an author edited', () => {
     const pinned = resolveWorkflowGraph('bug_fix@1');
 
     expect(pinned.nodes.map((node) => node.id)).toContain('reviewer');
+  });
+
+  it('keeps the exact executable graph after its current template changes', async () => {
+    loadWorkflowTemplates(await workflowsDir(authored(3)));
+    const graphAtCreation = resolveWorkflowGraph('bug_fix');
+    const irAtCreation = registeredWorkflowIr('bug_fix');
+    const sourceAtCreation = registeredWorkflowSource('bug_fix');
+    expect(irAtCreation).toBeDefined();
+    expect(sourceAtCreation).toContain('max 3');
+
+    const task: Task = {
+      id: 'task_pinned',
+      projectId: 'project_1',
+      type: 'bug_fix',
+      title: 'Do not rewrite me',
+      brief: 'The template will change after creation',
+      risk: 'medium',
+      state: 'ready',
+      workflowGraphVersionId: graphAtCreation.version,
+      budgetPolicyId: 'local-default',
+      maxAttempts: 3,
+      createdAt: '2026-08-09T00:00:00.000Z',
+      updatedAt: '2026-08-09T00:00:00.000Z',
+    };
+    const snapshot = workflowSnapshotRecord({
+      taskId: task.id,
+      graph: graphAtCreation,
+      ir: irAtCreation!,
+      source: sourceAtCreation!,
+      createdAt: task.createdAt,
+    });
+
+    loadWorkflowTemplates(await workflowsDir(authored(5)));
+    expect(resolveWorkflowGraph('bug_fix').maxLoopIterations).toBe(4);
+
+    const pinned = resolveTaskGraph(task, snapshot);
+    expect(pinned.maxLoopIterations).toBe(2);
+    expect(pinned.semanticHash).toBe(snapshot.semanticHash);
+    expect(pinned.semanticHash).not.toBe(resolveWorkflowGraph('bug_fix').semanticHash);
+  });
+
+  it('fails closed when a stored executable graph is modified', async () => {
+    loadWorkflowTemplates(await workflowsDir(authored(3)));
+    const graph = resolveWorkflowGraph('bug_fix');
+    const task = {
+      id: 'task_corrupt',
+      projectId: 'project_1',
+      type: 'bug_fix',
+      title: 'Reject corruption',
+      brief: 'Never fall back to mutable registry state',
+      risk: 'medium',
+      state: 'ready',
+      workflowGraphVersionId: graph.version,
+      budgetPolicyId: 'local-default',
+      maxAttempts: 3,
+      createdAt: '2026-08-09T00:00:00.000Z',
+      updatedAt: '2026-08-09T00:00:00.000Z',
+    } satisfies Task;
+    const snapshot = workflowSnapshotRecord({
+      taskId: task.id,
+      graph,
+      createdAt: task.createdAt,
+    });
+
+    expect(() =>
+      resolveTaskGraph(task, {
+        ...snapshot,
+        workflowGraphJson: snapshot.workflowGraphJson.replace(
+          '"maxLoopIterations":2',
+          '"maxLoopIterations":99',
+        ),
+      }),
+    ).toThrow('failed its integrity check');
+  });
+
+  it('freezes a pre-migration task once during its first upgraded boot', async () => {
+    loadWorkflowTemplates(await workflowsDir(authored(3)));
+    const db = openDatabase({ path: ':memory:' });
+    migrate(db);
+    const task = {
+      id: 'task_legacy_current',
+      projectId: 'project_1',
+      type: 'bug_fix',
+      title: 'Created before workflow snapshots',
+      brief: 'Freeze the last resolvable semantics',
+      risk: 'medium',
+      state: 'ready',
+      workflowGraphVersionId: 'bug_fix@3',
+      budgetPolicyId: 'local-default',
+      maxAttempts: 3,
+      createdAt: '2026-08-08T00:00:00.000Z',
+      updatedAt: '2026-08-08T00:00:00.000Z',
+    } satisfies Task;
+    new TaskRepository(db).upsert(task);
+
+    expect(backfillWorkflowSnapshots(db, resolveTaskGraph)).toBe(1);
+    const snapshot = new WorkflowSnapshotRepository(db).get(task.id)!;
+    expect(backfillWorkflowSnapshots(db, resolveTaskGraph)).toBe(0);
+
+    loadWorkflowTemplates(await workflowsDir(authored(5)));
+    expect(resolveTaskGraph(task, snapshot).maxLoopIterations).toBe(2);
+    expect(resolveWorkflowGraph('bug_fix').maxLoopIterations).toBe(4);
+    db.close();
   });
 });

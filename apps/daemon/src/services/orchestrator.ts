@@ -48,7 +48,9 @@ import {
   UsageRepository,
   VerificationResultRepository,
   VerificationSpecificationRepository,
+  WorkflowSnapshotRepository,
   WorktreeRepository,
+  type WorkflowSnapshotRecord,
   type SqliteDb,
 } from '@roleflock/database';
 import { runCommand, CommandError, parseCommandArgv } from '@roleflock/command-runner';
@@ -56,7 +58,6 @@ import { readEnv, stableInvocationKey, type RuntimeEvent } from '@roleflock/cont
 import { OUTCOME_UNKNOWN } from '@roleflock/run-control';
 import {
   graphVersionId,
-  registeredWorkflowTemplates,
   resolveWorkflowGraph,
   validateGraph,
   type GraphMode,
@@ -83,6 +84,7 @@ import {
   type VerificationSpecification,
 } from '@roleflock/verification-runner';
 import type { SecretStore } from '@roleflock/secret-store';
+import { workflowGraphFromSnapshot } from './workflow-snapshot.js';
 import { EventBus } from './event-bus.js';
 import { issueTaskChangePassport } from './change-passport-issuance.js';
 import { authoritativeConflictMessage, type DocumentService } from './documents.js';
@@ -283,6 +285,7 @@ export class Orchestrator {
     { resolve: (decision: 'approved' | 'rejected') => void }
   >();
   private readonly tasks: TaskRepository;
+  private readonly workflowSnapshots: WorkflowSnapshotRepository;
   private readonly executions: ActiveExecutionRepository;
   private readonly commands: ControlCommandRepository;
   private readonly evidence: EvidenceRepository;
@@ -331,6 +334,7 @@ export class Orchestrator {
     signingSecrets?: SecretStore,
   ) {
     this.tasks = new TaskRepository(db);
+    this.workflowSnapshots = new WorkflowSnapshotRepository(db);
     this.executions = new ActiveExecutionRepository(db);
     this.commands = new ControlCommandRepository(db);
     this.evidence = new EvidenceRepository(db);
@@ -830,10 +834,10 @@ export class Orchestrator {
     baseBranch: string,
   ): Promise<PreparedRun> {
     const graphRunId = randomUUID();
-    // The task records the graph version it was created with. Resolving through
-    // getWorkflowGraph keeps that version immutable for the life of the run: an
-    // unknown or retired version fails loudly rather than silently upgrading.
-    const graph = resolveTaskGraph(task);
+    // New tasks carry the exact executable graph they were created with. Legacy
+    // tasks still resolve through the historical version table, and an unknown
+    // or retired version fails loudly rather than silently upgrading.
+    const graph = resolveTaskGraph(task, this.workflowSnapshots.get(task.id));
     const graphErrors = validateGraph(graph);
     if (graphErrors.length) {
       throw new Error(`Invalid workflow graph: ${graphErrors.join(', ')}`);
@@ -2832,15 +2836,16 @@ export function isUnresolvedBillableTurn(record: {
  * unchanged.
  */
 function graphSemanticHashOf(graph: WorkflowGraph): string | undefined {
-  return registeredWorkflowTemplates().find((template) => template.id === graph.id)?.semanticHash;
+  return graph.semanticHash;
 }
 
 /**
- * Pins a task to the graph version it was created with. Tasks written before
- * graph versioning stored a bare mode (`bug_fix`); those still resolve, but new
- * runs are recorded against an explicit `mode@version`.
+ * Resolves an immutable task snapshot when one exists. Tasks written before
+ * snapshots fall back to historical version resolution; tasks written before
+ * graph versioning stored a bare mode (`bug_fix`), which remains supported.
  */
-export function resolveTaskGraph(task: Task): WorkflowGraph {
+export function resolveTaskGraph(task: Task, snapshot?: WorkflowSnapshotRecord): WorkflowGraph {
+  if (snapshot !== undefined) return workflowGraphFromSnapshot(task, snapshot);
   const stored = task.workflowGraphVersionId ?? '';
   const [mode] = stored.split('@');
   // `resolveWorkflowGraph` serves the current version from compiled `.roflock`

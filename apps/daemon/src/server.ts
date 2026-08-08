@@ -20,7 +20,7 @@ import {
 } from './auth.js';
 import { registerApi } from './routes/api.js';
 import { EventBus } from './services/event-bus.js';
-import { Orchestrator } from './services/orchestrator.js';
+import { Orchestrator, resolveTaskGraph } from './services/orchestrator.js';
 import { seedPricingDefaults } from './services/pricing.js';
 import { ProviderRegistry } from './services/provider-registry.js';
 import { DocumentService } from './services/documents.js';
@@ -29,6 +29,7 @@ import { ReviewAppService } from './services/review-app.js';
 import { readEnv } from '@roleflock/contracts';
 import { DATABASE_FILE_NAME, resolveDataDir } from './data-dir.js';
 import { loadWorkflowTemplates } from './workflow-templates.js';
+import { backfillWorkflowSnapshots } from './services/workflow-snapshot.js';
 export interface ServerOptions {
   dataDir?: string;
   host?: string;
@@ -88,6 +89,7 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
     }
   });
   const db = openMigratedDatabase(join(dataDir, DATABASE_FILE_NAME));
+  backfillWorkflowSnapshots(db, (task) => resolveTaskGraph(task));
   seedPricingDefaults(db);
   reconcileOrphanedProcesses(db);
   reconcileInterruptedGraphRuns(db);
