@@ -204,6 +204,12 @@ export function LiveTurn({
   const activity = execution?.currentActivity?.trim();
   const provider = execution?.providerDisplayName ?? 'Provider sedang dipilih';
   const model = execution?.configuredModelDisplayName ?? 'Model sedang dipilih';
+  // What this turn is allowed to do, not merely who is doing it. The projection
+  // has carried the profile all along; the view showed provider and model and
+  // left the one field that says whether an agent can touch the repository
+  // sitting unread.
+  const permission = execution?.permissionProfileId;
+  const canWrite = permission === 'worktree-write';
 
   useEffect(() => {
     const el = outputRef.current;
@@ -244,6 +250,19 @@ export function LiveTurn({
         <code>{model}</code>
         {execution?.effort ? <span className="live-effort">{execution.effort} effort</span> : null}
       </div>
+
+      {permission ? (
+        <div className="live-context" aria-label="Turn authority">
+          <span className="live-context-label">Authority</span>
+          {/* Named in terms of the repository, because "read-only" describes a
+              config value and "cannot change your code" describes the thing an
+              operator is actually deciding about. */}
+          <strong data-permission={permission}>
+            {canWrite ? 'May write to the worktree' : 'Read-only — cannot change your code'}
+          </strong>
+          <code>{permission}</code>
+        </div>
+      ) : null}
 
       {!finished && !awaitingDecision ? (
         <div className="live-activity" role="status" aria-live="polite">
