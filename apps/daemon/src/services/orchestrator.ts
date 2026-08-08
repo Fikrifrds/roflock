@@ -222,6 +222,8 @@ interface PreparedRun {
   baseCommit: string;
   /** Nodes carried over from a run the daemon restarted out of. */
   resumeCompleted?: string[];
+  /** Repair re-entries already spent by the run this one resumes. */
+  resumeLoopIterations?: number;
 }
 
 interface VerificationSpec {
@@ -910,6 +912,7 @@ export class Orchestrator {
       worktreePath: worktree.path,
       baseCommit: worktree.baseCommit,
       resumeCompleted: reusable ? resume?.completed : undefined,
+      resumeLoopIterations: reusable ? resume?.loopIterations : undefined,
     };
   }
 
@@ -1043,7 +1046,10 @@ export class Orchestrator {
    * Only nodes that still exist in the pinned graph are eligible, so a version
    * mismatch can never resurrect a node the current graph does not have.
    */
-  private resumableRun(task: Task, graph: WorkflowGraph): { completed: string[] } | undefined {
+  private resumableRun(
+    task: Task,
+    graph: WorkflowGraph,
+  ): { completed: string[]; loopIterations: number } | undefined {
     const resumableStates =
       task.state === 'cancelled' ? "('interrupted', 'failed', 'cancelled')" : "('interrupted')";
     const previous = this.db
@@ -1066,11 +1072,24 @@ export class Orchestrator {
       .map((row) => row.node_key)
       .filter((id) => known.has(id));
 
+    // Re-entries already paid for. Without this a restarted task would receive
+    // a fresh repair budget and could spend the whole thing again, billing a
+    // provider for attempts the previous process already made.
+    const spent = (
+      this.db
+        .prepare(
+          `SELECT COUNT(*) AS count FROM loop_attempts
+           WHERE node_run_id IN (SELECT id FROM node_runs WHERE graph_run_id = ?)`,
+        )
+        .get(previous.id) as { count: number }
+    ).count;
+
     return {
       // Before a writer finishes, rerunning the planning context is safer than
       // skipping into a later role with no prior-turn output. Once code exists,
       // preserve it and continue at the first unfinished verification gate.
       completed: task.state === 'cancelled' && !completed.includes('writer') ? [] : completed,
+      loopIterations: spent,
     };
   }
 
@@ -1088,6 +1107,9 @@ export class Orchestrator {
     // graph reads exactly those rows — so the UI kept showing a node at work
     // under a task it already called failed.
     const openRuns = new Map<string, { nodeRunId: string; invocationId: string }>();
+    // The node that triggered a loop has already closed its run by the time the
+    // edge is taken, so its id is kept here to attach the attempt record to.
+    const lastNodeRunId = new Map<string, string>();
 
     const executeNode = async ({
       node,
@@ -1151,6 +1173,7 @@ export class Orchestrator {
         )
         .run(nodeRunId, graphRunId, node.id, 'running', now(), now());
       openRuns.set(node.id, { nodeRunId, invocationId });
+      lastNodeRunId.set(node.id, nodeRunId);
 
       const route =
         role === 'planner' || role === 'reviewer' || role === 'writer' || role === 'verifier'
@@ -1796,6 +1819,26 @@ export class Orchestrator {
       {
         signal: controller.signal,
         resumeCompleted,
+        resumeLoopIterations: prepared.resumeLoopIterations ?? 0,
+        onLoopIteration: ({ iteration, from, to, failureClass }) => {
+          // Recorded before the target resets, so a crash between the decision
+          // and the retry still counts the attempt that was paid for.
+          const sourceRun = openRuns.get(from)?.nodeRunId ?? lastNodeRunId.get(from);
+          if (sourceRun !== undefined) {
+            this.db
+              .prepare(
+                'INSERT INTO loop_attempts (id, node_run_id, attempt, state, created_at) VALUES (?, ?, ?, ?, ?)',
+              )
+              .run(randomUUID(), sourceRun, iteration, 'taken', now());
+          }
+          this.appendEvent(task.id, 'graph.loop.reentered', {
+            graphRunId,
+            iteration,
+            from,
+            to,
+            failureClass,
+          });
+        },
         initialArtifacts: (() => {
           const current = this.currentContract(task.id);
           return current === undefined

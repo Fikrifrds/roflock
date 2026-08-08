@@ -284,14 +284,16 @@ export function graphIrToWorkflowGraph(ir: GraphIR): BridgeResult {
       // A node's own retry budget and a loop's attempt budget are different
       // quantities: the first bounds retrying this node when it fails by
       // itself, the second bounds re-running the cycle after a verifier
-      // rejects. An explicit budget wins. Falling back to the loop's is only
-      // to satisfy the legacy validator's rule that a cycle must contain some
-      // retry budget — the real ceiling is `maxLoopIterations` below.
-      ...(retryBudget(node) !== undefined
-        ? { maxAttempts: retryBudget(node) }
-        : loop === undefined
-          ? {}
-          : { maxAttempts: loop.policy.maxAttempts }),
+      // rejects. The loop entry exists only when no member of the cycle
+      // declared its own budget, so when it is present it must win — otherwise
+      // a node that explicitly asked for a single attempt would leave the cycle
+      // looking unbudgeted to the legacy validator, which refuses to run it.
+      // The real ceiling is `maxLoopIterations` either way.
+      ...(loop !== undefined
+        ? { maxAttempts: loop.policy.maxAttempts }
+        : retryBudget(node) !== undefined
+          ? { maxAttempts: retryBudget(node) }
+          : {}),
       // `focus` is a swarm assignment, not a job description: the runtime
       // injects it to tell parallel agents sharing one role how their
       // assignments differ. A node with no sibling has nothing to be

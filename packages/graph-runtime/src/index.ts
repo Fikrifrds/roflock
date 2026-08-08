@@ -69,6 +69,25 @@ export interface GraphRunResult {
 export interface RunGraphOptions {
   /** Node ids already completed before this run — used to resume after a restart. */
   resumeCompleted?: readonly string[];
+  /**
+   * Loop re-entries already spent before this run.
+   *
+   * Resuming with a fresh counter would hand a restarted task a whole new
+   * repair budget: a run that had already burned three of three attempts could
+   * burn three more, paying a provider each time. The budget belongs to the
+   * task, not to the process that happens to be executing it.
+   */
+  resumeLoopIterations?: number;
+  /**
+   * Fires when a typed failure edge is taken, before the target is reset.
+   * The caller persists this so the budget survives a restart.
+   */
+  onLoopIteration?: (iteration: {
+    iteration: number;
+    from: string;
+    to: string;
+    failureClass: FailureClass;
+  }) => void;
   /** Observability hook; fires on every node state transition. */
   onNodeState?: (nodeId: string, state: NodeState, attempt: number) => void;
   signal?: AbortSignal;
@@ -184,7 +203,7 @@ export async function runGraph(
   const results: NodeResult[] = [];
   const artifacts: PresentedArtifact[] = [...(options.initialArtifacts ?? [])];
   const extractArtifacts = options.artifactExtractor ?? defaultArtifactExtractor;
-  let loopIterations = 0;
+  let loopIterations = options.resumeLoopIterations ?? 0;
   let runFailed = false;
 
   const setState = (id: string, next: NodeState) => {
@@ -329,6 +348,12 @@ export async function runGraph(
 
     if (edge && loopIterations < graph.maxLoopIterations) {
       loopIterations += 1;
+      options.onLoopIteration?.({
+        iteration: loopIterations,
+        from: node.id,
+        to: edge.to,
+        failureClass,
+      });
       // Re-running the target invalidates everything downstream of it, including
       // the node that just failed.
       for (const id of descendantsOf(graph, edge.to)) {
