@@ -16,6 +16,8 @@
   },
   "dependencies": {
     "@roleflock/change-passport": "workspace:*",
+    "@roleflock/database": "workspace:*",
+    "@roleflock/evidence": "workspace:*",
     "@roleflock/graph-ir": "workspace:*",
     "@roleflock/language": "workspace:*"
   },

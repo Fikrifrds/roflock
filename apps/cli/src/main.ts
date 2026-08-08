@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { ExitCode } from './exit-codes.js';
+import { runEvidence, runWhy } from './evidence-command.js';
 import { runCheck, runCompile, runHash, runValidateIr } from './language-commands.js';
 import { runPassportCli } from './passport-command.js';
 
@@ -33,6 +34,8 @@ Language
   validate-ir <file.ir.json>        Validate a Graph IR document
 
 Evidence
+  evidence <task-id>                Explain a run from what was recorded
+  why <task-id> --file <path>       Which recorded output touched a file
   passport verify <passport.json>   Verify a signed Change Passport offline
 
 Other
@@ -83,6 +86,8 @@ export function runCli(argv: string[], io: CliIo): number {
   if (command === 'compile') return runCompile(rest, io);
   if (command === 'hash') return runHash(rest, io);
   if (command === 'validate-ir') return runValidateIr(rest, io);
+  if (command === 'evidence') return runEvidence(rest, io);
+  if (command === 'why') return runWhy(rest, io);
 
   io.stderr(`Unknown command: ${command}`);
   io.stderr("Run 'roflock --help' to see the available commands.");

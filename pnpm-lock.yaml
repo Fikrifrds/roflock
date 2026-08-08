@@ -44,6 +44,12 @@ importers:
       '@roleflock/change-passport':
         specifier: workspace:*
         version: link:../../packages/change-passport
+      '@roleflock/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@roleflock/evidence':
+        specifier: workspace:*
+        version: link:../../packages/evidence
       '@roleflock/graph-ir':
         specifier: workspace:*
         version: link:../../packages/graph-ir
