@@ -1097,13 +1097,41 @@ a stop it cannot prove.
 installed CLI nobody logged into is common, and calling it ready sends a run to
 a provider that will refuse it.
 
+### Shipped drivers (RF-EVO-116/118/121)
+
+Codex, Claude and the OpenAI-compatible endpoint each expose a driver factory,
+and all three pass conformance. They wrap the working adapters — the CLI process
+handling, sandbox flags and failure classification are the parts worth keeping.
+
+Conformance runs against a fake CLI. A driver's honesty about itself is
+checkable offline, and a suite that needed Codex installed is a suite nobody
+runs. It does **not** establish that the real CLIs behave as their adapters
+expect; that needs the real binaries, which is why `ProviderAdapter` stays.
+
+**A contract hole surfaced while testing.** `codexDriver('/not/a/real/binary')`
+threw out of `start()` instead of emitting events, so conformance could not run
+against it at all — and a missing CLI is the most ordinary failure a driver has.
+The wrapper now catches an adapter throw and settles as `failed` with its
+reason, keeping the promise that a run emits events and ends in `settled`.
+
+### A claim corrected
+
+The wrapper's write guard was first described as permission _enforcement_. It is
+not: it matches words in the objective, so "modify the payment module" is
+refused while "refactor billing" passes through. What confines an adapter is the
+permission envelope it receives — empty `allowedPaths`, `allowCommands: false` —
+enforced by the CLI's own sandbox. Calling a regex over prose a security
+boundary is the mistake this project refuses everywhere else, and tests now pin
+both what the guard catches and what it does not.
+
 ### Not done
 
-| Ticket          | Remaining work                                              |
-| --------------- | ----------------------------------------------------------- |
-| ~~RF-EVO-115~~  | Done — `providerDriver()` passes the full conformance suite |
-| RF-EVO-116..121 | Codex, Claude, OpenCode and generic HTTP driver migrations  |
-| RF-EVO-123/124  | Session/resume and usage events on real drivers             |
+| Ticket                 | Remaining work                                               |
+| ---------------------- | ------------------------------------------------------------ |
+| ~~RF-EVO-115~~         | Done — `providerDriver()` passes the full conformance suite  |
+| ~~RF-EVO-116/118/121~~ | Done — Codex, Claude and compatible drivers pass conformance |
+| RF-EVO-120             | OpenCode driver                                              |
+| RF-EVO-123/124         | Session/resume and usage events on real drivers              |
 
 These need real CLI integration and cannot be proven with fixtures alone. Per
 the plan, `ProviderAdapter` compatibility is not removed until the equivalent
