@@ -1,4 +1,4 @@
-import { sha256Canonical } from '@roleflock/contracts';
+import { sha256Canonical } from './sha256.js';
 import type { GraphIR } from './types.js';
 
 /**
@@ -9,9 +9,10 @@ import type { GraphIR } from './types.js';
  * meaning must produce a different one — otherwise a workflow edit could
  * silently reinterpret a historical run.
  *
- * The hash is computed with `node:crypto` through `@roleflock/contracts`. That
- * is the one part of this package that is not browser-safe; RF-EVO-150 replaces
- * the digest for the Playground and should not need to touch anything else here.
+ * The digest is portable TypeScript rather than `node:crypto`, so this package
+ * imports nothing platform-specific and the browser Playground computes exactly
+ * the same identity the runtime does. A hash that depended on where it ran would
+ * make a recorded run's identity meaningless.
  */
 
 /**
