@@ -1,5 +1,14 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { compile } from '@roleflock/language';
 import { ExitCode } from './exit-codes.js';
@@ -167,10 +176,19 @@ function writeLock(path: string, lock: Lockfile): void {
     Object.entries(lock.packages).sort(([left], [right]) => left.localeCompare(right)),
   );
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify({ schemaVersion: 1, packages }, null, 2)}\n`, {
-    encoding: 'utf8',
-    flag: 'w',
-  });
+  // A lockfile is the trust record for installed source. Replace it atomically
+  // so an interrupted local process leaves either the old complete record or
+  // the new complete record, never truncated JSON.
+  const temporary = join(dirname(path), `.${LOCK_FILE}.${process.pid}.tmp`);
+  try {
+    writeFileSync(temporary, `${JSON.stringify({ schemaVersion: 1, packages }, null, 2)}\n`, {
+      encoding: 'utf8',
+      flag: 'wx',
+    });
+    renameSync(temporary, path);
+  } finally {
+    if (existsSync(temporary)) rmSync(temporary, { force: true });
+  }
 }
 
 export function installWorkflowPackage(directory: string, project = process.cwd()) {
@@ -202,13 +220,27 @@ export function installWorkflowPackage(directory: string, project = process.cwd(
 
   // All validation and collision checks finish before the first write. Copy only
   // the declared manifest and source files; package directories cannot smuggle
-  // hooks, credentials, node_modules, or other executable payloads.
-  mkdirSync(target, { recursive: true });
-  writeFileSync(join(target, MANIFEST_FILE), `${JSON.stringify(verified.manifest, null, 2)}\n`);
-  for (const file of verified.files) {
-    const output = join(target, file.path);
-    mkdirSync(dirname(output), { recursive: true });
-    writeFileSync(output, file.source);
+  // hooks, credentials, node_modules, or other executable payloads. Populate a
+  // sibling staging directory first, then publish it with a same-filesystem
+  // rename so readers never observe a partial installed package.
+  mkdirSync(paths.packageRoot, { recursive: true });
+  const staging = mkdtempSync(join(paths.packageRoot, '.install-'));
+  try {
+    writeFileSync(
+      join(staging, MANIFEST_FILE),
+      `${JSON.stringify(verified.manifest, null, 2)}\n`,
+      'utf8',
+    );
+    for (const file of verified.files) {
+      const output = join(staging, file.path);
+      mkdirSync(dirname(output), { recursive: true });
+      writeFileSync(output, file.source);
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    renameSync(staging, target);
+  } catch (error) {
+    if (existsSync(staging)) rmSync(staging, { recursive: true, force: true });
+    throw error;
   }
   lock.packages[verified.manifest.name] = {
     version: verified.manifest.version,
@@ -219,7 +251,14 @@ export function installWorkflowPackage(directory: string, project = process.cwd(
       ...(file.semanticHash === undefined ? {} : { semanticHash: file.semanticHash }),
     })),
   };
-  writeLock(paths.lock, lock);
+  try {
+    writeLock(paths.lock, lock);
+  } catch (error) {
+    // The target was created by this invocation and is not trusted without a
+    // matching lock entry. Remove it rather than leaving an untracked package.
+    rmSync(target, { recursive: true, force: true });
+    throw error;
+  }
   return { installed: true, package: verified, target };
 }
 

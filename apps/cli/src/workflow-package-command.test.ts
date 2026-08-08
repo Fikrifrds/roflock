@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -80,6 +88,12 @@ describe('local workflow packages', () => {
       version: '1.2.3',
       integrity: first.package.integrity,
     });
+    expect(readdirSync(join(project, '.roflock/packages'))).not.toContainEqual(
+      expect.stringMatching(/^\.install-/),
+    );
+    expect(readdirSync(join(project, '.roflock'))).not.toContainEqual(
+      expect.stringMatching(/^\.roflock-workflows\.lock\.json\..*\.tmp$/),
+    );
   });
 
   it('surfaces package validation and list output through the CLI namespace', () => {
@@ -118,5 +132,23 @@ describe('local workflow packages', () => {
     expect(runWorkflowPackage(['install', source, '--project', project], command.io)).toBe(
       ExitCode.Usage,
     );
+  });
+
+  it('refuses a symlinked workflow even when it resolves inside the package', () => {
+    const { source } = workspace();
+    const original = join(source, 'workflows/demo.roflock');
+    const alias = join(source, 'workflows/alias.roflock');
+    symlinkSync(original, alias);
+    writeFileSync(
+      join(source, 'roflock.workflow.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        name: 'demo-workflows',
+        version: '1.2.3',
+        workflows: ['workflows/alias.roflock'],
+      }),
+    );
+
+    expect(() => verifyWorkflowPackage(source)).toThrow('not a symlink');
   });
 });

@@ -49,7 +49,11 @@ It writes `<project>/.roflock/roflock-workflows.lock.json` with the source
 location, version, source-content SHA-256 integrity hash, and workflow semantic
 hashes. The same package/version/integrity is idempotent. A conflicting lock or
 pre-existing target fails closed; this early protocol has no implicit update or
-overwrite operation.
+overwrite operation. Installation stages files beside the final target and
+atomically publishes both the package directory and lockfile. An interrupted
+local install therefore leaves the prior lockfile (or no installed package),
+never a partially written trust record. Symlinked workflow entries are refused,
+including symlinks that happen to resolve inside the source directory.
 
 Installed source is still source code to review. Run a selected file explicitly,
 for example:

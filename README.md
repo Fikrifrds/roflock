@@ -34,7 +34,10 @@ and Studio must not be exposed through a public reverse proxy.
   concurrency limits, one writer per worktree, pause/resume/cancel, and crash
   reconciliation;
 - first-class CLI for authoring, runs, approvals, evidence, daemon lifecycle,
-  diagnostics, drivers, and offline Change Passport verification;
+  diagnostics, drivers, local integrity-locked workflow packages, shell
+  completion, and offline Change Passport verification;
+- compiler-backed Language Server Protocol support and a source-distributed VS
+  Code extension for `.roflock` diagnostics and snippets;
 - local authenticated Studio, bundled in the npm artifact;
 - browser-only static Playground with no daemon, filesystem, shell, provider,
   credential, or network dependency;
@@ -69,9 +72,9 @@ npm pack
 npm install --global ./roflock-0.1.0.tgz
 ```
 
-The package installs `roflock`, `roflock-mcp`, and the deprecated `roleflock`
-compatibility alias. It is self-contained; consumers do not install private
-workspace packages.
+The package installs `roflock`, `roflock-lsp`, `roflock-mcp`, and the
+deprecated `roleflock` compatibility alias. It is self-contained; consumers do
+not install private workspace packages.
 
 ## Five-minute local path
 
@@ -188,6 +191,8 @@ issue.
 - [Documentation index](docs/README.md)
 - [Architecture](docs/architecture.md)
 - [Language reference](docs/language/reference.md)
+- [Local workflow packages](docs/workflows/local-packages.md)
+- [VS Code and Language Server](docs/editor/vscode.md)
 - [CLI reference](docs/cli/reference.md)
 - [Runtime operator guide](docs/runtime/operator-guide.md)
 - [Playground and Studio guide](docs/ui/playground-and-studio.md)
