@@ -16,6 +16,7 @@ import { runWorkflow } from './runtime-command.js';
 import { runStudio } from './studio-command.js';
 import { runTaskDecision, type TaskDecisionCommand } from './task-decision-command.js';
 import { runDryRun, runExplain } from './workflow-introspection-command.js';
+import { runWorkflowPackage } from './workflow-package-command.js';
 
 export interface CliIo {
   stdout(message: string): void;
@@ -82,6 +83,7 @@ Environment
   doctor                            Diagnose runtime, repository, daemon, and drivers
   drivers [doctor]                  Report detected drivers, auth, and capabilities
   completion <shell>                Print Bash, Zsh, or Fish completion source
+  workflow <action>                 Validate, install, or list local workflow packages
 
 Evidence
   evidence <task-id>                Explain a run from what was recorded
@@ -150,6 +152,7 @@ export function cliAutomationContract() {
       'why',
       'passport',
       'completion',
+      'workflow',
       'explain',
       'dry-run',
     ],
@@ -201,6 +204,7 @@ export function runCli(argv: string[], io: CliIo): number {
   if (command === 'explain') return runExplain(rest, io);
   if (command === 'dry-run') return runDryRun(rest, io);
   if (command === 'completion') return runCompletion(rest, io);
+  if (command === 'workflow') return runWorkflowPackage(rest, io);
   if (command === 'evidence') return runEvidence(rest, io);
   if (command === 'why') return runWhy(rest, io);
 

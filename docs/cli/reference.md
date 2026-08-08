@@ -352,6 +352,20 @@ The generated static completion covers public command names for `roflock` and
 the deprecated `roleflock` alias. It does not inspect a repository, daemon, or
 provider.
 
+### `workflow`
+
+```bash
+roflock workflow validate <package-directory> [--json]
+roflock workflow install <package-directory> [--project <repository>] [--json]
+roflock workflow list [--project <repository>] [--json]
+```
+
+This local package protocol validates a versioned manifest and its declared
+`.roflock` files, then records a source integrity hash and semantic hashes in a
+project lockfile. It accepts local directories only; remote Git URLs, package
+hooks, and implicit updates are intentionally rejected until their trust model
+is specified. See [local workflow packages](../workflows/local-packages.md).
+
 ## Evidence and passports
 
 ### `evidence`
