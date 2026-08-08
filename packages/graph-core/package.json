@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@roleflock/contracts": "workspace:*",
+    "@roleflock/graph-ir": "workspace:*",
     "@roleflock/role-protocol": "workspace:*"
   },
   "devDependencies": {

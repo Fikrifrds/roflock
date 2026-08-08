@@ -362,6 +362,9 @@ importers:
       '@roleflock/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@roleflock/graph-ir':
+        specifier: workspace:*
+        version: link:../graph-ir
       '@roleflock/role-protocol':
         specifier: workspace:*
         version: link:../role-protocol
@@ -401,6 +404,12 @@ importers:
         specifier: workspace:*
         version: link:../role-protocol
     devDependencies:
+      '@roleflock/graph-ir':
+        specifier: workspace:*
+        version: link:../graph-ir
+      '@roleflock/language':
+        specifier: workspace:*
+        version: link:../language
       typescript:
         specifier: ^5.8.3
         version: 5.9.3

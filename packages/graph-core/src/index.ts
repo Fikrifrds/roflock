@@ -66,7 +66,12 @@ export interface GraphEdge {
 }
 
 export interface WorkflowGraph {
-  id: GraphMode;
+  /**
+   * Built-in templates use a {@link GraphMode}; a graph bridged from compiled
+   * Graph IR carries that workflow's own id. Used for display and event
+   * payloads, not for dispatch.
+   */
+  id: string;
   /** Immutable identity of this graph's shape; a running task keeps its version. */
   version: string;
   label: string;
@@ -643,3 +648,5 @@ export function validateGraph(graph: WorkflowGraph): string[] {
 
 /** @deprecated use WorkflowRole */
 export type BugFixRole = WorkflowRole;
+
+export { graphIrToWorkflowGraph, type BridgeResult } from './ir-bridge.js';
