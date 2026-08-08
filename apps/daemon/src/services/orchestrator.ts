@@ -1187,14 +1187,23 @@ export class Orchestrator {
       });
       const alreadyRecorded = this.invocations.findByIdempotencyKey(invocationKey);
       if (alreadyRecorded !== undefined) {
-        // Unknown is not permission to repeat (ADR-010). Surfacing it stops the
-        // node and asks for a human decision rather than silently re-spending.
         this.appendEvent(task.id, 'invocation.already_recorded', {
           graphRunId,
           nodeId: node.id,
           invocationKey,
+          status: alreadyRecorded.status,
           outcome: alreadyRecorded.outcome ?? OUTCOME_UNKNOWN,
         });
+        if (isUnresolvedBillableTurn(alreadyRecorded)) {
+          // This exact turn was already sent to a paid provider and nobody
+          // observed how it ended. Re-running it might pay twice for one
+          // result; skipping it might discard work that succeeded. The runtime
+          // cannot tell which, so it stops and a human decides (ADR-010).
+          throw new NodeFailure(
+            `A previous run already invoked ${node.id} against ${alreadyRecorded.providerConnectionId} and its outcome is unknown. Roflock will not repeat billable work on a guess — resolve this invocation before continuing.`,
+            'outcome_unknown',
+          );
+        }
       }
       const invocationId = alreadyRecorded?.id ?? randomUUID();
       this.db
@@ -1932,8 +1941,10 @@ export class Orchestrator {
     const blocked = failed?.error instanceof ProviderUnavailableError ? failed.error : undefined;
     const setupRequired =
       failed?.error instanceof NodeFailure && failed.error.failureClass === 'setup_required';
+    const outcomeUnknown =
+      failed?.error instanceof NodeFailure && failed.error.failureClass === 'outcome_unknown';
 
-    if (blocked || setupRequired) {
+    if (blocked || setupRequired || outcomeUnknown) {
       // `interrupted`, not `failed`: the completed nodes are still good, so the
       // next start resumes from them once the operator has pointed the role at
       // a model that answers.
@@ -1947,7 +1958,11 @@ export class Orchestrator {
         .run(
           now(),
           blocked?.role ?? null,
-          setupRequired ? 'setup_required' : (blocked?.refusals[0]?.reason ?? 'unavailable'),
+          setupRequired
+            ? 'setup_required'
+            : outcomeUnknown
+              ? 'outcome_unknown'
+              : (blocked?.refusals[0]?.reason ?? 'unavailable'),
           JSON.stringify(blocked?.refusals ?? []),
           graphRunId,
         );
@@ -2652,6 +2667,29 @@ export function parseVerifierVerdict(output: string | undefined): VerifierVerdic
 }
 
 const GRAPH_MODES: readonly GraphMode[] = ['direct', 'fast', 'standard', 'bug_fix', 'critical'];
+
+/**
+ * A paid provider turn whose result nobody observed.
+ *
+ * Only billable turns qualify. A deterministic check costs nothing to repeat,
+ * so re-running one is strictly better than stopping the run to ask about it.
+ * A turn with a definite outcome is *known*: the graph's own retry budget
+ * decides what happens next, and this is not that decision.
+ */
+export function isUnresolvedBillableTurn(record: {
+  status: string;
+  outcome?: string;
+  providerConnectionId: string;
+}): boolean {
+  if (record.providerConnectionId === 'deterministic') return false;
+  return (
+    record.outcome === undefined ||
+    record.outcome === OUTCOME_UNKNOWN ||
+    record.outcome === 'interrupted' ||
+    record.status === 'running' ||
+    record.status === 'unknown'
+  );
+}
 
 /**
  * The semantic identity of the graph a run is executing, when it has one.

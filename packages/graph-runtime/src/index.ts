@@ -26,6 +26,7 @@ export type FailureClass =
   | 'provider_error'
   | 'budget_exhausted'
   | 'setup_required'
+  | 'outcome_unknown'
   | 'cancelled'
   | 'unknown';
 
@@ -162,6 +163,11 @@ const ROUTES: Record<FailureClass, EdgeCondition[]> = {
   // the gate so retry can resume there instead of sending unchanged code back
   // through the writer.
   setup_required: [],
+  // A billable turn whose result nobody observed. Routing anywhere would either
+  // repeat work that may already have been paid for or discard work that may
+  // already have succeeded, and the runtime cannot tell which. It stops so a
+  // human can (ADR-010).
+  outcome_unknown: [],
   cancelled: [],
   unknown: ['on_fail'],
 };
