@@ -263,6 +263,28 @@ flow { Builder.exploded -> Approval }`,
     ).toContain(DiagnosticCode.UnboundedCycle);
   });
 
+  it('rejects non-positive node retry budgets instead of silently ignoring them', () => {
+    const agent = errorCodes(`
+      role writer { write }
+      agent Builder { role writer retry 0 }
+      human Approval
+      flow { Builder -> Approval }
+    `);
+    const check = errorCodes(`
+      role writer { write }
+      agent Builder { role writer }
+      check Tests { run "npm test" retry 0 }
+      human Approval
+      flow {
+        Builder -> Tests
+        Tests.pass -> Approval
+      }
+    `);
+
+    expect(agent).toContain(DiagnosticCode.UnboundedCycle);
+    expect(check).toContain(DiagnosticCode.UnboundedCycle);
+  });
+
   it('rejects a check with no command', () => {
     expect(
       errorCodes(`

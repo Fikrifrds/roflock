@@ -138,6 +138,18 @@ function lower(
     nodeSpans[declaration.name] = declaration.span;
     switch (declaration.kind) {
       case 'agent': {
+        if (
+          declaration.retry !== undefined &&
+          (!Number.isInteger(declaration.retry) || declaration.retry < 1)
+        ) {
+          diagnostics.push(
+            err(
+              DiagnosticCode.UnboundedCycle,
+              `Agent '${declaration.name}' retry count must be a positive integer`,
+              declaration.span,
+            ),
+          );
+        }
         const effects = declaration.effects.map((effect) => ({
           class: effect.effect,
           risk: effect.risk,
@@ -186,6 +198,18 @@ function lower(
         break;
       }
       case 'check': {
+        if (
+          declaration.retry !== undefined &&
+          (!Number.isInteger(declaration.retry) || declaration.retry < 1)
+        ) {
+          diagnostics.push(
+            err(
+              DiagnosticCode.UnboundedCycle,
+              `Check '${declaration.name}' retry count must be a positive integer`,
+              declaration.span,
+            ),
+          );
+        }
         if (declaration.run === undefined) {
           diagnostics.push(
             err(
