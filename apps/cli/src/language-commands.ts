@@ -9,6 +9,7 @@ import {
   type Diagnostic,
   type GraphIR,
 } from '@roleflock/graph-ir';
+import { layoutGraph, toMermaid } from '@roleflock/graph-ui';
 import { compile } from '@roleflock/language';
 import { ExitCode } from './exit-codes.js';
 import type { CliIo } from './main.js';
@@ -138,6 +139,50 @@ export function runCompile(args: string[], io: CliIo): number {
 
   try {
     writeFileSync(parsed.out, json);
+  } catch {
+    io.stderr(`Cannot write '${parsed.out}'`);
+    return ExitCode.Config;
+  }
+  io.stderr(`Wrote ${parsed.out}`);
+  return ExitCode.Ok;
+}
+
+/**
+ * `roflock render` — a Mermaid diagram of a workflow.
+ *
+ * Text rather than pixels, so the same diagram works in a terminal, a README, a
+ * pull request and the docs without any of them needing a renderer Roflock
+ * ships. It uses the shared layout model, so what a reviewer sees here is what
+ * Studio and the Playground will draw.
+ */
+export function runRender(args: string[], io: CliIo): number {
+  let parsed: Parsed;
+  try {
+    parsed = parseArgs(args, 'render');
+  } catch (caught) {
+    io.stderr((caught as Error).message);
+    return ExitCode.Usage;
+  }
+
+  let source: string;
+  try {
+    source = read(parsed.file);
+  } catch (caught) {
+    io.stderr((caught as Error).message);
+    return ExitCode.Config;
+  }
+
+  const result = compile(source, { uri: relative(process.cwd(), parsed.file) || parsed.file });
+  report(result.diagnostics, parsed.file, io);
+  if (!result.ir) return ExitCode.Usage;
+
+  const diagram = toMermaid(layoutGraph(result.ir), { legend: true });
+  if (parsed.out === undefined) {
+    io.stdout(diagram);
+    return ExitCode.Ok;
+  }
+  try {
+    writeFileSync(parsed.out, `${diagram}\n`);
   } catch {
     io.stderr(`Cannot write '${parsed.out}'`);
     return ExitCode.Config;

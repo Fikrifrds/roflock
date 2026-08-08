@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { ExitCode } from './exit-codes.js';
 import { runEvidence, runWhy } from './evidence-command.js';
-import { runCheck, runCompile, runHash, runValidateIr } from './language-commands.js';
+import { runCheck, runCompile, runHash, runRender, runValidateIr } from './language-commands.js';
 import { runPassportCli } from './passport-command.js';
 
 export interface CliIo {
@@ -30,6 +30,7 @@ Usage
 Language
   check <file.roflock>              Compile and validate a workflow
   compile <file.roflock> [-o out]   Emit canonical Graph IR
+  render <file.roflock> [-o out]    Draw the workflow as a Mermaid diagram
   hash <file>                       Print a workflow's semantic hash
   validate-ir <file.ir.json>        Validate a Graph IR document
 
@@ -85,6 +86,7 @@ export function runCli(argv: string[], io: CliIo): number {
   if (command === 'check') return runCheck(rest, io);
   if (command === 'compile') return runCompile(rest, io);
   if (command === 'hash') return runHash(rest, io);
+  if (command === 'render') return runRender(rest, io);
   if (command === 'validate-ir') return runValidateIr(rest, io);
   if (command === 'evidence') return runEvidence(rest, io);
   if (command === 'why') return runWhy(rest, io);
