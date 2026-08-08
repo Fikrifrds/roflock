@@ -33,12 +33,9 @@ const execFileAsync = promisify(execFile);
  * promising a restriction nothing enforces.
  *
  * **It has real sessions** — `--session` and `--continue` resume a prior thread,
- * and every event carries a `sessionID`. It is nevertheless declared
- * `sessions: false`, because `InvocationEvent`'s `invocation.started` has no
- * field to carry that id: the capability exists in the CLI but cannot reach the
- * runtime through this seam yet. Conformance caught the overclaim on the first
- * real run, which is what it is for. Surfacing the id needs a contracts change
- * and is tracked as RF-EVO-123.
+ * and every event carries a `sessionID`. `InvocationEvent.invocation.started`
+ * now carries that identity through the compatibility seam, so the driver can
+ * truthfully declare and exercise session resume.
  */
 
 export interface OpenCodeOptions {
@@ -319,9 +316,8 @@ function mapEvent(event: OpenCodeEvent): Mapped[] {
  * Nothing is claimed that cannot be delivered. `usageReporting` and `toolEvents`
  * are true because the CLI emits both and the adapter maps them.
  * `permissionControls` is false: OpenCode's only choice is between asking a
- * human and doing the work, with no way to confine writes to a path. `sessions`
- * is false despite the CLI supporting them, because the adapter contract cannot
- * yet carry the session id — see the note above.
+ * human and doing the work, with no way to confine writes to a path. Session
+ * identity and resume are true because both are exercised through `--session`.
  */
 export function openCodeDriver(options: OpenCodeOptions = {}): AgentDriver {
   return providerDriver(new OpenCodeAdapter(options.binary), {

@@ -1633,6 +1633,39 @@ workflows, routing/failover, provider timeout, unknown-outcome protection,
 cancellation, and forced-restart recovery. The full daemon suite passes 187/190
 inside the sandbox; the three listener-denied cases belong to the preview
 package, whose complete test file passes 7/7 outside the sandbox. Package
-typechecks are clean. RF-EVO-185 remains separate: durable driver session IDs,
-resume selection, and selected-driver cancellation reporting are not claimed by
-this ticket.
+typechecks are clean. Durable driver lifecycle work remains outside RF-EVO-184
+and is recorded separately in §29.
+
+---
+
+## 29. Public-alpha correction — durable driver lifecycle
+
+RF-EVO-185 makes session, resume, and cancellation claims durable and specific
+to the driver that actually executes a turn. Migration 036 extends invocation
+records with driver identity, native session ID, resume parent, cancellation
+capability, and the exact interruption result. A started event persists its
+session immediately; later attempts of the same task and workflow node call
+`driver.resume()` only when the driver claims resume and an earlier invocation
+has a known terminal outcome. `OUTCOME_UNKNOWN` remains excluded, so session
+support never becomes a route around ADR-010's no-duplicate-billing rule.
+
+Active driver turns are tracked per task and per stable invocation key, including
+parallel turns. Stop, cancel, and force-terminate invoke every selected active
+driver, persist each returned guarantee, and return the weakest aggregate
+capability. Only `remote-confirmed` can produce `stopped: true`; a local process
+signal remains explicitly unconfirmed. A runtime bound also prevents an
+`interrupt()` result from raising the capability the driver declared before the
+turn. The task-specific cancellation endpoint and Studio warning use that live
+selection rather than the global set of shipped drivers. When no harness turn is
+active, Studio says scheduling can stop but does not invent an external stop.
+
+End-to-end tests inject a resumable driver while an adapter is configured to
+throw if invoked. A known failed writer attempt stores `session_41`; its retry
+reaches `driver.resume()`, writes the verified change, and records the resume
+parent without touching the adapter. A separate blocked turn proves that the
+task stop endpoint invokes the selected driver, returns its
+`remote-confirmed` result, and stores the interruption JSON. Database tests pass
+60/60, provider-core tests 27/27, focused lifecycle/recovery daemon tests 21/21,
+and the full Studio suite 93/93. The full daemon suite passes 191/194 inside the
+sandbox; all seven preview tests, including its three listener-denied cases,
+pass outside it. Package typechecks are clean.

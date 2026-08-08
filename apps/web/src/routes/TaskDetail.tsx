@@ -388,7 +388,7 @@ export function TaskDetail() {
                   >
                     Force stop
                   </button>
-                  <StopTruthfulness />
+                  <StopTruthfulness taskId={id} />
                 </>
               ) : null}
               {task.state === 'paused' ? (

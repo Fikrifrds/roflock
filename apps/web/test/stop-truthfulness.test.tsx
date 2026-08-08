@@ -32,18 +32,19 @@ describe('what stop promises', () => {
   it('warns that remote work may continue and may still be billed', async () => {
     respond({ capability: 'local-process', confirmable: false });
 
-    wrap(<StopTruthfulness />);
+    wrap(<StopTruthfulness taskId="task_1" />);
 
     const note = await screen.findByRole('note');
     expect(note.textContent).toContain('may continue');
     // The cost is named. "May continue" alone reads as a technical nicety.
     expect(note.textContent).toContain('billed');
+    expect(fetch).toHaveBeenCalledWith('/api/tasks/task_1/cancellation', expect.anything());
   });
 
   it('says nothing when a stop can actually be confirmed', async () => {
     respond({ capability: 'remote-confirmed', confirmable: true });
 
-    wrap(<StopTruthfulness />);
+    wrap(<StopTruthfulness taskId="task_1" />);
 
     // A caveat attached to a guarantee that does hold is noise, and noise is how
     // a warning stops being read on the run where it is true.
@@ -53,8 +54,18 @@ describe('what stop promises', () => {
   it('stays silent rather than guessing before the answer arrives', () => {
     respond({ capability: 'local-process', confirmable: false });
 
-    wrap(<StopTruthfulness />);
+    wrap(<StopTruthfulness taskId="task_1" />);
 
     expect(screen.queryByRole('note')).toBeNull();
+  });
+
+  it('does not pretend a local process was stopped when no harness turn is active', async () => {
+    respond({ capability: 'none', confirmable: false, activeTurns: 0 });
+
+    wrap(<StopTruthfulness taskId="task_1" />);
+
+    expect((await screen.findByRole('note')).textContent).toContain(
+      'No interruptible harness turn is active',
+    );
   });
 });

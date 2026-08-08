@@ -78,4 +78,88 @@ describe('invocation identity storage', () => {
     // each other.
     expect(() => invocations.create(record('inv_2', legacy))).not.toThrow();
   });
+
+  it('persists the selected driver, session, resume parent, and interruption result', () => {
+    const invocations = repository();
+    invocations.create(record('inv_1'));
+    invocations.updateDriver('inv_1', {
+      providerConnectionId: 'opencode',
+      configuredModelId: 'test-model',
+      driverId: 'opencode',
+      cancellationCapability: 'local-process',
+      resumedFromInvocationId: 'inv_parent',
+    });
+    invocations.recordDriverSession('inv_1', 'session_41');
+    invocations.recordInterruption('inv_1', {
+      stopped: false,
+      capability: 'local-process',
+    });
+
+    expect(invocations.get('inv_1')).toMatchObject({
+      providerConnectionId: 'opencode',
+      configuredModelId: 'test-model',
+      driverId: 'opencode',
+      driverSessionId: 'session_41',
+      resumedFromInvocationId: 'inv_parent',
+      cancellationCapability: 'local-process',
+      interruptionJson: JSON.stringify({ stopped: false, capability: 'local-process' }),
+    });
+  });
+
+  it('resumes only from a known earlier session of the same task, node, and driver', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'roflock-inv-session-'));
+    directories.push(directory);
+    const db = openMigratedDatabase(join(directory, 'test.db'));
+    const invocations = new InvocationRepository(db);
+    db.prepare(
+      `INSERT INTO graph_runs (id, task_id, graph_version_id, state, created_at)
+       VALUES ('run_1', 'task_1', 'bug_fix@3', 'running', '2026-08-08T00:00:00.000Z')`,
+    ).run();
+    for (const id of ['node_known', 'node_unknown', 'node_current']) {
+      db.prepare(
+        `INSERT INTO node_runs (id, graph_run_id, node_key, state, started_at, created_at)
+         VALUES (?, 'run_1', 'writer', 'completed', '2026-08-08T00:00:00.000Z', '2026-08-08T00:00:00.000Z')`,
+      ).run(id);
+    }
+    invocations.create(
+      record('inv_known', {
+        nodeRunId: 'node_known',
+        status: 'completed',
+        outcome: 'success',
+        startedAt: '2026-08-08T00:00:01.000Z',
+        idempotencyKey: 'known-key',
+        driverId: 'opencode',
+        driverSessionId: 'session_known',
+      }),
+    );
+    invocations.create(
+      record('inv_unknown', {
+        nodeRunId: 'node_unknown',
+        status: 'failed',
+        outcome: 'OUTCOME_UNKNOWN',
+        startedAt: '2026-08-08T00:00:02.000Z',
+        idempotencyKey: 'unknown-key',
+        driverId: 'opencode',
+        driverSessionId: 'session_unknown',
+      }),
+    );
+    invocations.create(
+      record('inv_current', {
+        nodeRunId: 'node_current',
+        idempotencyKey: 'current-key',
+        driverId: 'opencode',
+      }),
+    );
+
+    expect(
+      invocations.findLatestResumableSession({
+        taskId: 'task_1',
+        nodeKey: 'writer',
+        driverId: 'opencode',
+        providerConnectionId: 'codex',
+        configuredModelId: 'gpt-5.6-sol',
+        excludeInvocationId: 'inv_current',
+      }),
+    ).toMatchObject({ id: 'inv_known', driverSessionId: 'session_known' });
+  });
 });

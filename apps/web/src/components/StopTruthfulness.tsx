@@ -17,16 +17,29 @@ import { useData } from '../lib/client.js';
 interface Cancellation {
   capability: 'none' | 'local-process' | 'cooperative' | 'remote-confirmed';
   confirmable: boolean;
+  activeTurns?: number;
 }
 
-export function StopTruthfulness() {
-  const { data } = useData<Cancellation>(['runtime-cancellation'], '/api/runtime/cancellation');
+export function StopTruthfulness({ taskId }: { taskId: string }) {
+  const { data } = useData<Cancellation>(
+    ['task-cancellation', taskId],
+    `/api/tasks/${taskId}/cancellation`,
+  );
 
   // Silent until the answer is known. Guessing here would defeat the point.
   if (!data) return null;
   // A confirmable stop needs no caveat — and must not carry one, or the warning
   // becomes noise people learn to scroll past.
   if (data.confirmable) return null;
+
+  if (data.capability === 'none') {
+    return (
+      <p role="note" className="quiet">
+        No interruptible harness turn is active. Cancelling stops Roflock scheduling, but cannot
+        claim external work has stopped.
+      </p>
+    );
+  }
 
   return (
     <p role="note" className="quiet">

@@ -232,6 +232,11 @@ export function registerApi(
     return { capability, confirmable: stopIsConfirmable(capability) };
   });
 
+  /** The guarantee of the driver turn(s) active on this task right now. */
+  app.get('/api/tasks/:id/cancellation', async (request) =>
+    orchestrator.cancellationForTask((request.params as { id: string }).id),
+  );
+
   app.get('/api/runtime/info', async (_request, reply) => {
     reply.setCookie('roleflock_token', session.token, {
       httpOnly: true,
@@ -1139,16 +1144,13 @@ export function registerApi(
   });
   for (const action of ['pause', 'resume', 'cancel'] as const)
     app.post(`/api/tasks/:id/${action}`, async (request) => {
-      orchestrator.control((request.params as { id: string }).id, action);
-      return { accepted: true };
+      return orchestrator.control((request.params as { id: string }).id, action);
     });
   app.post('/api/tasks/:id/stop', async (request) => {
-    orchestrator.control((request.params as { id: string }).id, 'stop');
-    return { accepted: true };
+    return orchestrator.control((request.params as { id: string }).id, 'stop');
   });
   app.post('/api/tasks/:id/force-terminate', async (request) => {
-    orchestrator.control((request.params as { id: string }).id, 'force-terminate');
-    return { accepted: true };
+    return orchestrator.control((request.params as { id: string }).id, 'force-terminate');
   });
   for (const action of ['accept', 'reject'] as const) {
     app.post(`/api/tasks/:id/${action}`, async (request, reply) => {
@@ -1278,8 +1280,7 @@ export function registerApi(
       const row = db
         .prepare('SELECT task_id FROM active_executions WHERE node_run_id = ?')
         .get((request.params as { id: string }).id) as { task_id?: string } | undefined;
-      if (row?.task_id) orchestrator.control(row.task_id, action);
-      return { accepted: true };
+      return row?.task_id ? orchestrator.control(row.task_id, action) : { accepted: true as const };
     });
   app.get('/api/approvals', async () => approvals.listPending());
   for (const decision of ['approve', 'reject'] as const) {

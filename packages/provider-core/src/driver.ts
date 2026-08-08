@@ -65,6 +65,27 @@ export function stopIsConfirmable(capability: CancellationCapability): boolean {
   return capability === 'remote-confirmed';
 }
 
+const CANCELLATION_ORDER: readonly CancellationCapability[] = [
+  'none',
+  'local-process',
+  'cooperative',
+  'remote-confirmed',
+];
+
+/** The guarantee safe to state when more than one driver is active. */
+export function weakestCancellationCapability(
+  capabilities: readonly CancellationCapability[],
+): CancellationCapability {
+  if (capabilities.length === 0) return 'none';
+  return capabilities.reduce<CancellationCapability>(
+    (weakest, capability) =>
+      CANCELLATION_ORDER.indexOf(capability) < CANCELLATION_ORDER.indexOf(weakest)
+        ? capability
+        : weakest,
+    'remote-confirmed',
+  );
+}
+
 export interface DriverAvailability {
   /** The executable or endpoint was found. Says nothing about being usable. */
   detected: boolean;

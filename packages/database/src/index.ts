@@ -26,6 +26,7 @@ export type {
 export { WorktreeRepository } from './repositories/worktree-repository.js';
 export { ActiveExecutionRepository } from './repositories/active-execution-repository.js';
 export { InvocationRepository } from './repositories/invocation-repository.js';
+export type { InvocationRecord } from './repositories/invocation-repository.js';
 export { UsageRepository } from './repositories/usage-repository.js';
 export type { UsageEntry, ProviderModelUsage } from './repositories/usage-repository.js';
 export { PriceCardRepository, QuotaSnapshotRepository } from './repositories/pricing-repository.js';

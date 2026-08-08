@@ -72,8 +72,12 @@ import {
 } from '@roleflock/repository-runtime';
 import {
   classifyProviderFailure,
+  stopIsConfirmable,
+  weakestCancellationCapability,
   type AgentDriver,
+  type CancellationCapability,
   type Effort,
+  type InterruptResult,
   type ReportedUsage,
 } from '@roleflock/provider-core';
 import { CursorWriterAdapter, assertChangedPathsAllowed } from '@roleflock/provider-cursor';
@@ -285,8 +289,55 @@ export class ProviderUnavailableError extends Error {
   }
 }
 
+interface ActiveDriverTurn {
+  driver: AgentDriver;
+  invocationId: string;
+  invocationKey: string;
+  capability: CancellationCapability;
+}
+
+export interface TaskCancellationStatus {
+  capability: CancellationCapability;
+  confirmable: boolean;
+  activeTurns: number;
+}
+
+export interface ControlResult {
+  accepted: true;
+  cancellation?: TaskCancellationStatus & {
+    stopped: boolean;
+    results: InterruptResult[];
+  };
+}
+
+/** A runtime driver result can narrow its declared guarantee, never raise it. */
+export function boundedInterruptResult(
+  declared: CancellationCapability,
+  result: InterruptResult,
+): InterruptResult {
+  const capability = weakestCancellationCapability([declared, result.capability]);
+  const mismatch = declared !== result.capability;
+  return {
+    stopped: result.stopped && stopIsConfirmable(capability) && !mismatch,
+    capability,
+    ...(result.detail === undefined && !mismatch
+      ? {}
+      : {
+          detail: [
+            result.detail,
+            mismatch
+              ? `driver declared ${declared} but interruption returned ${result.capability}`
+              : undefined,
+          ]
+            .filter(Boolean)
+            .join('; '),
+        }),
+  };
+}
+
 export class Orchestrator {
   private readonly active = new Map<string, AbortController>();
+  private readonly activeDriverTurns = new Map<string, Map<string, ActiveDriverTurn>>();
   private readonly acceptanceWaiters = new Map<
     string,
     { resolve: (decision: 'accepted' | 'rejected') => void }
@@ -451,7 +502,19 @@ export class Orchestrator {
     return this.active.has(taskId);
   }
 
-  control(taskId: string, commandType: string): void {
+  cancellationForTask(taskId: string): TaskCancellationStatus {
+    const turns = [...(this.activeDriverTurns.get(taskId)?.values() ?? [])];
+    const capability = turns.length
+      ? weakestCancellationCapability(turns.map((turn) => turn.capability))
+      : 'none';
+    return {
+      capability,
+      confirmable: stopIsConfirmable(capability),
+      activeTurns: turns.length,
+    };
+  }
+
+  async control(taskId: string, commandType: string): Promise<ControlResult> {
     const execution = this.executions.getByTask(taskId);
     if (!execution) throw new Error('No active execution for task');
     const id = randomUUID();
@@ -470,20 +533,58 @@ export class Orchestrator {
       this.executions.upsert(execution);
       this.setTaskState(taskId, 'paused');
     }
-    if (commandType === 'stop' || commandType === 'cancel') {
+    let cancellation: ControlResult['cancellation'];
+    if (commandType === 'stop' || commandType === 'cancel' || commandType === 'force-terminate') {
       execution.stopRequested = true;
       this.executions.upsert(execution);
       // `stopping` now, `cancelled` when the graph finishes unwinding. Leaving
       // it on `running` made a stopped task keep claiming it was working.
       this.setTaskState(taskId, 'stopping');
+      const turns = [...(this.activeDriverTurns.get(taskId)?.values() ?? [])];
+      const pending = turns.map(async (turn): Promise<InterruptResult> => {
+        let result: InterruptResult;
+        try {
+          result = turn.driver.interrupt
+            ? boundedInterruptResult(
+                turn.capability,
+                await turn.driver.interrupt(turn.invocationKey),
+              )
+            : {
+                stopped: false,
+                capability: 'none',
+                detail: `${turn.driver.id} does not implement interruption`,
+              };
+        } catch (error) {
+          result = {
+            stopped: false,
+            capability: turn.capability,
+            detail: error instanceof Error ? error.message : String(error),
+          };
+        }
+        this.invocations.recordInterruption(turn.invocationId, result);
+        this.appendEvent(taskId, 'driver.interruption_reported', {
+          invocationId: turn.invocationId,
+          invocationKey: turn.invocationKey,
+          driverId: turn.driver.id,
+          ...result,
+        });
+        return result;
+      });
       this.active.get(taskId)?.abort();
-    }
-    if (commandType === 'force-terminate') {
-      execution.stopRequested = true;
-      this.executions.upsert(execution);
-      this.setTaskState(taskId, 'stopping');
-      this.active.get(taskId)?.abort();
-      this.forceKillTaskProcesses(taskId, execution.nodeRunId);
+      const results = await Promise.all(pending);
+      const capability = results.length
+        ? weakestCancellationCapability(results.map((result) => result.capability))
+        : 'none';
+      cancellation = {
+        capability,
+        confirmable: stopIsConfirmable(capability),
+        activeTurns: results.length,
+        stopped: results.length > 0 && results.every((result) => result.stopped),
+        results,
+      };
+      if (commandType === 'force-terminate') {
+        this.forceKillTaskProcesses(taskId, execution.nodeRunId);
+      }
     }
     if (commandType === 'cancel') {
       const wt = this.worktrees.getByTask(taskId);
@@ -491,6 +592,7 @@ export class Orchestrator {
     }
     this.commands.updateStatus(id, 'completed', { completedAt: now() });
     this.bus.publish('control.commanded', { taskId, commandType });
+    return { accepted: true, ...(cancellation === undefined ? {} : { cancellation }) };
   }
 
   /**
@@ -1466,6 +1568,7 @@ export class Orchestrator {
           nodeRunId,
           invocationId,
           invocationKey,
+          nodeKey: node.id,
           prompt,
           cwd: worktreePath,
           signal: controller.signal,
@@ -1607,6 +1710,7 @@ export class Orchestrator {
             nodeRunId,
             invocationId,
             invocationKey,
+            nodeKey: node.id,
             prompt: [
               node.objective ? `Authored objective: ${node.objective}` : '',
               'Review the proposed source-code change and confirm whether its repository scope is appropriate.',
@@ -1803,6 +1907,7 @@ export class Orchestrator {
               nodeRunId,
               invocationId,
               invocationKey,
+              nodeKey: node.id,
               prompt,
               cwd: worktreePath,
               signal: controller.signal,
@@ -2390,6 +2495,7 @@ export class Orchestrator {
     nodeRunId: string;
     invocationId: string;
     invocationKey: string;
+    nodeKey: string;
     prompt: string | ((route: RoleRoute) => string);
     cwd: string;
     signal: AbortSignal;
@@ -2435,8 +2541,40 @@ export class Orchestrator {
       input.onRoute?.(route);
 
       try {
+        const capabilities = await route.driver.capabilities();
+        const previousSession = capabilities.resume
+          ? this.invocations.findLatestResumableSession({
+              taskId: input.task.id,
+              nodeKey: input.nodeKey,
+              driverId: route.driver.id,
+              providerConnectionId: route.providerId,
+              configuredModelId: route.modelId,
+              excludeInvocationId: input.invocationId,
+            })
+          : undefined;
+        if (previousSession?.driverSessionId && route.driver.resume === undefined) {
+          throw new Error(`${route.driver.id} claims resume but does not implement it`);
+        }
+        this.invocations.updateDriver(input.invocationId, {
+          providerConnectionId: route.providerId,
+          configuredModelId: route.modelId,
+          driverId: route.driver.id,
+          cancellationCapability: capabilities.cancellation,
+          resumedFromInvocationId: previousSession?.id,
+        });
+        if (previousSession?.driverSessionId) {
+          this.appendEvent(input.task.id, 'driver.session_resumed', {
+            graphRunId: input.graphRunId,
+            nodeRunId: input.nodeRunId,
+            invocationId: input.invocationId,
+            resumedFromInvocationId: previousSession.id,
+            driverId: route.driver.id,
+            sessionId: previousSession.driverSessionId,
+          });
+        }
         const invoked = await this.consumeInvocation({
           driver: route.driver,
+          taskId: input.task.id,
           invocationId: input.invocationId,
           invocationKey: input.invocationKey,
           nodeRunId: input.nodeRunId,
@@ -2446,6 +2584,8 @@ export class Orchestrator {
           permissionEnvelope: input.permissionEnvelope,
           model: route.modelId,
           effort: route.effort,
+          capability: capabilities.cancellation,
+          resumeSessionId: previousSession?.driverSessionId,
         });
         this.recordUsage({
           task: input.task,
@@ -2518,6 +2658,7 @@ export class Orchestrator {
 
   private async consumeInvocation(input: {
     driver: AgentDriver;
+    taskId: string;
     invocationId: string;
     invocationKey: string;
     nodeRunId: string;
@@ -2531,6 +2672,8 @@ export class Orchestrator {
     };
     model?: string;
     effort?: Effort;
+    capability: CancellationCapability;
+    resumeSessionId?: string;
   }): Promise<{ output: string; usage?: ReportedUsage }> {
     let output = '';
     let reasoningChars = 0;
@@ -2545,6 +2688,15 @@ export class Orchestrator {
     let settled = false;
     const spawnedPids = new Set<number>();
     const worktree = input.permissionEnvelope?.worktree;
+    const taskTurns =
+      this.activeDriverTurns.get(input.taskId) ?? new Map<string, ActiveDriverTurn>();
+    taskTurns.set(input.invocationKey, {
+      driver: input.driver,
+      invocationId: input.invocationId,
+      invocationKey: input.invocationKey,
+      capability: input.capability,
+    });
+    this.activeDriverTurns.set(input.taskId, taskTurns);
 
     const recordSpawn = (pid: number): void => {
       if (spawnedPids.has(pid)) return;
@@ -2606,7 +2758,7 @@ export class Orchestrator {
     };
 
     try {
-      for await (const event of input.driver.start({
+      const request = {
         invocationKey: input.invocationKey,
         objective: input.prompt,
         workspacePath: input.permissionEnvelope?.worktree ?? input.cwd,
@@ -2621,11 +2773,20 @@ export class Orchestrator {
         model: input.model,
         effort: input.effort,
         onSpawn: recordSpawn,
-      })) {
+      };
+      const events = input.resumeSessionId
+        ? input.driver.resume!(input.resumeSessionId, request)
+        : input.driver.start(request);
+      for await (const event of events) {
         // Any event is proof of life. The turn is only abandoned when the
         // provider goes quiet, never for taking its time.
         watchdog.touch();
-        if (event.type === 'started' && event.pid !== undefined) recordSpawn(event.pid);
+        if (event.type === 'started') {
+          if (event.pid !== undefined) recordSpawn(event.pid);
+          if (event.sessionId !== undefined) {
+            this.invocations.recordDriverSession(input.invocationId, event.sessionId);
+          }
+        }
         if (event.type === 'heartbeat') {
           const execution = this.executions.getByNodeRun(input.nodeRunId);
           if (execution) {
@@ -2677,6 +2838,9 @@ export class Orchestrator {
       throw error;
     } finally {
       watchdog.dispose();
+      const active = this.activeDriverTurns.get(input.taskId);
+      active?.delete(input.invocationKey);
+      if (active?.size === 0) this.activeDriverTurns.delete(input.taskId);
     }
     this.closeProcessHandles(input.nodeRunId, 'terminated');
     return { output, usage };

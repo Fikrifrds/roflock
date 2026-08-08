@@ -35,6 +35,8 @@ export interface ServerOptions {
   host?: string;
   port?: number;
   session?: Session;
+  /** Test/plugin seam for supplying additional local harness drivers. */
+  providers?: ProviderRegistry;
 }
 export interface ServerHandle {
   app: FastifyInstance;
@@ -95,7 +97,7 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
   reconcileInterruptedGraphRuns(db);
   reconcileWriterLeases(db);
   const bus = new EventBus();
-  const providers = new ProviderRegistry();
+  const providers = options.providers ?? new ProviderRegistry();
   const providerConnections = new ProviderConnectionRepository(db);
   const providerSecrets = new LocalSecretStore(dataDir);
   for (const connection of providerConnections.listCustom()) {

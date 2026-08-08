@@ -126,17 +126,20 @@ export class ProviderRegistry {
   private readonly discovery = new Map<string, { at: number; value: Promise<unknown> }>();
 
   constructor() {
-    if (fakeProviderEnabled()) this.register(new FakeProvider());
+    if (fakeProviderEnabled()) this.registerProvider(new FakeProvider());
     const claude = new ClaudeAdapter();
     const codex = new CodexAdapter();
-    this.register(claude, providerDriver(claude, { capabilities: { usageReporting: true } }));
-    this.register(
+    this.registerProvider(
+      claude,
+      providerDriver(claude, { capabilities: { usageReporting: true } }),
+    );
+    this.registerProvider(
       codex,
       providerDriver(codex, {
         capabilities: { toolEvents: true, structuredOutput: false, usageReporting: true },
       }),
     );
-    this.register(new CursorWriterAdapter(createFsCursorWriter()));
+    this.registerProvider(new CursorWriterAdapter(createFsCursorWriter()));
 
     void Promise.all(this.adapters.list().map((adapter) => this.healthCheck(adapter.id))).catch(
       () => undefined,
@@ -178,7 +181,8 @@ export class ProviderRegistry {
     return driver;
   }
 
-  private register(adapter: ProviderAdapter, driver: AgentDriver = providerDriver(adapter)): void {
+  /** Register an adapter and its production driver as one routable connection. */
+  registerProvider(adapter: ProviderAdapter, driver: AgentDriver = providerDriver(adapter)): void {
     this.adapters.register(adapter);
     this.drivers.set(adapter.id, driver);
   }
@@ -200,7 +204,7 @@ export class ProviderRegistry {
     if (!input.endpoint.trim() || !input.model.trim()) {
       throw new Error('endpoint and model are required');
     }
-    this.register(
+    this.registerProvider(
       new OpenAiCompatibleAdapter(id, input.endpoint.trim(), input.apiKey, input.model.trim()),
     );
     this.customNames.set(id, input.displayName.trim() || id);

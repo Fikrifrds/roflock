@@ -13,6 +13,11 @@ export interface InvocationRecord {
   disclosureManifestId?: string;
   /** Stable identity for this turn; see `stableInvocationKey`. */
   idempotencyKey?: string;
+  driverId?: string;
+  driverSessionId?: string;
+  resumedFromInvocationId?: string;
+  cancellationCapability?: string;
+  interruptionJson?: string;
 }
 
 export class InvocationRepository {
@@ -22,8 +27,8 @@ export class InvocationRepository {
     this.db
       .prepare(
         `INSERT INTO invocations
-          (id, node_run_id, provider_connection_id, configured_model_id, status, started_at, completed_at, outcome, error_json, disclosure_manifest_id, idempotency_key)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          (id, node_run_id, provider_connection_id, configured_model_id, status, started_at, completed_at, outcome, error_json, disclosure_manifest_id, idempotency_key, driver_id, driver_session_id, resumed_from_invocation_id, cancellation_capability, interruption_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         record.id,
@@ -37,6 +42,11 @@ export class InvocationRepository {
         record.errorJson ?? null,
         record.disclosureManifestId ?? null,
         record.idempotencyKey ?? null,
+        record.driverId ?? null,
+        record.driverSessionId ?? null,
+        record.resumedFromInvocationId ?? null,
+        record.cancellationCapability ?? null,
+        record.interruptionJson ?? null,
       );
     return record;
   }
@@ -52,21 +62,80 @@ export class InvocationRepository {
     const row = this.db.prepare('SELECT * FROM invocations WHERE idempotency_key = ?').get(key) as
       Record<string, unknown> | undefined;
     if (row === undefined) return undefined;
-    return {
-      id: String(row['id']),
-      nodeRunId: String(row['node_run_id']),
-      providerConnectionId: String(row['provider_connection_id']),
-      configuredModelId: String(row['configured_model_id']),
-      status: String(row['status']),
-      startedAt: String(row['started_at']),
-      ...(row['completed_at'] == null ? {} : { completedAt: String(row['completed_at']) }),
-      ...(row['outcome'] == null ? {} : { outcome: String(row['outcome']) }),
-      ...(row['error_json'] == null ? {} : { errorJson: String(row['error_json']) }),
-      ...(row['disclosure_manifest_id'] == null
-        ? {}
-        : { disclosureManifestId: String(row['disclosure_manifest_id']) }),
-      idempotencyKey: key,
-    };
+    return mapInvocation(row);
+  }
+
+  updateDriver(
+    id: string,
+    input: {
+      providerConnectionId: string;
+      configuredModelId: string;
+      driverId: string;
+      cancellationCapability: string;
+      resumedFromInvocationId?: string;
+    },
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE invocations
+         SET provider_connection_id = ?, configured_model_id = ?, driver_id = ?,
+             cancellation_capability = ?, resumed_from_invocation_id = ?
+         WHERE id = ?`,
+      )
+      .run(
+        input.providerConnectionId,
+        input.configuredModelId,
+        input.driverId,
+        input.cancellationCapability,
+        input.resumedFromInvocationId ?? null,
+        id,
+      );
+  }
+
+  recordDriverSession(id: string, sessionId: string): void {
+    this.db.prepare('UPDATE invocations SET driver_session_id = ? WHERE id = ?').run(sessionId, id);
+  }
+
+  recordInterruption(id: string, value: unknown): void {
+    this.db
+      .prepare('UPDATE invocations SET interruption_json = ? WHERE id = ?')
+      .run(JSON.stringify(value), id);
+  }
+
+  /**
+   * A known, earlier session for a new attempt of the same workflow node.
+   * Unknown outcomes are excluded: resume is context continuity, never
+   * permission to repeat work whose completion could not be observed.
+   */
+  findLatestResumableSession(input: {
+    taskId: string;
+    nodeKey: string;
+    driverId: string;
+    providerConnectionId: string;
+    configuredModelId: string;
+    excludeInvocationId: string;
+  }): InvocationRecord | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT i.* FROM invocations i
+         JOIN node_runs nr ON nr.id = i.node_run_id
+         JOIN graph_runs gr ON gr.id = nr.graph_run_id
+         WHERE gr.task_id = ? AND nr.node_key = ? AND i.driver_id = ?
+           AND i.provider_connection_id = ? AND i.configured_model_id = ?
+           AND i.driver_session_id IS NOT NULL AND i.id <> ?
+           AND i.status IN ('completed', 'failed')
+           AND COALESCE(i.outcome, '') <> 'OUTCOME_UNKNOWN'
+         ORDER BY i.started_at DESC LIMIT 1`,
+      )
+      .get(
+        input.taskId,
+        input.nodeKey,
+        input.driverId,
+        input.providerConnectionId,
+        input.configuredModelId,
+        input.excludeInvocationId,
+      ) as Record<string, unknown> | undefined;
+    return row ? mapInvocation(row) : undefined;
   }
 
   updateStatus(
@@ -113,5 +182,15 @@ function mapInvocation(row: Record<string, unknown>): InvocationRecord {
     disclosureManifestId: row.disclosure_manifest_id
       ? String(row.disclosure_manifest_id)
       : undefined,
+    idempotencyKey: row.idempotency_key ? String(row.idempotency_key) : undefined,
+    driverId: row.driver_id ? String(row.driver_id) : undefined,
+    driverSessionId: row.driver_session_id ? String(row.driver_session_id) : undefined,
+    resumedFromInvocationId: row.resumed_from_invocation_id
+      ? String(row.resumed_from_invocation_id)
+      : undefined,
+    cancellationCapability: row.cancellation_capability
+      ? String(row.cancellation_capability)
+      : undefined,
+    interruptionJson: row.interruption_json ? String(row.interruption_json) : undefined,
   };
 }

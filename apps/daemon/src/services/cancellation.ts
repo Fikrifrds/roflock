@@ -1,7 +1,10 @@
 import { claudeDriver } from '@roleflock/provider-claude';
 import { codexDriver } from '@roleflock/provider-codex';
 import { openCodeDriver } from '@roleflock/provider-opencode';
-import type { CancellationCapability } from '@roleflock/provider-core';
+import {
+  weakestCancellationCapability,
+  type CancellationCapability,
+} from '@roleflock/provider-core';
 
 /**
  * The weakest stop guarantee among the drivers a run could land on.
@@ -18,13 +21,6 @@ import type { CancellationCapability } from '@roleflock/provider-core';
  * provider can confirm a remote stop.
  */
 
-const ORDER: CancellationCapability[] = [
-  'none',
-  'local-process',
-  'cooperative',
-  'remote-confirmed',
-];
-
 export async function shippedDriverCancellation(): Promise<CancellationCapability> {
   const capabilities = await Promise.all(
     [claudeDriver(), codexDriver(), openCodeDriver()].map(
@@ -32,9 +28,5 @@ export async function shippedDriverCancellation(): Promise<CancellationCapabilit
     ),
   );
 
-  return capabilities.reduce(
-    (weakest: CancellationCapability, capability: CancellationCapability) =>
-      ORDER.indexOf(capability) < ORDER.indexOf(weakest) ? capability : weakest,
-    'remote-confirmed' as CancellationCapability,
-  );
+  return weakestCancellationCapability(capabilities);
 }

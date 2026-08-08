@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { stopIsConfirmable } from '@roleflock/provider-core';
+import { stopIsConfirmable, weakestCancellationCapability } from '@roleflock/provider-core';
 import { shippedDriverCancellation } from '../src/services/cancellation.js';
+import { boundedInterruptResult } from '../src/services/orchestrator.js';
 
 /**
  * The floor the interface is allowed to promise.
@@ -25,5 +26,28 @@ describe('the stop guarantee the daemon reports', () => {
     // first element, or picked the max, would return the best driver's answer
     // and quietly authorise the interface to over-promise for the others.
     expect(await shippedDriverCancellation()).not.toBe('remote-confirmed');
+  });
+
+  it('uses the weakest guarantee when parallel turns use different drivers', () => {
+    expect(weakestCancellationCapability([])).toBe('none');
+    expect(weakestCancellationCapability(['remote-confirmed', 'cooperative'])).toBe('cooperative');
+    expect(weakestCancellationCapability(['remote-confirmed', 'none', 'local-process'])).toBe(
+      'none',
+    );
+  });
+
+  it('does not let an interrupt result raise the capability declared before the run', () => {
+    expect(
+      boundedInterruptResult('local-process', {
+        stopped: true,
+        capability: 'remote-confirmed',
+      }),
+    ).toMatchObject({ stopped: false, capability: 'local-process' });
+    expect(
+      boundedInterruptResult('remote-confirmed', {
+        stopped: true,
+        capability: 'remote-confirmed',
+      }),
+    ).toEqual({ stopped: true, capability: 'remote-confirmed' });
   });
 });
