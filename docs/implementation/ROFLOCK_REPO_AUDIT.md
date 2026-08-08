@@ -1063,6 +1063,27 @@ Verification: build, lint, typecheck pass; **672 tests pass**.
 | RF-EVO-114     | `FakeDriver` plus `runDriverConformance` in `test-support` |
 | RF-EVO-122     | Cancellation truthfulness, enforced by conformance         |
 
+### The compatibility wrapper (RF-EVO-115)
+
+`providerDriver()` presents an existing `ProviderAdapter` as an `AgentDriver`,
+and passes the same conformance suite a hand-written driver does. That is what
+makes the migration incremental: the runtime can move to drivers before Codex,
+Claude or Cursor is rewritten.
+
+It is pessimistic on purpose. No health check means `detected: false` rather
+than "probably ready"; an adapter that ends without saying how settles as
+`failed`, not `completed`; and permissions are enforced at the wrapper rather
+than delegated, because an adapter cannot honour a restriction its envelope
+never described.
+
+**One design change came from a failing test.** `cancellation` was overridable,
+and a test expecting conformance to catch an overclaim failed — the lie was
+_self-consistent_. `interrupt` agreed with the raised claim, so no contradiction
+existed to find, and a user would have been told their work stopped while a paid
+provider carried on. It is now absent from the override type and restated in the
+implementation, so a cast cannot route around it either. Unrepresentable beats
+caught.
+
 ### The decision worth remembering
 
 `cancellation` is a four-value capability, not a boolean, because the difference
@@ -1078,11 +1099,11 @@ a provider that will refuse it.
 
 ### Not done
 
-| Ticket          | Remaining work                                                        |
-| --------------- | --------------------------------------------------------------------- |
-| RF-EVO-115      | `ProviderAdapter` compatibility wrapper exercised against conformance |
-| RF-EVO-116..121 | Codex, Claude, OpenCode and generic HTTP driver migrations            |
-| RF-EVO-123/124  | Session/resume and usage events on real drivers                       |
+| Ticket          | Remaining work                                              |
+| --------------- | ----------------------------------------------------------- |
+| ~~RF-EVO-115~~  | Done — `providerDriver()` passes the full conformance suite |
+| RF-EVO-116..121 | Codex, Claude, OpenCode and generic HTTP driver migrations  |
+| RF-EVO-123/124  | Session/resume and usage events on real drivers             |
 
 These need real CLI integration and cannot be proven with fixtures alone. Per
 the plan, `ProviderAdapter` compatibility is not removed until the equivalent
