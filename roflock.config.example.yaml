@@ -1,0 +1,38 @@
+# Roflock local configuration example
+#
+# Copy to <data dir>/config.yaml or a project .roflock/config.yaml.
+#
+# The data directory is ~/.roflock for a new install. An installation created
+# before the rename keeps using ~/.roleflock and is not moved; a project may
+# also still use .roleflock/config.yaml. Both legacy locations are accepted.
+#
+# Every setting below can be overridden by a ROFLOCK_* environment variable
+# (ROFLOCK_PORT, ROFLOCK_DATA_DIR, ...). The matching ROLEFLOCK_* names still
+# work and warn once.
+
+runtime:
+  host: 127.0.0.1
+  port: 4178
+  dataDir: ~/.roflock
+
+security:
+  requireLocalOrigin: true
+  csrfProtection: true
+
+repository:
+  deniedPathGlobs:
+    - '**/.env'
+    - '**/.env.*'
+    - '**/*secret*'
+    - '**/*credential*'
+    - '**/id_rsa*'
+    - '**/*.pem'
+    - '**/*.key'
+
+providers: []
+
+roles: []
+
+budget:
+  defaultMaxActualCostUsd: 5
+  defaultMaxAttempts: 3
