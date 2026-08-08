@@ -48,9 +48,9 @@ truthful**. A driver that cannot prove remote cancellation must not report work
 as stopped. Conformance enforces it; do not add an exception.
 
 Open debts, none blocking: shipped templates declare no `authority`, so Role
-Protocol gates stay unused (§15 risk 19); `workflows/` is located by walking up
-from the daemon module and will not survive npm packaging (§15 risk 18,
-RF-DIST-001); and resuming past an approval gate re-asks the human (§16).
+Protocol gates stay unused (§15 risk 19); and resuming past an approval gate
+re-asks the human (§16). Risk 18 is closed — the build now bundles workflow
+templates into the daemon package.
 
 ---
 
