@@ -1140,6 +1140,34 @@ The live stream test does not assert success. A real account can be out of
 quota, and a run that fails _for a stated reason_ is a correct outcome — what
 must hold is that the stream is coherent and explains itself.
 
+### OpenCode, and the safety property it forced (RF-EVO-120)
+
+Verified against the installed CLI. Two findings came from running it rather than
+reading its documentation.
+
+**It edits files without being asked.** `opencode run` performed an `edit` tool
+call with no `--auto` flag and no permission prompt, and there is no sandbox
+option — `--dir` is a working directory, not a boundary. Roflock therefore
+**refuses** a read-only turn on this provider rather than passing it through: a
+permission nothing enforces is worse than one never offered. `--auto` is never
+passed either, since it approves everything unscoped, shell commands included.
+
+`writes: true` is declared even though it is the less convenient answer.
+Declaring false would not stop OpenCode writing; it would only stop Roflock
+knowing that it might.
+
+**Conformance caught an overclaim on the first live run.** OpenCode has real
+sessions — `--session`, `--continue`, a `sessionID` on every event — so
+`sessions: true` was declared. It failed: `InvocationEvent`'s
+`invocation.started` has no field to carry that id, so the capability exists in
+the CLI but cannot reach the runtime through this seam. Now false, with the gap
+tracked as RF-EVO-123. This is precisely what the suite is for, and it took
+seconds.
+
+Discovery had a gap too: OpenCode installs to `~/.opencode/bin`, which a
+non-login shell often lacks on PATH, so looking only for `opencode` reported a
+working install as missing.
+
 ### A claim corrected
 
 The wrapper's write guard was first described as permission _enforcement_. It is
@@ -1156,7 +1184,7 @@ both what the guard catches and what it does not.
 | ---------------------- | ------------------------------------------------------------ |
 | ~~RF-EVO-115~~         | Done — `providerDriver()` passes the full conformance suite  |
 | ~~RF-EVO-116/118/121~~ | Done — Codex, Claude and compatible drivers pass conformance |
-| RF-EVO-120             | OpenCode driver — not installed on any machine tested so far |
+| ~~RF-EVO-120~~         | Done — OpenCode driver, verified against CLI 1.18.15         |
 | RF-EVO-123/124         | Session/resume and usage events on real drivers              |
 
 These need real CLI integration and cannot be proven with fixtures alone. Per
