@@ -154,10 +154,26 @@ describe('daemon recovery', () => {
         })
       ).statusCode,
     ).toBe(200);
+    // `paused`, not `running`. The orchestrator that asked for this decision did
+    // not survive the restart, so nothing is executing — and claiming otherwise
+    // left the task in a state `/start` refuses, with no way back. Paused is
+    // truthful and is exactly what the Resume button posts against.
     await waitFor(
       restarted.app,
       `/api/tasks/${taskId}`,
-      (body) => (body as { state: string }).state === 'running',
+      (body) => (body as { state: string }).state === 'paused',
     );
+
+    // And resuming actually works, rather than reporting a run that is not there.
+    expect(
+      (
+        await restarted.app.inject({
+          method: 'POST',
+          url: `/api/tasks/${taskId}/start`,
+          headers,
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(202);
   }, 30_000);
 });

@@ -490,12 +490,33 @@ export class Orchestrator {
     });
   }
 
+  /**
+   * Records a human decision and, when a run is still waiting for it, releases
+   * that run.
+   *
+   * The waiter is in memory, so it does not survive a daemon restart. When it is
+   * gone the decision is still durable — but nothing is executing, and marking
+   * the task `running` would be a claim about a process that does not exist.
+   * Worse, `running` is a state `/start` refuses, so the task could never be
+   * resumed from the UI at all. `paused` is truthful and is what the Resume
+   * button already posts against.
+   */
   resolveConfirmation(id: string, decision: 'approved' | 'rejected'): void {
     this.confirmations.setStatus(id, decision === 'approved' ? 'approved' : 'rejected', now());
-    this.confirmationWaiters.get(id)?.resolve(decision);
+    const waiter = this.confirmationWaiters.get(id);
+    waiter?.resolve(decision);
     this.confirmationWaiters.delete(id);
     const request = this.confirmations.get(id);
-    if (request) this.setTaskState(request.taskId, 'running');
+    if (!request) return;
+    if (waiter !== undefined || this.active.has(request.taskId)) {
+      this.setTaskState(request.taskId, 'running');
+      return;
+    }
+    this.appendEvent(request.taskId, 'confirmation.resolved_without_run', {
+      confirmationId: id,
+      decision,
+    });
+    this.setTaskState(request.taskId, 'paused');
   }
 
   approveAllByFingerprint(fingerprint: string): number {
