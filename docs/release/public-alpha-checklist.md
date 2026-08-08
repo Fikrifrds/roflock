@@ -40,7 +40,7 @@ implicit claim.
 | `pnpm test`                      | 940 passed, 12 opt-in live-driver tests skipped              |
 | `pnpm format:check`              | passed                                                       |
 | working-tree `git diff --check`  | passed                                                       |
-| documentation link check         | 73 Markdown files; all local links resolve                   |
+| documentation link check         | 76 Markdown files; all local links resolve                   |
 | `pnpm build:playground:public`   | passed with the `/play/` base                                |
 | release tag/version verifier     | passed for `v0.1.0`                                          |
 

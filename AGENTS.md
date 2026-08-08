@@ -5,10 +5,10 @@ Root agent guidance. Sections 1–17 are the Roflock AI Coding Master Instructio
 
 ## Current phase
 
-**R0 through R10 have implementation outcomes, but public-alpha hardening is active.**
-The launch review reopened workflow pinning, semantic-lowering, runtime-driver,
-CLI distribution, harness, and release-gate work. The authoritative open-work
-status is now
+**R0 through R10 and repository-side public-alpha hardening are complete.** The
+launch review reopened and then closed workflow pinning, semantic lowering,
+runtime-driver, CLI distribution, harness, documentation, and local release-gate
+work. The authoritative readiness status is
 [`docs/implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md`](docs/implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md).
 Audit §19 has the phase-by-phase picture, §23 what R10 delivered and what stays deferred. The audit at
 [`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md)
@@ -47,16 +47,18 @@ CLI distribution and harness interoperability are governed by
 
 ### Next
 
-Follow the public-alpha completion plan in dependency order. First make workflow
-identity immutable and lower authored semantics faithfully; then remove the
-built-in workflow ceiling and move production turns onto `AgentDriver`. Complete
-distribution, runtime CLI, remaining harness/MCP work, documentation, and clean
-release gates after those correctness foundations are green.
+The repository-side public-alpha candidate is ready. Follow the
+[executed release checklist](docs/release/public-alpha-checklist.md) for the
+remaining operator-owned work: push and review the candidate, obtain the green
+Linux/macOS/Windows matrix, prove npm package ownership and trusted publishing,
+create the signed tag, verify registry provenance, create the GitHub Release,
+and deploy the public Playground. None of those external actions have happened
+merely because local gates are green.
 
-The driver contract, `FakeDriver`, conformance suite, and Codex, Claude, custom,
-and OpenCode drivers exist. `ProviderAdapter` remains a compatibility boundary;
-the production orchestrator has not yet completed its migration to
-`AgentDriver`. Pi remains an explicit open spike.
+The production orchestrator uses `AgentDriver`; `ProviderAdapter` remains only a
+compatibility metadata boundary. The driver contract, `FakeDriver`, conformance
+suite, and Codex, Claude, custom, and OpenCode drivers exist. The Pi spike chose
+process-isolated RPC and does not claim a shipped Pi driver.
 
 The rule that matters more than any of them: **capability reporting must be
 truthful**. A driver that cannot prove remote cancellation must not report work

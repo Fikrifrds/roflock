@@ -126,6 +126,7 @@ approvals, shared output semantics, and owned-daemon lifecycle remain below.
 | RF-HARNESS-012 | complete          | Cancellation truthfulness is tested at driver and Studio wording boundaries.                                                  |
 | RF-HARNESS-013 | complete          | The auth guide maps shipped harness probes and ownership, BYOK scope, Pi status, secret handling, and explicit non-support.   |
 | RF-HARNESS-014 | complete          | Playground is browser-only with zero-fetch coverage; production links fail closed, and a future handoff threat design exists. |
+| RF-HARNESS-015 | complete          | OpenCode's offline conformance path is mandatory and cannot disappear behind an opt-in live-test flag.                        |
 
 MCP is an adapter over existing compiler/runtime/control contracts. It must not
 become a second runtime or an approval bypass.

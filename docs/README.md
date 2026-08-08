@@ -16,6 +16,8 @@ plans and RoleFlock-era documents remain available as design history.
 | [Playground and Studio](ui/playground-and-studio.md)                                   | Browser surfaces, use, deployment, security bounds   |
 | [Driver authoring](drivers/authoring-and-conformance.md)                               | AgentDriver contract, conformance, harness status    |
 | [Public-alpha completion](implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md) | Exact readiness authority and release gates          |
+| [Public-alpha release audit](implementation/ROFLOCK_PUBLIC_ALPHA_RELEASE_AUDIT.md)     | Commit review, gate evidence, residual risk          |
+| [Executed release checklist](release/public-alpha-checklist.md)                        | Local evidence and remaining operator actions        |
 | [Control-surface API](integrations/control-surface-api.md)                             | Authenticated local client integration               |
 | [Harness invocation](integrations/harness-invocation.md)                               | Codex, Claude Code, OpenCode, Pi/shell entry points  |
 | [Authentication](integrations/authentication.md)                                       | Harness-owned login and BYOK boundaries              |
