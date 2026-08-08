@@ -49,6 +49,8 @@ function consumeTokenFromUrl(): string | undefined {
   return token;
 }
 
+export type StreamStatus = 'live' | 'reconnecting' | 'closed';
+
 export function createApi() {
   let token = consumeTokenFromUrl() ?? localStorage.getItem(TOKEN_KEY) ?? '';
   let csrf = localStorage.getItem(CSRF_KEY) ?? '';
@@ -117,13 +119,35 @@ export function createApi() {
     hasToken: () => Boolean(token),
     // The stream authenticates with the httpOnly cookie set by bootstrap(); the
     // token is deliberately not passed as a query parameter.
-    stream: (onEvent: () => void) => {
+    /**
+     * `onStatus` reports whether the stream is actually carrying events.
+     *
+     * Without it the shell said "live" from the moment bootstrap succeeded and
+     * never revised it, so a dropped connection looked exactly like a quiet
+     * one. That is the worst way for this to fail: the screen keeps showing the
+     * last state it saw, and a stalled run reads as a running one.
+     */
+    stream: (onEvent: () => void, onStatus?: (status: StreamStatus) => void) => {
       const source = new EventSource('/api/events/stream', { withCredentials: true });
       source.onmessage = onEvent;
       source.addEventListener('task.updated', onEvent);
       source.addEventListener('execution.updated', onEvent);
       source.addEventListener('approval.requested', onEvent);
       source.addEventListener('task.failed', onEvent);
+      source.onopen = () => {
+        // Fired on every successful (re)connect, so recovery is reported too —
+        // a banner that appears on failure and never clears is its own lie.
+        onStatus?.('live');
+        // Anything that changed while disconnected was missed entirely; EventSource
+        // replays nothing. Refetching on reconnect is what makes the view true again.
+        onEvent();
+      };
+      source.onerror = () => {
+        // CLOSED is terminal: EventSource retries a transient drop by itself but
+        // gives up here, so this is the state a human must be told about rather
+        // than left waiting through.
+        onStatus?.(source.readyState === EventSource.CLOSED ? 'closed' : 'reconnecting');
+      };
       return () => source.close();
     },
   };

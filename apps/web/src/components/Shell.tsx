@@ -4,11 +4,16 @@ import { UnauthorizedError, type RuntimeInfo } from '../lib/api.js';
 import { api, queryClient } from '../lib/client.js';
 import { TaskInbox } from './TaskInbox.js';
 
-type Connection = 'connecting' | 'live' | 'unauthorized' | 'error';
+type Connection = 'connecting' | 'live' | 'reconnecting' | 'closed' | 'unauthorized' | 'error';
 
 const CONNECTION_LABELS: Record<Connection, string> = {
   connecting: 'Connecting…',
   live: 'Connected',
+  // Both of these say the screen is out of date, because that is the thing a
+  // human needs to know. "Reconnecting" alone invites waiting; what matters is
+  // that what they are reading is no longer current.
+  reconnecting: 'Reconnecting — this view may be out of date',
+  closed: 'Disconnected — this view is out of date, reload to reconnect',
   unauthorized: 'Not authorised',
   error: 'Daemon unreachable',
 };
@@ -52,9 +57,14 @@ export function Shell({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setRuntime(info);
         setConnection('live');
-        closeStream = api.stream(() => {
-          void queryClient.invalidateQueries();
-        });
+        closeStream = api.stream(
+          () => {
+            void queryClient.invalidateQueries();
+          },
+          (status) => {
+            if (!cancelled) setConnection(status);
+          },
+        );
       })
       .catch((error: unknown) => {
         if (cancelled) return;
@@ -118,7 +128,13 @@ export function Shell({ children }: { children: ReactNode }) {
             Governed agent workspace
           </div>
           <i
-            className={connection === 'live' ? 'live' : connection === 'error' ? 'offline' : ''}
+            className={
+              connection === 'live'
+                ? 'live'
+                : connection === 'error' || connection === 'closed'
+                  ? 'offline'
+                  : ''
+            }
             role="status"
             aria-live="polite"
           >
