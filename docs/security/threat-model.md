@@ -33,7 +33,7 @@ The token lives in `<dataDir>/session.json` with mode `0600`, so only the OS use
 
 No API route returns the token. `/api/runtime/info` requires the token and returns only the CSRF value plus an httpOnly cookie. The token is also never accepted from a query string, so it cannot leak through proxy or access logs; the SSE stream authenticates with that cookie instead.
 
-`ROLEFLOCK_ROTATE_TOKEN=1` mints a fresh token and invalidates the previous launch URL. `pnpm url` reprints the current one.
+`ROFLOCK_ROTATE_TOKEN=1` mints a fresh token and invalidates the previous launch URL. `pnpm url` reprints the current one. `ROLEFLOCK_ROTATE_TOKEN` remains a deprecated compatibility fallback.
 
 ## CSRF and origin
 

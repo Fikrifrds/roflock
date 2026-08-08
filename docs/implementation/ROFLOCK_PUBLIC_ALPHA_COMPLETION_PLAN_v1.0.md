@@ -47,8 +47,9 @@ These findings take precedence over milestone completion claims.
 | RF-EVO-186 | complete | API-created tasks from two revisions of one workflow keep distinct source, executable graph, semantic hash, and integrity hash despite sharing the compatibility version; the earlier task remains pinned after registry mutation.                                 |
 | RF-EVO-187 | complete | An explicit authority profile that the compatibility runtime cannot enforce now fails bridging; it can no longer degrade silently into an ungated role.                                                                                                            |
 | RF-EVO-188 | complete | Explicit agent/check retry budgets must be positive integers at compile time; invalid values can no longer disappear at the runtime bridge.                                                                                                                        |
+| RF-EVO-189 | complete | Daemon launch, port-conflict, log, and token-rotation guidance now uses the public Roflock name and preferred env prefix while preserving legacy wire/data compatibility.                                                                                          |
 
-The implementation order is 181 → 182 → 183 → 184 → 185 → 186 → 187 → 188.
+The implementation order is 181 → 182 → 183 → 184 → 185 → 186 → 187 → 188 → 189.
 Each ticket must preserve the single `runGraph` runtime and pass its targeted
 tests before a separate commit.
 
