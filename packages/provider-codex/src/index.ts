@@ -144,6 +144,9 @@ export class CodexAdapter implements ProviderAdapter {
     // it waits for input that never comes, and the turn hangs until timeout.
     child.stdin?.end();
 
+    // Why the turn failed, as Codex itself reported it on stdout.
+    let reportedFailure: string | undefined;
+
     for await (const chunk of child.stdout) {
       yield { type: 'heartbeat', at: new Date().toISOString() };
       for (const line of String(chunk).split('\n').filter(Boolean)) {
@@ -152,6 +155,20 @@ export class CodexAdapter implements ProviderAdapter {
 
           const usage = parseReportedUsage(event.usage);
           if (usage) yield { type: 'usage.updated', usage: { ...usage } };
+
+          // Codex reports why a turn failed on **stdout**, as a JSON event —
+          // stderr carries only incidental notices. Reading the reason from
+          // stderr therefore reported "Reading additional input from stdin..."
+          // for a run that actually failed on an exhausted quota, and quota is
+          // the one failure kind that changes routing: unrecognised, the router
+          // keeps retrying a provider that cannot succeed until its window
+          // resets.
+          if (event.type === 'error' || event.type === 'turn.failed') {
+            const nested = (event.error as { message?: unknown } | undefined)?.message;
+            const reported = typeof event.message === 'string' ? event.message : nested;
+            if (typeof reported === 'string' && reported.trim()) reportedFailure = reported;
+            continue;
+          }
 
           // Codex nests the reply under `item`, so the flat field names the
           // other CLIs use find nothing here and the output was being dropped.
@@ -176,12 +193,15 @@ export class CodexAdapter implements ProviderAdapter {
       yield { type: 'invocation.completed', output: '' };
       return;
     }
-    const kind = classifyProviderFailure(stderr);
+    // Codex's own reason first: it is the only source that distinguishes an
+    // exhausted quota from a transient error, and stderr is mostly noise.
+    const reason = reportedFailure ?? stderr;
+    const kind = classifyProviderFailure(reason);
     yield {
       type: 'invocation.failed',
       error: {
         code: `CODEX_${kind.toUpperCase()}`,
-        message: stderr || `exit ${code}`,
+        message: reason || `exit ${code}`,
         retryable: kind === 'transient' || kind === 'unknown',
       },
     };
