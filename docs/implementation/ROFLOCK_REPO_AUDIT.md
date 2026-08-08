@@ -1416,3 +1416,83 @@ Events pane (RF-EVO-173), Evidence view wiring to `explainRun` (174 — a route
 already exists), approval inbox integration (175 — a route already exists), driver
 and permission display (176), pause/stop truthfulness in the UI (177), and
 reconnect handling (178).
+
+## 23. R10 outcome — Studio complete
+
+All six outstanding Studio tickets landed, plus the end-to-end proof (179). The
+pattern across them is worth recording, because it repeated with no exceptions:
+in every case the runtime already knew the truth and the interface did not.
+
+**RF-EVO-173 — the halt nobody could see.** A turn that was billed and whose
+result was never observed halts the run under ADR-010, because re-running it may
+pay twice and skipping it may discard finished work. The reason reached the
+browser inside the node's `outcome` string; the graph draws nodes by state, so
+nothing rendered it. An operator saw a stopped task, no explanation, and no sign
+a decision was waiting on them — a halt that blocks the run and hides its own
+cause. The projection now carries the condition as a fact, decided by the same
+predicate the orchestrator halts on against the same invocation rows. Matching
+the halt message was rejected: it would make a warning about money depend on
+wording nobody would keep stable, the mistake already made once with a
+regex-based permission guard (§19).
+
+**RF-EVO-174 — evidence, gaps included.** The Evidence route rendered the
+bundle, which answers "what was recorded?" rather than "why should I believe
+this is safe?". The difference between those questions is entirely the missing
+links. `explainRun` now reaches the UI through a `/chain` endpoint kept separate
+from the bundle. The panel also had to be defended against its own payload: it
+threw on a response without `steps` and took the whole Evidence page down with
+it — the gap reporter destroying the diff, the bundle and the ledger. A chain
+that cannot be read reports itself as unverified rather than as an empty,
+clean-looking chain.
+
+**RF-EVO-175 — already done.** The approvals route approves, rejects and grants.
+The ticket needed verification, not work. Recorded so the next reader does not
+rebuild it.
+
+**RF-EVO-176 — authority, not just identity.** The live view named provider,
+model and effort and said nothing about what the turn could do.
+`permissionProfileId` had been travelling in the projection and declared in the
+web app's own types the whole time, unrendered. Phrased as consequence ("cannot
+change your code") rather than setting ("read-only"), and absent means absent —
+defaulting to the read-only wording would reassure about a restriction nothing
+confirmed was applied.
+
+**RF-EVO-177 — stop.** "Force stop" was titled "Kill the active process
+immediately". `stopIsConfirmable` already encoded the truth and was consumed
+only by conformance. The daemon now reports the _weakest_ cancellation across
+shipped drivers, derived from them rather than hard-coded: taking the best case
+would hide the caveat on the runs that need it, and freezing the current floor
+would leave the UI lying the other way once a provider can confirm a remote stop.
+
+**RF-EVO-178 — a view that stopped being live.** `stream()` had no `onerror` at
+all, and the shell set "Connected" once and never revised it, so a dead stream
+kept displaying pre-drop state under a label claiming it was current. A stalled
+run read as a running one. Transient and terminal drops are now distinguished,
+recovery clears the warning, and a reconnect refetches — EventSource replays
+nothing it missed, so without that the label would go back to "Connected" over
+stale data.
+
+**RF-EVO-179 — the language actually runs.** A compiled template that fails to
+bridge falls back to the built-in. That is correct for robustness and is also
+how an authored change could vanish silently. The test asserts on values an
+author changed, read back from the graph the runtime would execute; its first
+draft failed exactly that way, which is the failure it exists to catch.
+
+**Known limit, unresolved.** `GraphMode` is a closed union of the five built-in
+workflow ids. A user can change what `bug_fix` means by editing
+`workflows/bug_fix.roflock`, and that edit reaches execution (179). A user
+cannot yet author a _new_ workflow under a new name and run it: task creation
+validates against that union, and `loadWorkflowTemplates()` is called with no
+argument in `server.ts`, so a run cannot be pointed at another directory.
+Widening this is a real piece of work — schema, task creation, version pinning —
+not a rename, and it is not claimed as done.
+
+**Verification at this point.** Build, typecheck and lint exit 0; 834 tests pass,
+from a 432-test baseline. Live driver conformance (43 tests) passes against the
+three real CLIs but stays opt-in behind `ROFLOCK_LIVE_DRIVER_TESTS=1`, so a green
+suite should not be read as evidence the real CLIs were exercised.
+
+**Not verifiable by me.** Every Studio claim above is behavioural, asserted
+through testing-library. Visual design — layout, hierarchy, whether these panels
+read well beside each other on a real screen — is not something I can check, and
+none of it has been looked at by a person.
