@@ -8,11 +8,12 @@ describe('OpenAiCompatibleAdapter streaming', () => {
       'data: {"choices":[{"delta":{"content":"diff --git a/a b/a"}}]}\n',
       'data: [DONE]\n',
     ].join('\n');
-    const fetcher = vi.fn(async () =>
-      new Response(frames, {
-        status: 200,
-        headers: { 'content-type': 'text/event-stream' },
-      }),
+    const fetcher = vi.fn(
+      async () =>
+        new Response(frames, {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        }),
     );
     const adapter = new OpenAiCompatibleAdapter(
       'qwen',

@@ -1,5 +1,9 @@
 import type { InvocationEvent } from '@roleflock/contracts';
-import { classifyProviderFailure } from '@roleflock/provider-core';
+import {
+  classifyProviderFailure,
+  providerDriver,
+  type AgentDriver,
+} from '@roleflock/provider-core';
 import type {
   InvocationRequest,
   ProviderAdapter,
@@ -118,4 +122,18 @@ export class OpenAiCompatibleAdapter implements ProviderAdapter {
     }
     yield { type: 'invocation.completed', output: '' };
   }
+}
+
+/**
+ * An OpenAI-compatible endpoint as an `AgentDriver`.
+ *
+ * This is the BYOK and local-model path, so it must stay usable without any
+ * vendor CLI installed. Capabilities are left at the adapter's own reporting:
+ * a compatible endpoint may be anything from a hosted API to a local server,
+ * and guessing on its behalf would put a claim in front of a runtime decision.
+ */
+export function openAiCompatibleDriver(
+  ...args: ConstructorParameters<typeof OpenAiCompatibleAdapter>
+): AgentDriver {
+  return providerDriver(new OpenAiCompatibleAdapter(...args));
 }

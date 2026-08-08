@@ -23,6 +23,9 @@
   },
   "devDependencies": {
     "@roleflock/contracts": "workspace:*",
+    "@roleflock/provider-claude": "workspace:*",
+    "@roleflock/provider-codex": "workspace:*",
+    "@roleflock/provider-custom": "workspace:*",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4"
   }

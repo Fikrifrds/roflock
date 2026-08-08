@@ -116,6 +116,7 @@ export class ProviderBackedDriver implements AgentDriver {
 
     let started = false;
     let settled = false;
+    let thrown: unknown;
     try {
       for await (const event of this.adapter.invoke({
         invocationId: request.invocationKey,
@@ -149,15 +150,29 @@ export class ProviderBackedDriver implements AgentDriver {
         }
         yield mapped;
       }
+    } catch (error) {
+      // An adapter that throws — a missing CLI, a refused connection — must not
+      // take the driver contract down with it. The contract says a run emits
+      // events and ends in `settled`, so a throw becomes a failure with its
+      // reason rather than an exception the caller has to know to expect.
+      thrown = error;
     } finally {
       this.running.delete(request.invocationKey);
     }
 
     if (!started) yield { type: 'started' };
-    // An adapter that ended without saying how is not a success. Saying so is
-    // the difference between an unknown outcome and a fabricated one.
     if (!settled) {
-      yield { type: 'settled', outcome: 'failed', detail: 'adapter ended without an outcome' };
+      if (thrown !== undefined) {
+        yield {
+          type: 'settled',
+          outcome: 'failed',
+          detail: thrown instanceof Error ? thrown.message : String(thrown),
+        };
+      } else {
+        // An adapter that ended without saying how is not a success. Saying so
+        // is the difference between an unknown outcome and a fabricated one.
+        yield { type: 'settled', outcome: 'failed', detail: 'adapter ended without an outcome' };
+      }
     }
   }
 

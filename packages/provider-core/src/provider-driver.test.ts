@@ -253,3 +253,36 @@ describe('what the permission guard does and does not do', () => {
     },
   );
 });
+
+describe('an adapter that throws', () => {
+  it('becomes a failure with its reason, not an exception the caller must expect', async () => {
+    const driver = providerDriver(
+      adapter([], {
+        // eslint-disable-next-line @typescript-eslint/require-await, require-yield
+        async *invoke(): AsyncIterable<InvocationEvent> {
+          throw new Error('Codex CLI is not installed or not available on PATH.');
+        },
+      }),
+    );
+
+    // The contract says a run emits events and ends in `settled`. A missing CLI
+    // must not take that contract down with it — conformance could not even run
+    // against a driver whose start() throws.
+    expect(await collect(driver.start(request))).toEqual([
+      { type: 'started' },
+      {
+        type: 'settled',
+        outcome: 'failed',
+        detail: 'Codex CLI is not installed or not available on PATH.',
+      },
+    ]);
+  });
+
+  it('distinguishes a throw from an adapter that merely went quiet', async () => {
+    const quiet = providerDriver(adapter([{ type: 'invocation.started', invocationId: 'inv_1' }]));
+
+    expect((await collect(quiet.start(request))).at(-1)).toMatchObject({
+      detail: 'adapter ended without an outcome',
+    });
+  });
+});

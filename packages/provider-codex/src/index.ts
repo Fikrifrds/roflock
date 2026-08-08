@@ -10,6 +10,8 @@ import {
   type ProviderCapabilities,
   type ProviderHealth,
   type ProviderModel,
+  providerDriver,
+  type AgentDriver,
 } from '@roleflock/provider-core';
 
 export async function discoverCodex(
@@ -184,4 +186,23 @@ export class CodexAdapter implements ProviderAdapter {
       },
     };
   }
+}
+
+/**
+ * Codex as an `AgentDriver`.
+ *
+ * Wraps the working adapter rather than reimplementing it: the CLI process
+ * handling, sandbox flags and failure classification here are the parts worth
+ * keeping, and the driver contract is a new way to reach them, not a reason to
+ * rewrite them.
+ *
+ * Capabilities beyond the adapter's own are declared explicitly. `toolEvents`
+ * is true because Codex reports tool activity; `sessions` and `resume` are not,
+ * because this integration starts a fresh `exec` each turn and claiming
+ * otherwise would be a promise the runtime would act on.
+ */
+export function codexDriver(...args: ConstructorParameters<typeof CodexAdapter>): AgentDriver {
+  return providerDriver(new CodexAdapter(...args), {
+    capabilities: { toolEvents: true, structuredOutput: false },
+  });
 }

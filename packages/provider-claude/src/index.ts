@@ -10,6 +10,8 @@ import {
   type ProviderCapabilities,
   type ProviderHealth,
   type ProviderModel,
+  providerDriver,
+  type AgentDriver,
 } from '@roleflock/provider-core';
 
 export async function discoverClaude(
@@ -189,4 +191,15 @@ export class ClaudeAdapter implements ProviderAdapter {
       },
     };
   }
+}
+
+/**
+ * Claude Code as an `AgentDriver`.
+ *
+ * Wraps the working adapter. Effort is a separate setting for this CLI rather
+ * than baked into the model id, which the adapter already handles — the driver
+ * inherits that rather than restating it.
+ */
+export function claudeDriver(...args: ConstructorParameters<typeof ClaudeAdapter>): AgentDriver {
+  return providerDriver(new ClaudeAdapter(...args));
 }
