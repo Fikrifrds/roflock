@@ -1,0 +1,30 @@
+name: Supply chain
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: '41 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  production-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --prod --audit-level=high
+      - run: node scripts/generate-sbom.mjs --out artifacts/roflock.cdx.json
+      - run: node scripts/verify-sbom.mjs artifacts/roflock.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: roflock-cyclonedx-sbom
+          path: artifacts/roflock.cdx.json
+          if-no-files-found: error

@@ -24,6 +24,7 @@ plans and RoleFlock-era documents remain available as design history.
 | [Authentication](integrations/authentication.md)                                       | Harness-owned login and BYOK boundaries              |
 | [CLI exit codes](cli/exit-codes.md)                                                    | CI-safe process and JSON error behavior              |
 | [Threat model](security/threat-model.md)                                               | Local daemon, repository, provider, evidence risks   |
+| [Supply chain](security/supply-chain.md)                                               | SBOM, CI security, container, Dev Container          |
 | [Playground boundary](security/playground-local-runtime.md)                            | Why the public site cannot run local agents          |
 | [Crash recovery](crash-recovery.md)                                                    | Operator recovery and safe continuation              |
 | [Contributing](../CONTRIBUTING.md)                                                     | Setup, invariants, tests, compatibility, PR evidence |

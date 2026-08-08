@@ -21,6 +21,8 @@
     "diagnostics": "node scripts/diagnostics.mjs",
     "passport": "node apps/cli/dist/cli.js passport",
     "benchmark": "node scripts/benchmark-verified-fix.mjs",
+    "sbom": "node scripts/generate-sbom.mjs --out artifacts/roflock.cdx.json",
+    "sbom:check": "node scripts/verify-sbom.mjs artifacts/roflock.cdx.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "pnpm -r typecheck",
