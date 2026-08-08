@@ -129,17 +129,17 @@ become a second runtime or an approval bypass.
 
 ## 6. Product and documentation stream
 
-| Ticket      | State    | Required outcome                                                                                                                                           |
-| ----------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RF-EVO-180  | complete | Visible Roflock launch UI and isolated responsive Playground; commit `5d8b69a`.                                                                            |
-| RF-DOCS-001 | complete | The user-first docs index and architecture guide define surfaces, immutable identity, single runtime, trust, and compatibility.                            |
-| RF-DOCS-002 | complete | The implemented-language reference covers exact 0.1 syntax, nodes, outcomes, loops, effects, authority, diagnostics, and immutable version/hash semantics. |
-| RF-DOCS-003 | complete | The shipped CLI reference covers artifact/source install, every command and option, JSON streams, IDs, exits, env compatibility, MCP, and troubleshooting. |
-| RF-DOCS-004 | open     | Local runtime/operator guide: configuration, data, recovery, approvals, evidence, and upgrades.                                                            |
-| RF-DOCS-005 | open     | Playground and Studio guides, including deployment and local handoff boundaries.                                                                           |
-| RF-DOCS-006 | open     | Driver authoring/conformance guide and Codex, Claude, OpenCode, Pi status.                                                                                 |
-| RF-DOCS-007 | open     | Open-source contributor, governance, security-reporting, support, and release guides.                                                                      |
-| RF-DOCS-008 | open     | End-to-end quick starts validated against a packed artifact and clean checkout.                                                                            |
+| Ticket      | State    | Required outcome                                                                                                                                                              |
+| ----------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RF-EVO-180  | complete | Visible Roflock launch UI and isolated responsive Playground; commit `5d8b69a`.                                                                                               |
+| RF-DOCS-001 | complete | The user-first docs index and architecture guide define surfaces, immutable identity, single runtime, trust, and compatibility.                                               |
+| RF-DOCS-002 | complete | The implemented-language reference covers exact 0.1 syntax, nodes, outcomes, loops, effects, authority, diagnostics, and immutable version/hash semantics.                    |
+| RF-DOCS-003 | complete | The shipped CLI reference covers artifact/source install, every command and option, JSON streams, IDs, exits, env compatibility, MCP, and troubleshooting.                    |
+| RF-DOCS-004 | complete | The local operator guide covers lifecycle, data/security, configuration, worktrees, recovery, approvals, evidence, consistent backup/restore, upgrades, reset, and incidents. |
+| RF-DOCS-005 | open     | Playground and Studio guides, including deployment and local handoff boundaries.                                                                                              |
+| RF-DOCS-006 | open     | Driver authoring/conformance guide and Codex, Claude, OpenCode, Pi status.                                                                                                    |
+| RF-DOCS-007 | open     | Open-source contributor, governance, security-reporting, support, and release guides.                                                                                         |
+| RF-DOCS-008 | open     | End-to-end quick starts validated against a packed artifact and clean checkout.                                                                                               |
 
 Documentation examples are executable fixtures where practical. A command that
 has not passed package/E2E verification must not be presented as shipped.
