@@ -27,13 +27,14 @@ interface Parsed {
   out?: string;
 }
 
-function parseArgs(args: string[], command: string): Parsed {
+function parseArgs(args: string[], command: string, allowOutput = false): Parsed {
   const positional: string[] = [];
   let out: string | undefined;
 
   for (let i = 0; i < args.length; i += 1) {
     const arg = args[i]!;
     if (arg === '-o' || arg === '--out') {
+      if (!allowOutput) throw new UsageError(`Unknown option '${arg}'`);
       out = args[i + 1];
       if (out === undefined) throw new UsageError(`${arg} needs a file path`);
       i += 1;
@@ -113,7 +114,7 @@ export function runCheck(args: string[], io: CliIo): number {
 export function runCompile(args: string[], io: CliIo): number {
   let parsed: Parsed;
   try {
-    parsed = parseArgs(args, 'compile');
+    parsed = parseArgs(args, 'compile', true);
   } catch (caught) {
     io.stderr((caught as Error).message);
     return ExitCode.Usage;
@@ -158,7 +159,7 @@ export function runCompile(args: string[], io: CliIo): number {
 export function runRender(args: string[], io: CliIo): number {
   let parsed: Parsed;
   try {
-    parsed = parseArgs(args, 'render');
+    parsed = parseArgs(args, 'render', true);
   } catch (caught) {
     io.stderr((caught as Error).message);
     return ExitCode.Usage;

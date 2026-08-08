@@ -5,6 +5,7 @@ import { openMigratedDatabase } from '@roleflock/database';
 import { explainFile, explainRun, renderExplanation } from '@roleflock/evidence';
 import { ExitCode } from './exit-codes.js';
 import type { CliIo } from './main.js';
+import { emitRuntimeError, emitUsageError } from './runtime-output.js';
 
 /**
  * `roflock evidence <task>` and `roflock why <task> --file <path>`.
@@ -35,7 +36,7 @@ interface Parsed {
   dataDir?: string;
 }
 
-function parseArgs(args: string[], command: string): Parsed {
+function parseArgs(args: string[], command: 'evidence' | 'why'): Parsed {
   const positional: string[] = [];
   let file: string | undefined;
   let dataDir: string | undefined;
@@ -45,6 +46,7 @@ function parseArgs(args: string[], command: string): Parsed {
     const arg = args[i]!;
     if (arg === '--json') json = true;
     else if (arg === '--file') {
+      if (command !== 'why') throw new Error("--file is only valid for 'roflock why'");
       file = args[i + 1];
       if (file === undefined) throw new Error('--file needs a path');
       i += 1;
@@ -58,6 +60,7 @@ function parseArgs(args: string[], command: string): Parsed {
 
   const taskId = positional[0];
   if (taskId === undefined) throw new Error(`Usage: roflock ${command} <task-id>`);
+  if (positional.length > 1) throw new Error(`roflock ${command} takes one task ID`);
   return {
     taskId,
     json,
@@ -83,17 +86,25 @@ export function runEvidence(args: string[], io: CliIo): number {
   try {
     parsed = parseArgs(args, 'evidence');
   } catch (caught) {
-    io.stderr((caught as Error).message);
-    return ExitCode.Usage;
+    return emitUsageError((caught as Error).message, args, io);
   }
 
   const dataDir = resolveDataDir(parsed.dataDir);
   if (!existsSync(join(dataDir, 'roleflock.db'))) {
-    io.stderr(`No Roflock database at ${dataDir}. Set ROFLOCK_DATA_DIR or pass --data-dir.`);
-    return ExitCode.Config;
+    return emitRuntimeError(
+      new Error(`No Roflock database at ${dataDir}. Set ROFLOCK_DATA_DIR or pass --data-dir.`),
+      io,
+      parsed.json,
+      ExitCode.Config,
+    );
   }
 
-  const explanation = withDatabase(dataDir, (db) => explainRun(db, parsed.taskId));
+  let explanation: ReturnType<typeof explainRun>;
+  try {
+    explanation = withDatabase(dataDir, (db) => explainRun(db, parsed.taskId));
+  } catch (error) {
+    return emitRuntimeError(error, io, parsed.json, ExitCode.Config);
+  }
 
   if (parsed.json) {
     io.stdout(JSON.stringify(explanation, null, 2));
@@ -111,23 +122,30 @@ export function runWhy(args: string[], io: CliIo): number {
   try {
     parsed = parseArgs(args, 'why');
   } catch (caught) {
-    io.stderr((caught as Error).message);
-    return ExitCode.Usage;
+    return emitUsageError((caught as Error).message, args, io);
   }
 
   if (parsed.file === undefined) {
-    io.stderr('Usage: roflock why <task-id> --file <path>');
-    return ExitCode.Usage;
+    return emitUsageError('Usage: roflock why <task-id> --file <path>', args, io);
   }
 
   const dataDir = resolveDataDir(parsed.dataDir);
   if (!existsSync(join(dataDir, 'roleflock.db'))) {
-    io.stderr(`No Roflock database at ${dataDir}. Set ROFLOCK_DATA_DIR or pass --data-dir.`);
-    return ExitCode.Config;
+    return emitRuntimeError(
+      new Error(`No Roflock database at ${dataDir}. Set ROFLOCK_DATA_DIR or pass --data-dir.`),
+      io,
+      parsed.json,
+      ExitCode.Config,
+    );
   }
 
   const file = parsed.file;
-  const touched = withDatabase(dataDir, (db) => explainFile(db, parsed.taskId, file));
+  let touched: ReturnType<typeof explainFile>;
+  try {
+    touched = withDatabase(dataDir, (db) => explainFile(db, parsed.taskId, file));
+  } catch (error) {
+    return emitRuntimeError(error, io, parsed.json, ExitCode.Config);
+  }
 
   if (parsed.json) {
     io.stdout(JSON.stringify({ taskId: parsed.taskId, file, artefacts: touched }, null, 2));

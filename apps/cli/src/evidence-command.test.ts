@@ -105,6 +105,25 @@ describe('roflock evidence', () => {
     expect(result.stderr).toContain('No Roflock database');
   });
 
+  it('keeps JSON failures machine-readable', () => {
+    const result = run([
+      'evidence',
+      'task_1',
+      '--json',
+      '--data-dir',
+      join(tmpdir(), 'roflock-absent'),
+    ]);
+
+    expect(result.code).toBe(ExitCode.Config);
+    expect(JSON.parse(result.stderr)).toMatchObject({ exitCode: ExitCode.Config });
+    expect(result.stdout).toBe('');
+  });
+
+  it('rejects ignored files and extra task IDs', () => {
+    expect(run(['evidence', 'task_1', '--file', 'ignored']).code).toBe(ExitCode.Usage);
+    expect(run(['evidence', 'task_1', 'task_2']).code).toBe(ExitCode.Usage);
+  });
+
   it('rejects being given no task', () => {
     expect(run(['evidence']).code).toBe(ExitCode.Usage);
   });
@@ -117,6 +136,16 @@ describe('roflock why', () => {
 
     expect(result.code).toBe(ExitCode.Usage);
     expect(result.stderr).toContain('--file');
+  });
+
+  it('returns a JSON usage envelope when requested', () => {
+    const result = run(['why', 'task_1', '--json']);
+
+    expect(result.code).toBe(ExitCode.Usage);
+    expect(JSON.parse(result.stderr)).toMatchObject({
+      error: { code: 'USAGE' },
+      exitCode: ExitCode.Usage,
+    });
   });
 
   it('distinguishes no recorded output from no history', () => {

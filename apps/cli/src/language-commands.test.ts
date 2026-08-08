@@ -85,6 +85,14 @@ describe('roflock check', () => {
   it('rejects being given no file', () => {
     expect(run(['check']).code).toBe(ExitCode.Usage);
   });
+
+  it('rejects output options it does not implement', () => {
+    const dir = workspace({ 'demo.roflock': VALID });
+    const result = run(['check', join(dir, 'demo.roflock'), '-o', join(dir, 'ignored')]);
+
+    expect(result.code).toBe(ExitCode.Usage);
+    expect(result.stderr).toContain("Unknown option '-o'");
+  });
 });
 
 describe('roflock compile', () => {

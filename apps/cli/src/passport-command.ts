@@ -7,6 +7,7 @@ import {
   verifySignedChangePassport,
   type PassportVerificationResult,
 } from '@roleflock/change-passport';
+import { ExitCode } from './exit-codes.js';
 
 export interface PassportCliIo {
   stdout(message: string): void;
@@ -37,10 +38,13 @@ export function runPassportCli(args: string[], io: PassportCliIo): number {
     });
     if (parsed.json) io.stdout(JSON.stringify(result, null, 2));
     else io.stdout(renderHuman(result));
-    return integritySucceeded(result) ? 0 : 1;
+    return integritySucceeded(result) ? ExitCode.Ok : ExitCode.RunFailed;
   } catch (error) {
-    io.stderr(error instanceof Error ? error.message : String(error));
-    return 2;
+    const message = error instanceof Error ? error.message : String(error);
+    if (args.includes('--json')) {
+      io.stderr(JSON.stringify({ error: { message, code: 'USAGE' }, exitCode: ExitCode.Usage }));
+    } else io.stderr(message);
+    return ExitCode.Usage;
   }
 }
 

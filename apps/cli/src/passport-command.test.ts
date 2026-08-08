@@ -8,6 +8,7 @@ import {
   type RunnerIdentityStore,
 } from '@roleflock/change-passport';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ExitCode } from './exit-codes.js';
 import { runPassportCli } from './passport-command.js';
 
 const directories: string[] = [];
@@ -37,7 +38,7 @@ describe('roleflock passport verify CLI', () => {
       { stdout: (value) => output.push(value), stderr: (value) => errors.push(value) },
     );
 
-    expect(exitCode).toBe(0);
+    expect(exitCode).toBe(ExitCode.Ok);
     expect(errors).toEqual([]);
     expect(output.join('\n')).toContain('VALID SIGNATURE');
     expect(output.join('\n')).toContain('SUBJECT MATCH');
@@ -70,7 +71,7 @@ describe('roleflock passport verify CLI', () => {
       ],
       { stdout: (value) => output.push(value), stderr: () => {} },
     );
-    expect(exitCode).toBe(1);
+    expect(exitCode).toBe(ExitCode.RunFailed);
     expect(output.join('\n')).toContain('INVALID SIGNATURE');
   });
 
@@ -81,9 +82,23 @@ describe('roleflock passport verify CLI', () => {
       ['passport', 'verify', files.passport, '--identity', files.identity],
       { stdout: (value) => output.push(value), stderr: () => {} },
     );
-    expect(exitCode).toBe(0);
+    expect(exitCode).toBe(ExitCode.Ok);
     expect(output.join('\n')).toContain('POLICY NOT ACCEPTED');
     expect(output.join('\n')).toContain('REVOCATION STATUS: unknown');
+  });
+
+  it('emits the standard JSON usage envelope on JSON errors', () => {
+    const errors: string[] = [];
+    const exitCode = runPassportCli(['passport', 'verify', 'missing.json', '--json'], {
+      stdout: () => {},
+      stderr: (value) => errors.push(value),
+    });
+
+    expect(exitCode).toBe(ExitCode.Usage);
+    expect(JSON.parse(errors.join('\n'))).toMatchObject({
+      error: { code: 'USAGE' },
+      exitCode: ExitCode.Usage,
+    });
   });
 });
 

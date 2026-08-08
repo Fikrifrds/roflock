@@ -42,7 +42,17 @@ describe('roflock CLI', () => {
     expect(contract.schemaVersion).toBe('1.0');
     expect(new Set(contract.commands).size).toBe(contract.commands.length);
     expect(contract.commands).toEqual(
-      expect.arrayContaining(['run', 'status', 'events', 'doctor', 'drivers', 'approvals']),
+      expect.arrayContaining([
+        'run',
+        'status',
+        'events',
+        'doctor',
+        'drivers',
+        'approvals',
+        'evidence',
+        'why',
+        'passport',
+      ]),
     );
     expect(contract.exitCodes).toEqual(ExitCode);
   });

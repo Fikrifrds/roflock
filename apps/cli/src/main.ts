@@ -130,13 +130,14 @@ export function cliAutomationContract() {
       'init',
       'doctor',
       'drivers',
+      'evidence',
+      'why',
+      'passport',
     ],
     nativeMachineOutput: {
       compile: 'canonical Graph IR JSON on stdout unless --out is supplied',
       hash: 'one semantic hash line on stdout',
       render: 'Mermaid text on stdout unless --out is supplied',
-      evidence: 'JSON evidence explanation on stdout',
-      why: 'JSON file provenance on stdout',
     },
     exitCodes: ExitCode,
   } as const;
