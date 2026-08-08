@@ -927,14 +927,37 @@ than being flattened to `interrupted`. ADR-010 is honoured.
 
 ### Not done
 
-| Ticket            | Remaining work                                                                              |
-| ----------------- | ------------------------------------------------------------------------------------------- |
-| RF-EVO-085 (full) | A forced-restart end-to-end through the real daemon, not only the storage contract          |
-| —                 | Switching the orchestrator's SQL writes to read _from_ the projection rather than beside it |
+**R5 is complete.** Every ticket in the phase is either done or recorded as
+already existing.
 
-R5's _safety_ properties — no duplicated billable work, no refreshed repair
-budget, no guess about an unobserved turn — are done and tested. The _modelling_
-work is now largely done too: `RuntimeEvent` gives the five transitions a
+The forced-restart end-to-end (RF-EVO-085) runs against the real daemon: a task
+reaches the plan approval gate, the daemon is killed, a second boots on the same
+data, and the run continues without buying the planners' work again. It measures
+**invocations**, not node runs — a resumed run writes a marker node run for work
+it inherited, so counting rows would call resumption a repeat.
+
+### The strand that test found
+
+`resolveConfirmation` resolved an in-memory waiter and then marked the task
+`running`. After a restart the waiter is gone, so approving recorded the
+decision, claimed the task was running, and left nothing executing —
+permanently, because `running` is a state `/start` refuses. The task could not
+be resumed from the UI at all.
+
+It now sets `paused` when no run is waiting. The existing recovery test had
+asserted the `running` flip and stopped, which is why this survived: it checked
+the state change rather than that anything resumed.
+
+### Known limitation
+
+Resuming past an approval gate re-enters the graph at the reviewer, so the human
+is asked to approve again. This fails toward more oversight rather than less, so
+it is safe, but it is not yet pleasant and is worth fixing when the approval UI
+is revisited in R10.
+
+R5's safety properties — no duplicated billable work, no refreshed repair
+budget, no guess about an unobserved turn — are done and tested. The modelling
+work is done too: `RuntimeEvent` gives the five transitions a
 contract, `reduceGraphRun` folds them deterministically, and the
 walking-skeleton end-to-end projects every run a real orchestrated task
 produced.

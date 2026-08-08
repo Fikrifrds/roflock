@@ -5,7 +5,7 @@ Root agent guidance. Sections 1–17 are the Roflock AI Coding Master Instructio
 
 ## Current phase
 
-**R0 through R4 are complete; R5 is partial.** The audit at
+**R0 through R5 are complete.** The audit at
 [`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md)
 is the authority on what this repository contains. Read it before touching code:
 it supersedes the planning documents wherever they disagree with the checkout,
@@ -37,23 +37,20 @@ CLI distribution and harness interoperability are governed by
 
 ### Next
 
-**Finish R5.** Its safety properties are done — a repair budget survives a
-restart, a billable turn has a stable identity, and an unobserved turn stops the
-run instead of being repeated — and so is most of the modelling:
-`RuntimeEvent` types the five transitions and `reduceGraphRun` folds them
-deterministically.
+**R6 — generic roles and typed artifacts.** Make the language and runtime
+generic without losing coding governance: arbitrary `RoleId`, a `RoleDefinition`
+schema, artifact types with consumes/produces ports, static port validation, and
+a legacy adapter so `ROLE_AUTHORITY_MATRIX` survives as a coding profile.
 
-Two things remain. A forced-restart end-to-end through the real daemon, rather
-than only the storage contract. And the switch itself: runtime events are
-recorded _beside_ the orchestrator's SQL writes so the two can be compared, per
-the plan's "instrument first, then move behaviour behind durable state". Moving
-the orchestrator to read from the projection is the last step, and doing it in
-the same change would have removed the ability to check one against the other.
+Audit §14 risk 15 is the thing R6 removes: `dispatchRole` currently infers
+verifier-versus-planner from graph position. Exit criterion is that a graph can
+use custom roles while every existing planner/executor/verifier authority test
+stays green.
 
-Audit §16 also records what R5 does **not** give you: there is still no way for
-a human to resolve an unknown-outcome invocation. The run says why it stopped,
-but marking a turn "already completed" or "never billed" needs UI and API from
-R10. Until then the only move is starting the task over — safe, but blunt.
+Two smaller debts worth clearing when convenient: the shipped workflow templates
+declare no `authority`, so Role Protocol artifact gates are still unused
+(§15 risk 19); and `workflows/` is located by walking up from the daemon module,
+which will not survive npm packaging (§15 risk 18, RF-DIST-001).
 
 ---
 
