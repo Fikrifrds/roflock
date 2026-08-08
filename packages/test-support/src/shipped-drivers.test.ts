@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { claudeDriver } from '@roleflock/provider-claude';
 import { codexDriver } from '@roleflock/provider-codex';
 import { openAiCompatibleDriver } from '@roleflock/provider-custom';
+import { openCodeDriver } from '@roleflock/provider-opencode';
 import type { AgentDriver } from '@roleflock/provider-core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runDriverConformance } from './driver-conformance.js';
@@ -59,12 +60,23 @@ const CLAUDE_STREAM = [
   '{"type":"result","usage":{"input_tokens":10,"output_tokens":2}}',
 ];
 
+/** OpenCode reports session identity, tools, usage and settlement as JSONL parts. */
+const OPENCODE_STREAM = [
+  '{"type":"step_start","sessionID":"session_conformance","part":{}}',
+  '{"type":"tool_use","sessionID":"session_conformance","part":{"tool":"read","state":{"status":"completed"}}}',
+  '{"type":"text","sessionID":"session_conformance","part":{"text":"ok"}}',
+  '{"type":"step_finish","sessionID":"session_conformance","part":{"reason":"stop","tokens":{"input":10,"output":2},"cost":0.001}}',
+];
+
 const options = {
   request: (overrides = {}) => ({
     invocationKey: 'inv_conformance',
     objective: 'investigate the failing test',
     workspacePath: tmpdir(),
-    permissions: { workspaceWrite: true, network: false },
+    // OpenCode cannot promise a read-only/tool-free turn, so the successful
+    // probe grants command use. Conformance separately replaces this envelope
+    // with a denied-write probe and verifies refusal.
+    permissions: { workspaceWrite: true, network: false, allowCommands: true },
     ...overrides,
   }),
 };
@@ -73,6 +85,7 @@ function shipped(): Array<[string, () => AgentDriver]> {
   return [
     ['codex', () => codexDriver(fakeCli(CODEX_STREAM))],
     ['claude', () => claudeDriver(fakeCli(CLAUDE_STREAM))],
+    ['opencode', () => openCodeDriver({ binary: fakeCli(OPENCODE_STREAM) })],
     [
       'openai-compatible',
       () =>
