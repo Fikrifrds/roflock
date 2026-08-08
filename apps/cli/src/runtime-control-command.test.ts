@@ -80,11 +80,14 @@ describe('runtime control commands', () => {
         status: 409,
       })) as typeof fetch;
     expect(
-      await runControl('pause', ['old_run'], test.io, {
+      await runControl('pause', ['old_run', '--json'], test.io, {
         clientOptions: { dataDir: test.directory, fetch: fetchMock },
       }),
     ).toBe(ExitCode.Blocked);
-    expect(test.stderr).toEqual(['Run is historical']);
+    expect(JSON.parse(test.stderr[0]!)).toEqual({
+      error: { message: 'Run is historical', httpStatus: 409 },
+      exitCode: ExitCode.Blocked,
+    });
   });
 
   it('requires an exact run id', async () => {

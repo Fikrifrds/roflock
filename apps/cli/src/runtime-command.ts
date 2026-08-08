@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { DaemonApiError, DaemonClient, type DaemonClientOptions } from './daemon-client.js';
+import { DaemonClient, type DaemonClientOptions } from './daemon-client.js';
 import { ExitCode } from './exit-codes.js';
 import type { CliIo } from './main.js';
+import { emitRuntimeError, emitUsageError } from './runtime-output.js';
 
 interface RunOptions {
   workflow: string;
@@ -73,16 +74,19 @@ export async function runWorkflow(
   try {
     options = parseRunArgs(args);
   } catch (error) {
-    io.stderr((error as Error).message);
-    return ExitCode.Usage;
+    return emitUsageError((error as Error).message, args, io);
   }
 
   let source: string;
   try {
     source = readFileSync(options.workflow, 'utf8');
   } catch {
-    io.stderr(`Cannot read '${options.workflow}'`);
-    return ExitCode.Config;
+    return emitRuntimeError(
+      new Error(`Cannot read '${options.workflow}'`),
+      io,
+      options.json,
+      ExitCode.Config,
+    );
   }
 
   const client = new DaemonClient({
@@ -110,13 +114,6 @@ export async function runWorkflow(
     }
     return ExitCode.Ok;
   } catch (error) {
-    io.stderr(error instanceof Error ? error.message : 'Failed to start workflow');
-    if (error instanceof DaemonApiError) {
-      if (error.status === 0 || error.status === 401 || error.status === 403)
-        return ExitCode.Config;
-      if (error.status === 409) return ExitCode.Blocked;
-      if (error.status === 422) return ExitCode.Usage;
-    }
-    return ExitCode.Internal;
+    return emitRuntimeError(error, io, options.json);
   }
 }

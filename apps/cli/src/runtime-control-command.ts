@@ -1,6 +1,7 @@
-import { DaemonApiError, DaemonClient, type DaemonClientOptions } from './daemon-client.js';
+import { DaemonClient, type DaemonClientOptions } from './daemon-client.js';
 import { ExitCode } from './exit-codes.js';
 import type { CliIo } from './main.js';
+import { emitRuntimeError, emitUsageError } from './runtime-output.js';
 
 export type RuntimeControl = 'pause' | 'resume' | 'cancel';
 
@@ -63,8 +64,7 @@ export async function runControl(
   try {
     options = parse(args, command);
   } catch (error) {
-    io.stderr((error as Error).message);
-    return ExitCode.Usage;
+    return emitUsageError((error as Error).message, args, io);
   }
   const client = new DaemonClient({
     ...dependencies.clientOptions,
@@ -94,13 +94,6 @@ export async function runControl(
     }
     return ExitCode.Ok;
   } catch (error) {
-    io.stderr(error instanceof Error ? error.message : `Failed to ${command} run`);
-    if (error instanceof DaemonApiError) {
-      if (error.status === 0 || error.status === 401 || error.status === 403)
-        return ExitCode.Config;
-      if (error.status === 404) return ExitCode.Usage;
-      if (error.status === 409) return ExitCode.Blocked;
-    }
-    return ExitCode.Internal;
+    return emitRuntimeError(error, io, options.json);
   }
 }

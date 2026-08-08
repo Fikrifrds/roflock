@@ -1786,3 +1786,25 @@ single-ID approve and reject paths, blocked exit behavior, missing-ID rejection,
 and decision immutability. Focused CLI approval tests pass 5/5; the walking
 skeleton, approval reuse, and restart-recovery set passes 9/9, with daemon and
 CLI typechecks clean.
+
+---
+
+## 35. Public-alpha runtime CLI — JSON and process semantics
+
+RF-CLI-005 makes `--json` and process exit status one automation contract across
+run launch, inspection, events, controls, and approvals. Successful commands
+write only their JSON value to stdout. Usage, connectivity, authentication, API,
+and runtime errors write one JSON object to stderr with `error.message`, optional
+daemon code and HTTP status, plus the exact `exitCode`; scripts never need to
+parse human prose or risk diagnostics contaminating a JSON pipeline.
+
+Run status is state-aware: completed/running is `0`, invalid input or unknown
+identity is `2`, configuration/authentication is `3`, failed/rejected is `4`,
+paused or waiting for a human is `5`, cancelled/stopping or an unclassified
+process interruption is `6`, and interrupted runs with provider, setup, or
+ambiguous external-work detail are `7`. Starting and control commands return
+`0` when accepted; listing or inspecting a pending approval returns `5`.
+
+The output-contract matrix covers every run-state class, daemon start failure,
+HTTP metadata, JSON usage failures, and command-level JSON error wiring. The
+full CLI suite passes 67/67 with typecheck clean.

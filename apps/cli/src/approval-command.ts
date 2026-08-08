@@ -1,6 +1,7 @@
-import { DaemonApiError, DaemonClient, type DaemonClientOptions } from './daemon-client.js';
+import { DaemonClient, type DaemonClientOptions } from './daemon-client.js';
 import { ExitCode } from './exit-codes.js';
 import type { CliIo } from './main.js';
+import { emitRuntimeError, emitUsageError } from './runtime-output.js';
 
 export interface Approval {
   id: string;
@@ -86,16 +87,6 @@ function show(approval: Approval, io: CliIo): void {
   if (approval.destination) io.stdout(`Destination: ${approval.destination}`);
 }
 
-function failure(error: unknown, io: CliIo): number {
-  io.stderr(error instanceof Error ? error.message : 'Approval request failed');
-  if (error instanceof DaemonApiError) {
-    if (error.status === 0 || error.status === 401 || error.status === 403) return ExitCode.Config;
-    if (error.status === 404) return ExitCode.Usage;
-    if (error.status === 409) return ExitCode.Blocked;
-  }
-  return ExitCode.Internal;
-}
-
 export async function runApprovalCommand(
   command: ApprovalCommand,
   args: string[],
@@ -106,8 +97,7 @@ export async function runApprovalCommand(
   try {
     options = parse(command, args);
   } catch (error) {
-    io.stderr((error as Error).message);
-    return ExitCode.Usage;
+    return emitUsageError((error as Error).message, args, io);
   }
   const client = new DaemonClient({
     ...dependencies.clientOptions,
@@ -155,6 +145,6 @@ export async function runApprovalCommand(
     else io.stdout(`Approval ${options.id} ${result.approval.status}.`);
     return ExitCode.Ok;
   } catch (error) {
-    return failure(error, io);
+    return emitRuntimeError(error, io, options.json);
   }
 }

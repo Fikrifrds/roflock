@@ -65,6 +65,7 @@ Other
 Options
   -h, --help                        Show this message
   -v, --version                     Print the Roflock version
+  --json                            Machine-readable runtime output; errors use stderr
 
 Roflock runs entirely on your machine and never requires a Roflock Cloud
 account. Language commands never start a run or touch a repository. Runtime

@@ -98,7 +98,10 @@ describe('roflock run', () => {
 
     expect(code).toBe(ExitCode.Usage);
     expect(output.stdout).toEqual([]);
-    expect(output.stderr).toEqual(['workflow is invalid']);
+    expect(JSON.parse(output.stderr[0]!)).toEqual({
+      error: { message: 'workflow is invalid', httpStatus: 422 },
+      exitCode: ExitCode.Usage,
+    });
   });
 
   it('rejects incomplete arguments before reading daemon credentials', async () => {

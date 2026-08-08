@@ -91,7 +91,7 @@ approvals, shared output semantics, and owned-daemon lifecycle remain below.
 | RF-CLI-002 | complete | `status` and cursor-based `events` query stable authenticated projections from durable run state and event history.                                                         |
 | RF-CLI-003 | complete | Run-scoped `pause`, `resume`, and `cancel` use the existing durable control and truthful AgentDriver interruption contracts.                                                |
 | RF-CLI-004 | complete | Approval list/filter/inspect commands expose exact actions; approve/reject require one explicit pending approval ID.                                                        |
-| RF-CLI-005 | open     | Runtime commands support documented JSON output and exit codes.                                                                                                             |
+| RF-CLI-005 | complete | Every runtime command has machine-readable success/error output and stable state-aware exit-code semantics.                                                                 |
 | RF-CLI-006 | open     | A local daemon lifecycle contract is explicit: connect to an existing daemon or start an owned process without hidden Cloud dependency.                                     |
 
 ---

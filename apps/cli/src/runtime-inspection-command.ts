@@ -1,6 +1,7 @@
-import { DaemonApiError, DaemonClient, type DaemonClientOptions } from './daemon-client.js';
+import { DaemonClient, type DaemonClientOptions } from './daemon-client.js';
 import { ExitCode } from './exit-codes.js';
 import type { CliIo } from './main.js';
+import { emitRuntimeError, emitUsageError, exitCodeForRun } from './runtime-output.js';
 
 export interface RunProjection {
   id: string;
@@ -88,15 +89,6 @@ function clientFor(
   });
 }
 
-function failure(error: unknown, io: CliIo): number {
-  io.stderr(error instanceof Error ? error.message : 'Daemon request failed');
-  if (error instanceof DaemonApiError) {
-    if (error.status === 0 || error.status === 401 || error.status === 403) return ExitCode.Config;
-    if (error.status === 404) return ExitCode.Usage;
-  }
-  return ExitCode.Internal;
-}
-
 export async function runStatus(
   args: string[],
   io: CliIo,
@@ -106,8 +98,7 @@ export async function runStatus(
   try {
     options = parse(args, 'status');
   } catch (error) {
-    io.stderr((error as Error).message);
-    return ExitCode.Usage;
+    return emitUsageError((error as Error).message, args, io);
   }
   try {
     const projection = await clientFor(options, dependencies).request<RunProjection>(
@@ -129,9 +120,9 @@ export async function runStatus(
         );
       }
     }
-    return ExitCode.Ok;
+    return exitCodeForRun(projection.state, projection.blockedReason);
   } catch (error) {
-    return failure(error, io);
+    return emitRuntimeError(error, io, options.json);
   }
 }
 
@@ -144,8 +135,7 @@ export async function runEvents(
   try {
     options = parse(args, 'events');
   } catch (error) {
-    io.stderr((error as Error).message);
-    return ExitCode.Usage;
+    return emitUsageError((error as Error).message, args, io);
   }
   try {
     const runEvents = await clientFor(options, dependencies).request<RunEvent[]>(
@@ -164,6 +154,6 @@ export async function runEvents(
     }
     return ExitCode.Ok;
   } catch (error) {
-    return failure(error, io);
+    return emitRuntimeError(error, io, options.json);
   }
 }
