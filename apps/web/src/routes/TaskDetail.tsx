@@ -11,6 +11,7 @@ import { VerificationVerdictPanel } from '../components/VerificationVerdictPanel
 import { ChangePassportPanel } from '../components/ChangePassportPanel.js';
 import { TaskHandoffPanel } from '../components/TaskHandoffPanel.js';
 import { GraphRunView } from '../components/GraphRunView.js';
+import { WorkflowSource } from '../components/WorkflowSource.js';
 import { LiveTurn } from '../components/LiveTurn.js';
 import { TaskWorkspaceHeader } from '../components/TaskWorkspaceHeader.js';
 import { WorkspaceChanges } from '../components/WorkspaceChanges.js';
@@ -457,6 +458,14 @@ export function TaskDetail() {
                 </summary>
                 <GraphRunView taskId={id} execution={execution} />
               </details>
+
+              {/* The workflow itself, beside the graph it compiles to. Added
+                  alongside the operational run view rather than replacing it:
+                  GraphRunView carries provider, model and attempt detail this
+                  does not, and Stream I is explicit that working operational
+                  screens are not rebuilt before the shared contracts are
+                  proven. */}
+              <WorkflowSource taskId={id} />
 
               <LiveTurn
                 execution={execution}

@@ -37,6 +37,14 @@ export interface RegisteredTemplate {
   graph: WorkflowGraph;
   /** Present for a compiled template; absent for a hard-coded built-in. */
   ir?: GraphIR;
+  /**
+   * The `.roflock` text this was compiled from.
+   *
+   * Kept so Studio can show the workflow a run is executing, rather than a
+   * reconstruction of it. A regenerated source would be a second rendering of
+   * the same graph and could disagree with the file on disk.
+   */
+  source?: string;
 }
 
 const registry = new Map<string, RegisteredTemplate>();
@@ -64,6 +72,11 @@ export function registeredWorkflowTemplates(): readonly WorkflowGraph[] {
  */
 export function registeredWorkflowIr(mode: string): GraphIR | undefined {
   return registry.get(parseGraphVersionId(mode).mode)?.ir;
+}
+
+/** The `.roflock` text a template was compiled from, when there is one. */
+export function registeredWorkflowSource(mode: string): string | undefined {
+  return registry.get(parseGraphVersionId(mode).mode)?.source;
 }
 
 /**
@@ -98,7 +111,9 @@ export function resolveWorkflowGraph(modeOrVersion: string): WorkflowGraph {
  * problem worth reporting, not a reason to start the daemon with a silently
  * shorter list of workflows.
  */
-export function buildWorkflowTemplates(sources: ReadonlyArray<{ id: string; ir: GraphIR }>): {
+export function buildWorkflowTemplates(
+  sources: ReadonlyArray<{ id: string; ir: GraphIR; source?: string }>,
+): {
   templates: RegisteredTemplate[];
   failures: Array<{ id: string; reasons: string[] }>;
 } {
@@ -107,8 +122,15 @@ export function buildWorkflowTemplates(sources: ReadonlyArray<{ id: string; ir: 
 
   for (const source of sources) {
     const bridged = graphIrToWorkflowGraph(source.ir);
-    if (bridged.graph) templates.push({ graph: bridged.graph, ir: source.ir });
-    else failures.push({ id: source.id, reasons: bridged.diagnostics.map((d) => d.message) });
+    if (bridged.graph) {
+      templates.push({
+        graph: bridged.graph,
+        ir: source.ir,
+        ...(source.source === undefined ? {} : { source: source.source }),
+      });
+    } else {
+      failures.push({ id: source.id, reasons: bridged.diagnostics.map((d) => d.message) });
+    }
   }
 
   return { templates, failures };

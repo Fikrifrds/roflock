@@ -3,8 +3,8 @@ import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { ActiveExecution, Task } from '@roleflock/contracts';
-import { registeredWorkflowIr } from '@roleflock/graph-core';
-import { layoutGraph } from '@roleflock/graph-ui';
+import { registeredWorkflowIr, registeredWorkflowSource } from '@roleflock/graph-core';
+import { layoutGraph, toSvg } from '@roleflock/graph-ui';
 import {
   AuditRepository,
   ApprovalGrantRepository,
@@ -1525,7 +1525,13 @@ export function registerApi(
 
     return {
       graphVersionId: graph.version,
+      // The source as it is on disk, not a reconstruction — a regenerated one
+      // would be a second rendering of the same graph and could disagree with
+      // the file the operator is editing.
+      source: registeredWorkflowSource(graph.version) ?? null,
+      semanticHash: ir.workflow.semanticHash ?? null,
       layout: layoutGraph(ir, { state }),
+      svg: toSvg(layoutGraph(ir, { state })),
     };
   });
 

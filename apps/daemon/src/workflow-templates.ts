@@ -52,14 +52,19 @@ export function loadWorkflowTemplates(directory?: string): TemplateLoadResult {
     return { loaded: [], failures: [] };
   }
 
-  const sources: Array<{ id: string; ir: NonNullable<ReturnType<typeof compile>['ir']> }> = [];
+  const sources: Array<{
+    id: string;
+    ir: NonNullable<ReturnType<typeof compile>['ir']>;
+    source: string;
+  }> = [];
   const failures: Array<{ id: string; reasons: string[] }> = [];
 
   for (const entry of readdirSync(root).sort()) {
     if (!entry.endsWith(WORKFLOW_EXTENSION)) continue;
     const path = resolve(root, entry);
     const id = entry.slice(0, -WORKFLOW_EXTENSION.length);
-    const compiled = compile(readFileSync(path, 'utf8'), { uri: path });
+    const text = readFileSync(path, 'utf8');
+    const compiled = compile(text, { uri: path });
     if (!compiled.ir) {
       failures.push({
         id,
@@ -69,7 +74,7 @@ export function loadWorkflowTemplates(directory?: string): TemplateLoadResult {
       });
       continue;
     }
-    sources.push({ id, ir: compiled.ir });
+    sources.push({ id, ir: compiled.ir, source: text });
   }
 
   const built = buildWorkflowTemplates(sources);
