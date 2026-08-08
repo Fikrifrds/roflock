@@ -648,6 +648,15 @@ importers:
         specifier: workspace:*
         version: link:../provider-core
     devDependencies:
+      '@roleflock/provider-claude':
+        specifier: workspace:*
+        version: link:../provider-claude
+      '@roleflock/provider-codex':
+        specifier: workspace:*
+        version: link:../provider-codex
+      '@roleflock/provider-custom':
+        specifier: workspace:*
+        version: link:../provider-custom
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
