@@ -45,8 +45,9 @@ These findings take precedence over milestone completion claims.
 | RF-EVO-184 | complete | Production role turns execute through `AgentDriver.start`; adapters remain only for compatibility metadata/writer capability checks. Exact path/command ceilings, lifecycle PIDs, heartbeat liveness, usage, and the stable invocation key survive the seam.       |
 | RF-EVO-185 | complete | Migration 036 persists driver/session/resume and interruption evidence. Known later attempts resume through the selected driver; ambiguous turns remain blocked. Task-specific stop status and control responses use the weakest active selected-driver guarantee. |
 | RF-EVO-186 | complete | API-created tasks from two revisions of one workflow keep distinct source, executable graph, semantic hash, and integrity hash despite sharing the compatibility version; the earlier task remains pinned after registry mutation.                                 |
+| RF-EVO-187 | complete | An explicit authority profile that the compatibility runtime cannot enforce now fails bridging; it can no longer degrade silently into an ungated role.                                                                                                            |
 
-The implementation order is 181 → 182 → 183 → 184 → 185 → 186. Each ticket
+The implementation order is 181 → 182 → 183 → 184 → 185 → 186 → 187. Each ticket
 must preserve the single `runGraph` runtime and pass its targeted tests before a
 separate commit.
 

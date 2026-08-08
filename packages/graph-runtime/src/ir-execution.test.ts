@@ -346,6 +346,19 @@ describe('executing compiled .roflock through runGraph', () => {
 });
 
 describe('the bridge fails closed', () => {
+  it('rejects an authority profile the runtime cannot enforce', () => {
+    const { bridged } = compileToRuntimeGraph(
+      LINEAR.replace('role implementer { write }', 'role implementer { write authority custom }'),
+    );
+
+    expect(bridged.graph).toBeUndefined();
+    expect(
+      bridged.diagnostics.some((d) =>
+        d.message.includes("authority profile 'custom', which the current runtime cannot enforce"),
+      ),
+    ).toBe(true);
+  });
+
   it('rejects custom human decisions the runtime cannot represent', () => {
     const { bridged } = compileToRuntimeGraph(
       LINEAR.replace('human Accept', 'human Accept { decisions ship, revise }'),

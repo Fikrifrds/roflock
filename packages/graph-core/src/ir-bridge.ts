@@ -82,6 +82,18 @@ function authorityProfile(node: IrNode, ir: GraphIR): RoleId | undefined {
   return profile !== undefined && LEGACY_ROLE_IDS.has(profile) ? (profile as RoleId) : undefined;
 }
 
+/**
+ * An explicit authority reference is a security claim, not decorative metadata.
+ * The compatibility runtime can currently enforce only the shipped coding Role
+ * Protocol profiles, so every other reference must stop bridging instead of
+ * quietly producing an ungated node.
+ */
+function unsupportedAuthorityProfile(node: IrNode, ir: GraphIR): string | undefined {
+  const role = ir.roles.find((candidate) => candidate.id === node.roleRef);
+  const profile = role?.permissionProfileRef;
+  return profile !== undefined && !LEGACY_ROLE_IDS.has(profile) ? profile : undefined;
+}
+
 function objectiveOf(node: IrNode): string | undefined {
   if (node.kind === 'agent') return node.agent.objective;
   if (node.kind === 'model_call') return node.modelCall.objective;
@@ -276,6 +288,16 @@ export function graphIrToWorkflowGraph(ir: GraphIR): BridgeResult {
 
   const nodes: GraphNode[] = [];
   for (const node of ir.nodes) {
+    const unsupportedAuthority = unsupportedAuthorityProfile(node, ir);
+    if (unsupportedAuthority !== undefined) {
+      diagnostics.push(
+        error(
+          DiagnosticCode.UnknownRole,
+          `Node '${node.id}' requests authority profile '${unsupportedAuthority}', which the current runtime cannot enforce. Supported coding profiles: ${[...LEGACY_ROLE_IDS].join(', ')}.`,
+        ),
+      );
+      continue;
+    }
     if (node.timeout !== undefined) {
       diagnostics.push(
         error(
