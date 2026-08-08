@@ -1349,59 +1349,42 @@ R9 is complete.
 
 ---
 
-## 22. R10 progress — Studio (not started)
+## 22. R10 progress — Studio (partial)
 
-Studio is the remaining phase. What it needs from below is now in place:
+### The shared diagram contract (RF-EVO-170, RF-EVO-172)
 
-- a browser-safe compiler and hash (§21);
-- a shared layout model already proven against the real workflows (§21), so the
-  Code, Diagram and Run views draw the same graph the CLI does;
-- a runtime history that projects deterministically (§16), so the Run view reads
-  a projection rather than inventing its own state;
-- an evidence chain that names its gaps (§20), so the Evidence view cannot
-  present an incomplete run as a complete one.
+A real blocker had to be removed first: **the bridge is one-way.** It lowers
+Graph IR into a `WorkflowGraph` and the IR is not recoverable from the result, so
+the daemon had nothing to lay out. A Studio diagram would have had to compute
+positions from the runtime graph — a second implementation, which is exactly the
+divergence `graph-ui` exists to prevent.
 
-The existing operational UI in `apps/web` is untouched and must stay working
-while Studio is built around it, per the migration plan's Stream I.
+The template registry now keeps both, and `/api/tasks/:id/diagram` serves the
+shared layout with live node state overlaid: the same ranks, badges and loop
+budget the CLI prints and the Playground draws.
 
-### Closed since it was recorded
+It **refuses** for a task pinned to a hard-coded template rather than improvising.
+Those have no IR, and laying one out anyway would mean guessing at what the run
+actually does. A 409 that explains itself beats a diagram nobody can trust.
 
-Risk 18 is closed by RF-DIST-001. Its failure mode was the reason to fix it
-before publish rather than at it: a packaged daemon would have found no
-templates, fallen back to the hard-coded graphs, and said nothing — everything
-appearing to work while the compiled workflows R4 made the source of truth went
-silently unused.
+### Deliberately not done
 
----
+`apps/web`'s `GraphRunView` — 582 lines of working operational UI, with provider
+and model display, attempt counts and failure routes — is untouched. The migration
+plan's Stream I is explicit that working operational screens are not rebuilt until
+the shared contracts are ready. This is the contract; adopting it is a separate
+change with its own review, and doing both at once would mean a rewrite whose
+regressions nobody could isolate.
 
-## 23. Why the shipped templates declare no `authority`
+The remaining Studio work (RF-EVO-171, 173..179) is UI: the Code and Run panes,
+the Evidence view, approval inbox integration, driver and permission display,
+pause/stop truthfulness in the interface, and reconnect handling. Everything
+underneath is in place and tested:
 
-Recorded as a risk in §15 and left open through R6, on the assumption it was a
-tightening waiting for a fixture. Investigation shows it is not, and the risk is
-closed as **deliberate** rather than pending.
-
-Role Protocol authority gates require specific input artifacts:
-
-```text
-planner    change_contract
-executor   change_contract, execution_plan, verification_specification
-verifier   change_contract, execution_plan, verification_specification,
-           execution_report, test_attestation
-```
-
-The `direct` workflow is `writer → test → accept`. It has **no planner node at
-all** — that is the entire point of the smallest-sufficient path. It can never
-produce an `execution_plan`, so giving its writer `authority executor` would
-block the workflow on every run, permanently.
-
-So authority is not a flag that can be switched on across the templates. It
-presumes the assurance pipeline's artifacts, which the lighter workflows
-deliberately do not produce. Applying it means deciding, per workflow, whether
-that workflow is _supposed_ to carry a plan and a verification specification —
-a product decision about what each mode promises, not a migration step.
-
-What is available today, and is tested: a workflow that wants Role Protocol
-enforcement declares `authority <profile>` on the role, and the gate fires before
-any work is paid for (§17). The mechanism is complete and opt-in; only the
-question of which shipped workflows should opt in remains, and that belongs with
-whoever decides what Direct and Fast are for.
+| Studio needs             | Where it already exists                        |
+| ------------------------ | ---------------------------------------------- |
+| One graph model          | `graph-ui`, served at `/api/tasks/:id/diagram` |
+| Browser-safe compiler    | §21                                            |
+| Deterministic run state  | §16 — `loadGraphRun` projects a run's history  |
+| Evidence that names gaps | §20 — `explainRun`                             |
+| Truthful cancellation    | §18 — `stopIsConfirmable`                      |

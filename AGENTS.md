@@ -5,7 +5,7 @@ Root agent guidance. Sections 1–17 are the Roflock AI Coding Master Instructio
 
 ## Current phase
 
-**R0 through R6 and R8 are complete; R7 and R9 are partial.** Audit §19 has the phase-by-phase picture. The audit at
+**R0 through R9 are complete; R10 is partial.** Audit §19 has the phase-by-phase picture, §22 what Studio still needs. The audit at
 [`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md)
 is the authority on what this repository contains. Read it before touching code:
 it supersedes the planning documents wherever they disagree with the checkout,
