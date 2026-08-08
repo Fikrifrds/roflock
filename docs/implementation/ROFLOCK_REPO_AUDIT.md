@@ -1180,12 +1180,29 @@ across block boundaries and multi-byte UTF-8, and canonical-JSON agreement with
 the shared implementation in `contracts`. `examples/bugfix.roflock` still hashes
 to `sha256:4129e2ba…`, exactly as before the swap.
 
+### Shared rendering model (RF-EVO-151, RF-EVO-155)
+
+`packages/graph-ui` projects Graph IR into something drawable, browser-safe and
+DOM-free. It computes _what_ to draw, never how — no measurement, no styling, no
+framework — which is the only reason a diagram can be tested at all, and testing
+it matters because one that quietly omits a failure route misrepresents a
+workflow's safety.
+
+Ranking is longest-path, so a node is never drawn above something it depends on.
+Declaration order breaks ties, so the same document always draws identically; a
+layout that shifted between renders would be useless for spotting what changed.
+
+`roflock render` completes the CLI surface RFC-001 §29 describes, emitting
+Mermaid so one diagram works in a terminal, a README, a pull request and the
+docs without any of them needing a renderer Roflock ships.
+
 ### Not done
 
-The Playground itself — shell, editor, live diagnostics, graph rendering,
-examples, simulation, share links (RF-EVO-151..159). That is a web application,
-not a change to the spine, and it now has everything it needs from the packages
-below it.
+The Playground application itself — shell, editor, live diagnostics, canvas,
+examples, simulation, share links (RF-EVO-152/153/154/156/157/158/159). That is
+a web application, not a change to the spine, and it now has everything it needs
+from the packages below it: a browser-safe compiler, a browser-safe hash, and a
+shared layout model already proven against real workflows.
 
 One constraint it must honour, from the PRD and the distribution plan: the
 public Playground gets no shell, filesystem, credential or agent-process access.
