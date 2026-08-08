@@ -24,15 +24,40 @@ afterEach(() => {
   while (directories.length > 0) rmSync(directories.pop()!, { recursive: true, force: true });
 });
 
-/** A binary that exits cleanly and prints nothing useful, like an idle CLI. */
-function fakeCli(): string {
+/**
+ * A stand-in binary that emits what the real CLI emits.
+ *
+ * A fake that prints nothing would let a driver pass conformance while claiming
+ * capabilities its real counterpart delivers and the fake never exercises. These
+ * mirror the streams observed from the installed CLIs.
+ */
+function fakeCli(stdoutLines: readonly string[] = []): string {
   const directory = mkdtempSync(join(tmpdir(), 'roflock-fake-cli-'));
   directories.push(directory);
   const path = join(directory, 'fake-cli');
-  writeFileSync(path, '#!/bin/sh\nexit 0\n');
+  writeFileSync(
+    path,
+    [
+      '#!/bin/sh',
+      'if [ "$1" = "--version" ]; then echo 1.0.0; exit 0; fi',
+      ...stdoutLines.map((line) => `printf '%s\\n' ${JSON.stringify(line)}`),
+      'exit 0',
+    ].join('\n'),
+  );
   chmodSync(path, 0o755);
   return path;
 }
+
+/** Codex reports usage nested under `usage`, per its `--json` stream. */
+const CODEX_STREAM = [
+  '{"type":"item.completed","item":{"text":"ok"},"usage":{"input_tokens":10,"output_tokens":2}}',
+];
+
+/** Claude reports usage on its result event. */
+const CLAUDE_STREAM = [
+  '{"type":"assistant","message":{"content":[{"type":"text","text":"ok"}]}}',
+  '{"type":"result","usage":{"input_tokens":10,"output_tokens":2}}',
+];
 
 const options = {
   request: (overrides = {}) => ({
@@ -46,8 +71,8 @@ const options = {
 
 function shipped(): Array<[string, () => AgentDriver]> {
   return [
-    ['codex', () => codexDriver(fakeCli())],
-    ['claude', () => claudeDriver(fakeCli())],
+    ['codex', () => codexDriver(fakeCli(CODEX_STREAM))],
+    ['claude', () => claudeDriver(fakeCli(CLAUDE_STREAM))],
     [
       'openai-compatible',
       () =>

@@ -223,6 +223,10 @@ export class CodexAdapter implements ProviderAdapter {
  */
 export function codexDriver(...args: ConstructorParameters<typeof CodexAdapter>): AgentDriver {
   return providerDriver(new CodexAdapter(...args), {
-    capabilities: { toolEvents: true, structuredOutput: false },
+    // `usageReporting` is claimed because the adapter maps Codex's reported
+    // usage — but only when Codex sends it. Conformance requires a usage event
+    // on the probe turn, so if a Codex release stops reporting, this claim fails
+    // loudly rather than the ledger quietly recording nothing.
+    capabilities: { toolEvents: true, structuredOutput: false, usageReporting: true },
   });
 }

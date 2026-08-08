@@ -66,8 +66,17 @@ export async function runDriverConformance(
   }
 
   // --- Claims match behaviour ----------------------------------------------
-  if (capabilities.usageReporting && !events.some((event) => event.type === 'usage')) {
-    fail('usage/claimed-not-emitted', 'claims usage reporting but emitted no usage event');
+  const outcome = events.find((event) => event.type === 'settled');
+  const succeeded = outcome?.type === 'settled' && outcome.outcome === 'completed';
+  if (capabilities.usageReporting && succeeded && !events.some((event) => event.type === 'usage')) {
+    // Only checked on a turn that succeeded. A refused or failed turn — an
+    // exhausted quota, an unreachable endpoint — genuinely has no usage to
+    // report, and demanding one would make an honest failure look like a lying
+    // capability.
+    fail(
+      'usage/claimed-not-emitted',
+      'claims usage reporting but a successful turn emitted no usage event',
+    );
   }
   if (capabilities.sessions) {
     const started = events.find((event) => event.type === 'started');

@@ -201,5 +201,10 @@ export class ClaudeAdapter implements ProviderAdapter {
  * inherits that rather than restating it.
  */
 export function claudeDriver(...args: ConstructorParameters<typeof ClaudeAdapter>): AgentDriver {
-  return providerDriver(new ClaudeAdapter(...args));
+  return providerDriver(new ClaudeAdapter(...args), {
+    // Verified against the installed CLI: a turn emits token counts. Claiming
+    // this is what lets the usage ledger record real numbers rather than
+    // treating the turn as unmeasured.
+    capabilities: { usageReporting: true },
+  });
 }
