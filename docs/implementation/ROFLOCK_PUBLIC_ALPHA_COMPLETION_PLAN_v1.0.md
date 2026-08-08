@@ -57,21 +57,21 @@ separate commit.
 The approved source for this stream is
 `ROFLOCK_CLI_DISTRIBUTION_AND_HARNESS_INTEGRATION_v1.0.md`.
 
-| Ticket      | State at baseline | Evidence or remaining work                                                                                        |
-| ----------- | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
-| RF-DIST-001 | partial           | A CLI workspace package exists, but its runtime dependency closure is not publishable as an independent artifact. |
-| RF-DIST-002 | partial           | `roflock` source-tree executable exists; the package-relative `bin` path is incorrect.                            |
-| RF-DIST-003 | partial           | Help/version are tested in the workspace, not from an installed tarball on all target OSes.                       |
-| RF-DIST-004 | open              | Verify tarball contents; current pack output omits required `dist` files.                                         |
-| RF-DIST-005 | open              | Install the tarball in a clean fixture and run version/help/check.                                                |
-| RF-DIST-006 | open              | Implement truthful `roflock doctor`.                                                                              |
-| RF-DIST-007 | open              | Implement `roflock drivers` and capability reporting.                                                             |
-| RF-DIST-008 | open              | Distinguish installed, detected, authenticated, and runnable.                                                     |
-| RF-DIST-009 | open              | Implement idempotent, non-destructive `roflock init`.                                                             |
-| RF-DIST-010 | open              | Define and test machine-readable output for automation commands.                                                  |
-| RF-DIST-011 | partial           | Exit constants exist; command-level mapping and public documentation are incomplete.                              |
-| RF-DIST-012 | open              | Add trusted-publishing-ready npm workflow with pack/install gates and no secret-bearing dry run.                  |
-| RF-DIST-013 | open              | Add and execute the alpha release checklist; actual publish remains an operator action.                           |
+| Ticket      | State    | Evidence or remaining work                                                                                                                                            |
+| ----------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RF-DIST-001 | complete | The public `roflock` package bundles every internal workspace dependency and carries only Fastify plus `better-sqlite3` in its install closure.                       |
+| RF-DIST-002 | complete | Package-relative `roflock` and deprecated `roleflock` bins resolve correctly; the installed CLI locates its bundled daemon from a shared output chunk.                |
+| RF-DIST-003 | partial  | Version/help/check pass from a clean installed tarball on macOS; the Linux and Windows matrix remains RF-DIST-012 work.                                               |
+| RF-DIST-004 | complete | `npm pack` produces a 30-entry, 726,766-byte tarball with bins, runtime chunks, daemon, five workflows, README, license, and no private runtime/workspace dependency. |
+| RF-DIST-005 | complete | A fresh npm install outside the monorepo passed version/help/check and ownership-proven daemon start/status/stop on port 4332; the reproducible CI gate lands in 012. |
+| RF-DIST-006 | open     | Implement truthful `roflock doctor`.                                                                                                                                  |
+| RF-DIST-007 | open     | Implement `roflock drivers` and capability reporting.                                                                                                                 |
+| RF-DIST-008 | open     | Distinguish installed, detected, authenticated, and runnable.                                                                                                         |
+| RF-DIST-009 | open     | Implement idempotent, non-destructive `roflock init`.                                                                                                                 |
+| RF-DIST-010 | open     | Define and test machine-readable output for automation commands.                                                                                                      |
+| RF-DIST-011 | partial  | Exit constants exist; command-level mapping and public documentation are incomplete.                                                                                  |
+| RF-DIST-012 | open     | Add trusted-publishing-ready npm workflow with pack/install gates and no secret-bearing dry run.                                                                      |
+| RF-DIST-013 | open     | Add and execute the alpha release checklist; actual publish remains an operator action.                                                                               |
 
 The package strategy must be decided from a clean install, not from workspace
 symlinks. Internal packages may be published together or bundled into the CLI,

@@ -85,7 +85,12 @@ function writeOwner(dataDir: string, owner: OwnerRecord): void {
 
 function defaultEntry(env: NodeJS.ProcessEnv): string {
   if (env.ROFLOCK_DAEMON_ENTRY) return env.ROFLOCK_DAEMON_ENTRY;
-  return fileURLToPath(new URL('../../daemon/dist/index.js', import.meta.url));
+  const candidates = [
+    fileURLToPath(new URL('../daemon/index.js', import.meta.url)),
+    fileURLToPath(new URL('./daemon/index.js', import.meta.url)),
+    fileURLToPath(new URL('../../daemon/dist/index.js', import.meta.url)),
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0]!;
 }
 
 function defaultSpawn(input: { entry: string; env: NodeJS.ProcessEnv; logFile: string }) {

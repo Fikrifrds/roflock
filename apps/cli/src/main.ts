@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { runApprovalCommand } from './approval-command.js';
 import { runDaemonCommand } from './daemon-command.js';
 import { ExitCode } from './exit-codes.js';
@@ -17,13 +17,17 @@ export interface CliIo {
 /**
  * Resolved from the package manifest rather than a duplicated constant, so
  * `roflock --version` cannot drift from the artifact a user actually installed.
- * `src/` and `dist/` sit at the same depth, so one path works for both the
- * compiled binary and the tests.
+ * Source tests load the workspace manifest while the bundled executable loads
+ * the package-root manifest from its shared chunk location.
  */
 export function cliVersion(): string {
-  const manifest = JSON.parse(
-    readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
-  ) as { version?: string };
+  const candidates = [
+    new URL('../package.json', import.meta.url),
+    new URL('../../package.json', import.meta.url),
+  ];
+  const manifestUrl = candidates.find((candidate) => existsSync(candidate));
+  if (!manifestUrl) return '0.0.0';
+  const manifest = JSON.parse(readFileSync(manifestUrl, 'utf8')) as { version?: string };
   return manifest.version ?? '0.0.0';
 }
 

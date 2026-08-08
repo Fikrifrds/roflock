@@ -2,7 +2,16 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "@roleflock/change-passport": ["../../packages/change-passport/dist/index.d.ts"],
+      "@roleflock/database": ["../../packages/database/dist/index.d.ts"],
+      "@roleflock/evidence": ["../../packages/evidence/dist/index.d.ts"],
+      "@roleflock/graph-ir": ["../../packages/graph-ir/dist/index.d.ts"],
+      "@roleflock/graph-ui": ["../../packages/graph-ui/dist/index.d.ts"],
+      "@roleflock/language": ["../../packages/language/dist/index.d.ts"]
+    }
   },
   "include": ["src"],
   "references": [{ "path": "../../packages/change-passport" }]

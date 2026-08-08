@@ -41,25 +41,22 @@ importers:
 
   apps/cli:
     dependencies:
-      '@roleflock/change-passport':
-        specifier: workspace:*
-        version: link:../../packages/change-passport
-      '@roleflock/database':
-        specifier: workspace:*
-        version: link:../../packages/database
-      '@roleflock/evidence':
-        specifier: workspace:*
-        version: link:../../packages/evidence
-      '@roleflock/graph-ir':
-        specifier: workspace:*
-        version: link:../../packages/graph-ir
-      '@roleflock/graph-ui':
-        specifier: workspace:*
-        version: link:../../packages/graph-ui
-      '@roleflock/language':
-        specifier: workspace:*
-        version: link:../../packages/language
+      '@fastify/cookie':
+        specifier: ^11.0.2
+        version: 11.1.2
+      '@fastify/static':
+        specifier: ^8.1.1
+        version: 8.3.0
+      better-sqlite3:
+        specifier: ^11.10.0
+        version: 11.10.0
+      fastify:
+        specifier: ^5.2.1
+        version: 5.10.0
     devDependencies:
+      esbuild:
+        specifier: ^0.25.12
+        version: 0.25.12
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
