@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { ExitCode } from './exit-codes.js';
-import { cliVersion, runCli } from './main.js';
+import { cliAutomationContract, cliVersion, runCli } from './main.js';
 
 function run(argv: string[]) {
   const stdout: string[] = [];
@@ -30,6 +30,29 @@ describe('roflock CLI', () => {
 
     expect(result.code).toBe(ExitCode.Ok);
     expect(result.stdout).toContain('Usage');
+  });
+
+  it('publishes a versioned JSON automation contract', () => {
+    const result = run(['help', '--json']);
+    const contract = JSON.parse(result.stdout) as ReturnType<typeof cliAutomationContract>;
+
+    expect(result.code).toBe(ExitCode.Ok);
+    expect(result.stderr).toBe('');
+    expect(contract).toEqual(cliAutomationContract());
+    expect(contract.schemaVersion).toBe('1.0');
+    expect(new Set(contract.commands).size).toBe(contract.commands.length);
+    expect(contract.commands).toEqual(
+      expect.arrayContaining(['run', 'status', 'events', 'doctor', 'drivers', 'approvals']),
+    );
+    expect(contract.exitCodes).toEqual(ExitCode);
+  });
+
+  it('rejects unknown help options instead of silently changing output', () => {
+    const result = run(['help', '--yaml']);
+
+    expect(result.code).toBe(ExitCode.Usage);
+    expect(result.stdout).toBe('');
+    expect(result.stderr).toContain('help [--json]');
   });
 
   it.each(['--version', '-v', 'version'])('reports the package version via %s', (flag) => {

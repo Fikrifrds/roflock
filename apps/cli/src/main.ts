@@ -77,7 +77,7 @@ Evidence
   passport verify <passport.json>   Verify a signed Change Passport offline
 
 Other
-  help                              Show this message
+  help [--json]                     Show text help or the automation contract
   version                           Print the Roflock version
 
 Options
@@ -99,6 +99,50 @@ Exit codes
 Docs: https://github.com/Fikrifrds/roflock`;
 
 /**
+ * Discoverable machine-output contract for shell tools and CI wrappers.
+ *
+ * Success payloads stay command-specific so adding a field does not force an
+ * artificial universal envelope. The stream and error rules are universal and
+ * versioned here; changing an existing field's meaning requires a new schema.
+ */
+export function cliAutomationContract() {
+  return {
+    schemaVersion: '1.0',
+    product: 'Roflock',
+    version: cliVersion(),
+    jsonOption: '--json',
+    streams: {
+      success: 'one JSON document on stdout; diagnostics/progress never precede it',
+      error: 'one JSON error document on stderr containing error and exitCode',
+    },
+    commands: [
+      'run',
+      'status',
+      'events',
+      'pause',
+      'resume',
+      'cancel',
+      'approvals',
+      'approval',
+      'approve',
+      'reject',
+      'daemon',
+      'init',
+      'doctor',
+      'drivers',
+    ],
+    nativeMachineOutput: {
+      compile: 'canonical Graph IR JSON on stdout unless --out is supplied',
+      hash: 'one semantic hash line on stdout',
+      render: 'Mermaid text on stdout unless --out is supplied',
+      evidence: 'JSON evidence explanation on stdout',
+      why: 'JSON file provenance on stdout',
+    },
+    exitCodes: ExitCode,
+  } as const;
+}
+
+/**
  * Dispatches one CLI invocation and returns the process exit code.
  *
  * Pure with respect to the process: it takes argv and an IO sink and returns a
@@ -108,6 +152,14 @@ export function runCli(argv: string[], io: CliIo): number {
   const [command, ...rest] = argv;
 
   if (command === undefined || command === '--help' || command === '-h' || command === 'help') {
+    if (rest.length === 1 && rest[0] === '--json') {
+      io.stdout(JSON.stringify(cliAutomationContract()));
+      return ExitCode.Ok;
+    }
+    if (rest.length > 0) {
+      io.stderr(`Usage: roflock help [--json]`);
+      return ExitCode.Usage;
+    }
     io.stdout(HELP);
     return ExitCode.Ok;
   }
