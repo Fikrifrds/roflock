@@ -1,69 +1,74 @@
-# Security Policy
+# Security policy
 
-## Reporting a vulnerability
+## Report privately
 
-Report suspected vulnerabilities privately. Do **not** open a public issue for
-anything that could be exploited before a fix is available.
+Do not open a public issue for a suspected vulnerability. Use
+[GitHub private vulnerability reporting](https://github.com/Fikrifrds/roflock/security/advisories/new).
+If that channel is unavailable, contact the repository owner privately through
+their GitHub profile and ask for a secure reporting channel without including
+exploit details in the first public message.
 
-Use GitHub's private vulnerability reporting on
-[github.com/Fikrifrds/roflock](https://github.com/Fikrifrds/roflock/security/advisories/new).
+Include, when available:
 
-Please include what you were running, what you observed, and the smallest
-reproduction you have. A proof of concept helps, but a clear description is
-enough to start.
+- affected Roflock version/commit and operating system;
+- installation method and relevant non-secret configuration;
+- expected and observed behavior;
+- minimal reproduction or proof of concept;
+- security impact and whether exploitation is ongoing; and
+- whether and how you want to be credited.
 
-We will acknowledge a report and tell you whether we consider it in scope. If a
-fix is needed we will keep you updated while it is prepared, and credit you in
-the advisory unless you prefer otherwise.
+Never include real provider tokens, daemon session values, private repository
+content, or personal data. Use synthetic fixtures and redact logs/diagnostics.
+
+This is currently a maintainer-operated pre-1.0 project without a guaranteed
+response SLA. Reports are acknowledged and triaged as capacity allows. The
+maintainer will coordinate scope, remediation, disclosure timing, CVE/advisory
+publication when appropriate, and credit. Please allow a reasonable embargo for
+investigation and a supported fix before public disclosure.
 
 ## Supported versions
 
-Roflock is pre-1.0. Security fixes land on `main` and in the next release; there
-are no maintained back-branches yet.
+Before 1.0, security fixes land on `main` and in the next patch/prerelease.
+There are no maintained back branches unless a release advisory explicitly
+says otherwise. Users should update to the newest published version.
 
-## Scope
+## In scope
 
-Roflock runs on a developer's machine, drives coding agents that can modify a
-repository, and decides what is allowed to ship. The security properties that
-matter most are the ones that keep a model from quietly widening its own
-authority.
+Examples include:
 
-In scope — a defect in any of these is a vulnerability:
+- daemon exposure beyond loopback or authentication/origin/CSRF bypass;
+- session, provider, runner-signing, or other secret disclosure;
+- repository/path/symlink escape or forbidden context disclosure;
+- execution without the writer lease or concurrent writers in one worktree;
+- reaching acceptance without required deterministic verification;
+- a model granting itself authority, bypassing approval, or changing a protected
+  transition without a typed outcome;
+- a driver overstating permissions, session continuity, usage, or cancellation;
+- evidence, audit, signature, semantic-hash, or Change Passport integrity
+  bypass;
+- unsafe invocation of a provider CLI or command runner; and
+- the public Playground reaching a local daemon, filesystem, credential, or
+  execution surface.
 
-- the daemon binding beyond loopback, or an API route reachable without the
-  session token;
-- session token or CSRF bypass, or the token becoming readable by another local
-  OS account;
-- escaping the repository path and symlink deny list, or reaching credential
-  files excluded from context;
-- writing to a worktree without holding its lease, or two writers running at
-  once;
-- reaching an accepted state without a required deterministic check passing;
-- a model or a prompt granting itself permissions, approving its own protected
-  effect, or bypassing a human approval gate;
-- a driver claiming a capability it does not have — in particular reporting work
-  as cancelled when the remote side may still be running;
-- secrets appearing in logs, events, evidence, diagnostics, or exports;
-- repository contents leaving the machine other than to the provider the
-  operator configured.
+## Usually out of scope
 
-Out of scope:
+- compromise by an attacker who already controls the daemon's OS account;
+- prompt injection that changes only untrusted model output and triggers no
+  unauthorized effect;
+- a vulnerability entirely inside an upstream harness/provider, unless Roflock
+  invokes or represents it unsafely;
+- findings that require disabling a documented safeguard; and
+- denial of service from intentionally enormous local inputs with no security
+  boundary crossed.
 
-- an attacker who already has the daemon's OS account — that account is the
-  trust boundary, not something Roflock defends against;
-- prompt injection that only affects the _content_ of a model's output. Prompt
-  text is not a security boundary in Roflock by design. Injection that causes a
-  protected effect without the corresponding approval or lease **is** in scope;
-- vulnerabilities in a coding harness or provider CLI, which are their own trust
-  boundary — though tell us if Roflock invokes one unsafely;
-- findings that require the operator to disable a documented safeguard.
+Reports may move into scope when they demonstrate a concrete protected effect.
+See the [threat model](docs/security/threat-model.md) and
+[Playground boundary](docs/security/playground-local-runtime.md).
 
-See [`docs/security/threat-model.md`](docs/security/threat-model.md) for the
-boundaries and their current mitigations.
+## Disclosure and fixes
 
-## Security is not a paid tier
-
-Roflock does not gate security behind a licence. There is no build where the
-validator is stronger, permissions are enforced more strictly, or audit is more
-complete because someone paid. A self-hosted install gets the same guarantees as
-any other.
+Security changes receive the same open-source implementation as every other
+install. The project does not maintain paid-only validators, stronger hosted
+permission enforcement, or more complete audit behavior. A coordinated release
+should include tests, an advisory, affected/fixed versions, mitigations, and
+upgrade instructions without exposing reporters before consent.

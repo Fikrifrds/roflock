@@ -23,4 +23,5 @@ jobs:
       # deterministic stand-in rather than left to fail on a missing binary.
       - run: pnpm test
         env:
-          ROLEFLOCK_FORCE_FAKE: '1'
+          ROFLOCK_FORCE_FAKE: '1'
+      - run: pnpm format:check

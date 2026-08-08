@@ -1,60 +1,68 @@
-# RoleFlock privacy (Phase 0)
+# Roflock local privacy summary
 
-**Last updated:** July 2026  
-**Applies to:** local daemon + web UI (`127.0.0.1`)
+**Last updated:** 9 August 2026
 
-This document describes how RoleFlock handles data on your machine. It is written for publication at roleflock.com and should match runtime behaviour verified via `GET /api/privacy`.
+**Applies to:** public-alpha CLI, loopback daemon/Studio, and static Playground
 
-## What stays local
+Roflock has no hosted account or multi-tenant backend in public alpha. Runtime
+state is stored under the active local data directory. Local-first does not mean
+that live agent work is offline: selected prompts and repository context are
+sent to the harness/provider the operator configured.
 
-- Registered repository paths and Git worktrees
-- Task briefs, approvals, evidence, usage ledger, and SQLite database (`~/.roleflock/` or `ROLEFLOCK_DATA_DIR`)
-- Uploaded task documents stored under the data directory
-- Provider CLI sessions and credentials managed by vendor tools on your OS user account
+## Stored locally
 
-RoleFlock does **not** operate a hosted multi-tenant backend in Phase 0.
+- registered repository paths, task briefs, immutable workflow snapshots,
+  Graph IR, events, approvals, evidence, usage, and audit records;
+- the SQLite database, task documents, and managed worktrees;
+- daemon session/CSRF material and Roflock-owned provider/runner-signing secret
+  stores; and
+- explicit backups and redacted diagnostics exports.
 
-## What may leave your machine
+New installs use `~/.roflock`; an existing `~/.roleflock` install remains there
+for compatibility. `ROFLOCK_DATA_DIR` selects another location. Provider CLI
+OAuth/subscription credentials remain in each harness's own storage and are not
+copied into the Roflock database.
 
-| Flow | Data sent | When |
-|------|-----------|------|
-| Provider CLIs (Claude, Codex, Cursor) | Prompts and context compiled for the active role | When you start a task and a live provider is selected |
-| Custom HTTP provider | Request body you configure (endpoint + model) | When registered and invoked |
-| Update check (optional) | Product name, version, platform | Only if `ROLEFLOCK_UPDATE_URL` is set; otherwise offline stub |
-| Support export (your action) | Redacted diagnostics JSON you download | When you request export from Privacy or API |
+## Data that may leave the machine
 
-Update checks **never** include repository paths, file contents, or API keys.
+| Flow                              | Data                                                                                    | Trigger                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Coding harness/provider           | Role objective and selected compiled context; provider-defined telemetry may also apply | Operator starts a live run with that route               |
+| Custom OpenAI-compatible endpoint | Model request body and selected context                                                 | Operator registers and routes to the endpoint            |
+| Optional update endpoint          | Product, version, and platform only                                                     | `ROFLOCK_UPDATE_URL` is configured and update check runs |
+| Support/GitHub                    | Only what the operator chooses to upload                                                | Operator files a report or attaches an inspected export  |
 
-## What we do not collect centrally (Phase 0)
+Roflock's update check does not include repository paths/content or API keys.
+The project ships no automatic Roflock telemetry upload in public alpha.
 
-- No automatic telemetry upload
-- No repository indexing to Mlola servers
-- No account-wide billing aggregation across providers
+## Playground
 
-Usage numbers in the UI are **local RoleFlock meters**, not vendor dashboards.
+The public Playground is a separate static site. Source is held in browser
+memory or a share-link URL fragment and is not stored by a Roflock server. It
+makes no daemon or compilation-time network request. Browser extensions,
+history sync, screenshots, and copied links may still expose fragments, so
+workflow source must not contain secrets.
 
-## Security controls
+## Operator controls
 
-- Loopback bind by default
-- Session token + CSRF on mutating API calls
-- Origin allow-list for browser mutations
-- No arbitrary shell HTTP endpoint
-- Path/symlink deny for secrets and escapes
-- Secret redaction in exports and logs
-- One writer lease per task worktree
+- Evidence, audit, Change Passport, and diagnostics exports are explicit.
+- Diagnostics are redacted and omit repository content, but should still be
+  inspected before sharing.
+- SQLite backups use the online backup API for a consistent live snapshot.
+- Data deletion removes SQLite/WAL/SHM, documents, managed worktrees,
+  provider-secret stores, and runner-signing stores.
+- Data deletion keeps Git repositories, backups, logs, and daemon session
+  authentication; these require separate deliberate operator action.
 
-## Your controls
+The complete procedures and file inventory are in the
+[operator guide](../runtime/operator-guide.md). Runtime claims are also exposed
+by authenticated `GET /api/privacy`.
 
-- **Export:** evidence, audit, and diagnostics bundles (redacted)
-- **Backup:** `POST /api/data/backup` copies local database to `~/.roleflock/backups/`
-- **Delete:** `POST /api/data/delete` with confirmation wipes local RoleFlock data (not your Git clones)
-- **Offline diagnostics:** `pnpm diagnostics` prints a local checklist without reading repository trees
+## Security
 
-## Provider disclosure
+The daemon binds to loopback by default and requires a mode-`0600` session
+secret, local-origin policy, and CSRF protection. Loopback alone is not
+authentication. There is no generic shell HTTP endpoint. Permission, lease,
+approval, and verification controls are enforced outside model prompts.
 
-Context sent to providers is governed by role contracts and exclusion lists. Items marked `secret` or matching paths like `.env` and `*.pem` are omitted before compilation. See disclosure manifests on each task.
-
-## Questions
-
-For product support, use exports from a running daemon rather than sharing raw repository trees.  
-Website: https://roleflock.com
+Report vulnerabilities privately according to [SECURITY.md](../../SECURITY.md).

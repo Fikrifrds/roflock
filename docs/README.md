@@ -6,25 +6,30 @@ plans and RoleFlock-era documents remain available as design history.
 
 ## Start here
 
-| Guide                                                                                  | Use it for                                          |
-| -------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| [Architecture](architecture.md)                                                        | One-runtime pipeline, trust boundaries, package map |
-| [Language reference](language/reference.md)                                            | Exact `.roflock` 0.1 syntax and semantics           |
-| [CLI reference](cli/reference.md)                                                      | Install, commands, JSON, exits, troubleshooting     |
-| [Runtime operator guide](runtime/operator-guide.md)                                    | Data, recovery, approvals, backup, upgrades         |
-| [Playground and Studio](ui/playground-and-studio.md)                                   | Browser surfaces, use, deployment, security bounds  |
-| [Driver authoring](drivers/authoring-and-conformance.md)                               | AgentDriver contract, conformance, harness status   |
-| [Public-alpha completion](implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md) | Exact readiness authority and release gates         |
-| [Control-surface API](integrations/control-surface-api.md)                             | Authenticated local client integration              |
-| [Harness invocation](integrations/harness-invocation.md)                               | Codex, Claude Code, OpenCode, Pi/shell entry points |
-| [Authentication](integrations/authentication.md)                                       | Harness-owned login and BYOK boundaries             |
-| [CLI exit codes](cli/exit-codes.md)                                                    | CI-safe process and JSON error behavior             |
-| [Threat model](security/threat-model.md)                                               | Local daemon, repository, provider, evidence risks  |
-| [Playground boundary](security/playground-local-runtime.md)                            | Why the public site cannot run local agents         |
-| [Crash recovery](crash-recovery.md)                                                    | Operator recovery and safe continuation             |
+| Guide                                                                                  | Use it for                                           |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [Architecture](architecture.md)                                                        | One-runtime pipeline, trust boundaries, package map  |
+| [Language reference](language/reference.md)                                            | Exact `.roflock` 0.1 syntax and semantics            |
+| [CLI reference](cli/reference.md)                                                      | Install, commands, JSON, exits, troubleshooting      |
+| [Runtime operator guide](runtime/operator-guide.md)                                    | Data, recovery, approvals, backup, upgrades          |
+| [Playground and Studio](ui/playground-and-studio.md)                                   | Browser surfaces, use, deployment, security bounds   |
+| [Driver authoring](drivers/authoring-and-conformance.md)                               | AgentDriver contract, conformance, harness status    |
+| [Public-alpha completion](implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md) | Exact readiness authority and release gates          |
+| [Control-surface API](integrations/control-surface-api.md)                             | Authenticated local client integration               |
+| [Harness invocation](integrations/harness-invocation.md)                               | Codex, Claude Code, OpenCode, Pi/shell entry points  |
+| [Authentication](integrations/authentication.md)                                       | Harness-owned login and BYOK boundaries              |
+| [CLI exit codes](cli/exit-codes.md)                                                    | CI-safe process and JSON error behavior              |
+| [Threat model](security/threat-model.md)                                               | Local daemon, repository, provider, evidence risks   |
+| [Playground boundary](security/playground-local-runtime.md)                            | Why the public site cannot run local agents          |
+| [Crash recovery](crash-recovery.md)                                                    | Operator recovery and safe continuation              |
+| [Contributing](../CONTRIBUTING.md)                                                     | Setup, invariants, tests, compatibility, PR evidence |
+| [Governance](../GOVERNANCE.md)                                                         | Roles, decisions, releases, maintainership           |
+| [Support](../SUPPORT.md)                                                               | Issue routing, diagnostics, safe reports             |
+| [Security reporting](../SECURITY.md)                                                   | Private vulnerability scope and process              |
+| [Release process](release/process.md)                                                  | Version, gates, npm OIDC, Playground deployment      |
 
-Contributor/governance/release and executable quick-start guides are tracked as
-RF-DOCS-007 and RF-DOCS-008 in the completion plan and linked here as they land.
+Executable quick-start guides are tracked as RF-DOCS-008 in the completion plan
+and linked here when they land.
 
 ## Public contracts
 

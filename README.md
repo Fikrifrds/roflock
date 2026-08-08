@@ -2,264 +2,238 @@
 
 **AI coding teams as code.**
 
-Roflock orchestrates the coding agents you already use. Define the workflow once
-— planning, review, deterministic checks, bounded retries, human approval — and
-run it with Codex, Claude Code, Cursor, or your own harness.
+Roflock is an Apache-2.0 workflow language, compiler, and governed local
+runtime for AI coding teams. Write a readable `.roflock` workflow, compile it to
+canonical Graph IR, run it through the same durable graph runtime, and retain
+the approvals, deterministic checks, events, and evidence that explain what
+happened.
 
-Roflock does not replace your coding agent. The harness keeps its own agent
-loop, file editing, tools, and provider authentication. Roflock owns everything
-around it: workflow definition, graph orchestration, role assignment, retry
-budgets, verification, worktree coordination, policy, approvals, and evidence.
+Roflock does not replace Codex, Claude Code, Cursor Agent, OpenCode, or another
+coding harness. Those tools keep their agent loops and authentication. Roflock
+owns the workflow around them: roles, dependencies, bounded repair loops,
+worktree coordination, permission ceilings, human gates, verification, and
+provenance.
 
-- Local UI (dev): http://127.0.0.1:5173
-- Browser Playground (dev): http://127.0.0.1:5174
-- Local daemon: http://127.0.0.1:4178
-- Licence: [Apache-2.0](LICENSE)
+## Release status
 
-## Status
+The repository is a **public-alpha release candidate** for `roflock@0.1.0`.
+The npm artifact, CLI, daemon, Studio, Playground build, arbitrary authored
+workflow execution, AgentDriver integrations, MCP server, and documentation are
+implemented. Publishing the npm package and deploying the static Playground are
+separate maintainer release actions; until then, install the packed artifact
+from a checkout.
 
-Roflock is evolving from RoleFlock, a working local-first delivery-assurance
-product. The governed runtime below is **implemented and covered by automated
-tests today**:
+Public alpha is local and single-user. It is not a hosted multi-tenant service,
+and Studio must not be exposed through a public reverse proxy.
 
-- Verified bug-fix flow (planner → approval → writer → verification → verifier → accept)
-- Per-role provider and model choice with automatic failover when a quota runs out
-- Required real verification (`npm test` or a custom argv command); a live run fails closed when neither exists
-- Direct / Fast / Standard / Bug Fix / Critical workflow modes, pinned to an immutable graph version
-- Graph runtime: typed failure edges, bounded retry loops, concurrency limits, one writer per worktree
-- Read-only run graph on Task detail, showing live node state and failure routes
-- Folder picker + custom project names
-- Approval inbox, grant reuse, knowledge base UI
-- Providers page with real CLI discovery + account/login/switch + local usage
-- Evidence, context inspector, export/privacy/backup/delete
-- Daemon restart recovery that resumes completed nodes — [`docs/crash-recovery.md`](docs/crash-recovery.md)
-- Localhost-only bind, file-delivered session token, CSRF, origin allow-list, no shell endpoint
-- Version/update check without repository data
+## What ships
 
-The parts that make it _Roflock_ are now implemented: the `.roflock` language,
-compiler, canonical Graph IR, public AgentDriver contract, and browser Playground.
-The migration audit records the remaining product limit: existing workflow
-templates can be edited and executed, but a brand-new workflow name is not yet
-accepted by task creation.
+- `.roflock` 0.1 language, compiler, canonical Graph IR, validator, semantic
+  hash, Mermaid renderer, and diagnostics;
+- one durable graph runtime with typed failure routing, bounded loops,
+  concurrency limits, one writer per worktree, pause/resume/cancel, and crash
+  reconciliation;
+- first-class CLI for authoring, runs, approvals, evidence, daemon lifecycle,
+  diagnostics, drivers, and offline Change Passport verification;
+- local authenticated Studio, bundled in the npm artifact;
+- browser-only static Playground with no daemon, filesystem, shell, provider,
+  credential, or network dependency;
+- production drivers for Codex CLI, Claude Code, and OpenCode, plus preserved
+  Cursor Agent and OpenAI-compatible integration paths;
+- stdio MCP tools for check, compile, run, status, and events; and
+- explicit approvals, deterministic verification, evidence chains, usage
+  records, backup/restore, redacted diagnostics, and data deletion.
 
-Where the migration stands, and what is being preserved rather than rewritten:
-[`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md).
-Read order and the full document index: [`docs/README.md`](docs/README.md).
+## Install
 
-Manual checklist: [`docs/test-plans/manual-test-checklist.md`](docs/test-plans/manual-test-checklist.md)
-Verified Fix first run: [`docs/product/verified-fix-onboarding.md`](docs/product/verified-fix-onboarding.md)
-Threat model: [`docs/security/threat-model.md`](docs/security/threat-model.md)
+Requires Node.js 24 or newer and Git. A live agent run also requires at least
+one supported coding harness installed and authenticated under the same OS user.
 
-## Setup
-
-Requires Node 24+ and pnpm 11+.
-
-For live agent runs, install and authenticate at least one writer-capable CLI:
-Codex or Cursor Agent. The Providers page reports a missing CLI as unavailable;
-Roflock does not substitute a generated markdown file for a live code change.
+After the package is published:
 
 ```bash
-pnpm install
+npm install --global roflock
+roflock --version
+roflock doctor
+```
+
+From the current checkout:
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm --dir apps/cli build
+
+cd apps/cli
+npm pack
+npm install --global ./roflock-0.1.0.tgz
+```
+
+The package installs `roflock`, `roflock-mcp`, and the deprecated `roleflock`
+compatibility alias. It is self-contained; consumers do not install private
+workspace packages.
+
+## Five-minute local path
+
+Create a safe project scaffold:
+
+```bash
+mkdir roflock-demo && cd roflock-demo
+git init
+printf '# Roflock demo\n' > README.md
+git add README.md && git commit -m "Initialize demo"
+roflock init
+roflock check .roflock/workflows/bugfix.roflock
+```
+
+Start the private local control surface:
+
+```bash
+roflock studio
+```
+
+Open the printed URL, configure a harness on **Providers**, register a Git
+repository on **Projects**, then create and operate a task. Keep the URL private:
+it contains the one-time daemon-session handoff.
+
+Or start an authored workflow directly:
+
+```bash
+roflock daemon start
+roflock run .roflock/workflows/bugfix.roflock \
+  --repo "$PWD" \
+  --brief "Fix the parser regression" \
+  --json
+```
+
+Use the returned `graphRunId` with `roflock status`, `events`, `pause`, `resume`,
+or `cancel`. Human approval commands require one exact pending approval ID;
+agents and MCP intentionally cannot approve work for you.
+
+For a deterministic UI demonstration with no provider or real verification:
+
+```bash
+ROFLOCK_FORCE_FAKE=1 roflock studio
+```
+
+Studio labels this as **Simulation mode**. Its output is never production
+evidence.
+
+## Language example
+
+```roflock
+workflow bugfix {
+  version "1.0.0"
+  max_cost 5
+}
+
+role builder { write }
+role reviewer { readonly }
+
+agent fix {
+  role builder
+  objective "Implement the approved fix"
+}
+
+check test {
+  run "npm test"
+  required
+}
+
+agent review {
+  role reviewer
+  objective "Review the verified change"
+}
+
+human accept {
+  title "Accept verified result"
+  decisions approve, reject
+}
+
+flow {
+  fix -> test
+  test.pass -> review
+  test.fail -> fix { max 3 }
+  review -> accept
+}
+```
+
+The source compiles to immutable Graph IR before execution. A task pins its
+exact source, IR, semantic hash, and workflow identity; later edits cannot
+change an in-flight run.
+
+## Trust model
+
+- The daemon binds to `127.0.0.1` by default, but loopback is not treated as
+  authentication. Token, local-origin, CSRF, and file-permission controls still
+  apply.
+- Browser code has no generic shell or arbitrary filesystem-read endpoint.
+- Every graph is validated, every loop is bounded, and required deterministic
+  checks cannot be bypassed on a route to acceptance.
+- Models cannot grant their own permissions or approvals. Prompt text is not a
+  security boundary.
+- Ambiguous billable provider work is not blindly repeated, and killing a local
+  CLI is not described as confirmed remote cancellation.
+- Repository content leaves the machine only when selected context is sent to
+  the provider the operator configured.
+- The public Playground is a separate static origin and cannot reach Studio or
+  the daemon.
+
+Read the [threat model](docs/security/threat-model.md) and report vulnerabilities
+through [GitHub private vulnerability reporting](SECURITY.md), never a public
+issue.
+
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Architecture](docs/architecture.md)
+- [Language reference](docs/language/reference.md)
+- [CLI reference](docs/cli/reference.md)
+- [Runtime operator guide](docs/runtime/operator-guide.md)
+- [Playground and Studio guide](docs/ui/playground-and-studio.md)
+- [AgentDriver authoring and conformance](docs/drivers/authoring-and-conformance.md)
+- [MCP RFC](docs/rfc/RFC-002-ROFLOCK-MCP-V1.md)
+- [Control-surface API](docs/integrations/control-surface-api.md)
+- [Public-alpha completion authority](docs/implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md)
+
+## Develop
+
+```bash
+corepack enable
+pnpm install --frozen-lockfile
 pnpm build
-pnpm lint       # ESLint 9 flat config
+pnpm lint
 pnpm typecheck
 pnpm test
+pnpm format:check
 ```
 
-## Run locally
+Run the source applications in separate terminals:
 
 ```bash
-# Terminal 1 — daemon (binds only to 127.0.0.1:4178)
-pnpm dev
-
-# Terminal 2 — Vite UI
-pnpm dev:web
-
-# Terminal 3 — browser-safe workflow Playground
-pnpm dev:playground
+pnpm dev             # daemon, 127.0.0.1:4178
+pnpm dev:web         # Studio dev server, 127.0.0.1:5173
+pnpm dev:playground  # browser-only Playground, 127.0.0.1:5174
 ```
 
-**Open the URL the daemon prints**, not a bare `localhost`:
-
-```
-Open the UI:    http://127.0.0.1:4178/?rft=<token>
-Vite dev UI:    http://127.0.0.1:5173/?rft=<token>
-```
-
-That `rft` parameter is the one-time handoff of the session token. The UI stores it
-and strips it from the address bar; after the first visit a plain
-`http://127.0.0.1:5173` works. Lost the link? Run `pnpm url`.
-
-The Playground is deliberately separate from the local daemon. Open
-`http://127.0.0.1:5174` or use the Playground shortcut in the Roflock dashboard.
-It compiles in the browser and has no filesystem, shell, credentials, or daemon access.
-
-For a production Studio build, configure the separately deployed Playground with an
-absolute URL:
-
-```bash
-# Build the public static app with asset URLs rooted at /play/.
-pnpm build:playground:public
-
-# After deploying apps/playground/dist to https://roflock.com/play/:
-VITE_PLAYGROUND_URL=https://roflock.com/play/ pnpm --filter @roleflock/web build
-```
-
-If that variable is absent or invalid, Studio hides the Playground shortcut instead of
-falling back to the daemon origin. This is deliberate: a same-origin Playground could
-inherit the local session and would no longer be browser-only.
-
-The token lives in `<data dir>/session.json` (mode `0600`) and is stable across
-restarts, so the link keeps working. `ROFLOCK_ROTATE_TOKEN=1 pnpm dev` mints a new
-one and invalidates the old. The daemon never serves the token over HTTP — loopback is
-shared with every other OS account on the machine, so the file mode is what keeps a
-second local user out.
-
-State lives in `<data dir>/roleflock.db`. A new install uses `~/.roflock`; an
-install created before the rename keeps using `~/.roleflock` and is never moved.
-Override with `ROFLOCK_DATA_DIR`.
-
-If port `4178` is occupied, choose another one consistently for daemon and Vite:
-
-```bash
-ROFLOCK_PORT=4312 pnpm dev
-ROFLOCK_PORT=4312 pnpm dev:web
-```
-
-**Important:** restart both daemon and web after pulling new code. If Start fails, the UI shows the error text.
-
-### Command line
-
-```bash
-roflock --help
-roflock passport verify <passport.json> --identity <runner.json>
-```
-
-`roleflock` still works as a deprecated alias and warns on stderr. Language and
-run commands arrive with the compiler and runtime surfaces.
-
-### Environment variables
-
-Roflock reads `ROFLOCK_*`. The matching `ROLEFLOCK_*` names still work and warn
-once per variable, so an existing installation keeps running after an upgrade:
-
-| Variable                           | Purpose                                        |
-| ---------------------------------- | ---------------------------------------------- |
-| `ROFLOCK_DATA_DIR`                 | Override the data directory                    |
-| `ROFLOCK_PORT`                     | Daemon port (default 4178)                     |
-| `ROFLOCK_ROTATE_TOKEN=1`           | Mint a new session token                       |
-| `ROFLOCK_FORCE_FAKE=1`             | Deterministic simulation — never real evidence |
-| `ROFLOCK_INCLUDE_FAKE=1`           | Register the fake provider without forcing it  |
-| `ROFLOCK_PROVIDER_IDLE_TIMEOUT_MS` | How long a silent provider may stall a node    |
-| `ROFLOCK_VERIFICATION_TIMEOUT_MS`  | Verification command budget                    |
-
-## Suggested first test path
-
-1. Projects → Choose… → register a Git repo → optional display name
-2. New task → Verified Bug Fix → Send to flock
-3. Task detail → Start
-4. Approve confirmation when reviewer asks
-5. Accept when verification finishes
-6. Open Evidence + Providers
-
-Use `ROFLOCK_FORCE_FAKE=1 pnpm dev` only for a deterministic UI/workflow
-simulation without live CLIs. The UI and exported evidence label it as
-**simulation**; its scripted output and `simulation-check` are not proof that a
-repository fix works.
-
-## Roles and models
-
-Open **Roles** to set which provider and model runs each role. Each role is an
-ordered list: Roflock uses the first candidate that is healthy and not out of
-quota, and falls through to the next when one refuses.
-
-Shipping defaults:
-
-| Role           | Preference                      | Falls back to                                                        |
-| -------------- | ------------------------------- | -------------------------------------------------------------------- |
-| Planner / lead | Cursor · `claude-opus-5-high`   | `gpt-5.6-sol-high`, then Codex `gpt-5.6-sol`, then Claude CLI `opus` |
-| Executor       | Cursor · `cursor-grok-4.5-high` | `claude-opus-5-high`, then Codex `gpt-5.6-sol`, then `composer-2.5`  |
-| Reviewer       | Cursor · `gpt-5.6-terra-medium` | `claude-opus-5-low`, then Codex `gpt-5.6-terra`                      |
-| Verifier       | Cursor · `gpt-5.6-terra-high`   | `claude-opus-5-medium`, then Codex `gpt-5.6-terra`                   |
-
-There is no fake provider. It is not in any list and it is not even registered
-unless `ROFLOCK_FORCE_FAKE=1` or `ROFLOCK_INCLUDE_FAKE=1` asks for it, so it
-cannot be picked by accident. If every candidate for a role refuses, the run
-**stops** and shows what each provider said.
-
-Where a model is reachable through two providers it appears twice on purpose —
-Cursor and Codex meter separately, so an exhausted plan costs the run a
-provider rather than the model.
-
-When a provider reports exhausted quota, an unknown model, or a dead session,
-that provider+model is parked on a cooldown (quota 1 h, unknown model 3 h) and
-the next candidate runs. The substitution is written to the task's evidence and
-the audit log — it is never silent. Lift a cooldown early from the Roles page.
-
-### When everything refuses
-
-The task stops and shows each provider's own error text, with a link straight to
-the role that needs changing. The steps that already finished are kept: the run
-is left resumable, so after you pick a model that answers, **Resume the run**
-picks up where it stopped instead of repeating work you already paid for.
-
-Effort is expressed differently per CLI: Cursor encodes it in the model id
-(`claude-opus-5-high` vs `-low`), while Claude Code and Codex take it as a
-separate setting. Both spellings are supported, and a level above what a CLI
-documents is clamped rather than forwarded.
-
-## Notes
-
-- **Fake provider** is omitted from the Providers UI unless `ROFLOCK_INCLUDE_FAKE=1`; `ROFLOCK_FORCE_FAKE=1` is visibly labelled simulation and never production verification.
-- Claude / Codex / Cursor appear on Providers with `ready` or `missing` based on PATH; login via provider auth actions.
-- **Writer:** Cursor Agent or Codex edits only the leased worktree. Codex uses an explicit `workspace-write` sandbox; all non-writer Codex turns are explicitly `read-only`.
-- A live run without a custom verification command or a package test script fails closed instead of accepting artefact presence as a test.
-- Planner/verifier may invoke Claude/Codex when discovered and not forced fake.
-- Provider discovery spawns the real CLIs and caches the result for 15s, so the Providers page does not respawn subprocesses on every poll.
-- `pnpm url` reprints the launch URL; `ROFLOCK_ROTATE_TOKEN=1` rotates the session token.
-- Public site copy (draft): [`docs/public/README.md`](docs/public/README.md), [`docs/public/privacy.md`](docs/public/privacy.md)
-- Baseline benchmark: `pnpm benchmark` → [`docs/benchmarks/baseline.md`](docs/benchmarks/baseline.md)
-
-## Safety invariants
-
-- Browser never executes shell commands
-- Daemon binds to localhost by default, and no API route hands out the session token
-- No raw shell or arbitrary filesystem-read HTTP endpoints
-- One writer lease per task worktree; the scheduler never runs two writers at once
-- No validated graph can loop forever, or reach `accept` without its required checks
-- A running task keeps the graph version it started with
-- Secret/symlink escape paths denied
-- Unknown billable outcomes are not auto-retried
-- Token counts and costs come from the CLI or are marked unknown — never invented
-- Actual and shadow cost are never presented as one bill
-- Stopping a task kills its provider process and settles the task on a terminal state
-- Update checks never send repository paths or contents
+Use the authenticated URL printed by the daemon, not a bare daemon URL. See
+[CONTRIBUTING.md](CONTRIBUTING.md) before changing architecture or compatibility
+contracts.
 
 ## Open source
 
-Apache-2.0. Roflock carries no capability gates: agent count, graph size, local
-and self-hosted runs, repositories, compiler and validator behaviour, evidence
-and replay, self-hosted access control, and custom providers are part of the
-software, not a paid tier. Managed infrastructure may one day be a service;
-permission to use the software's own capabilities will not be.
+Roflock is licensed under [Apache-2.0](LICENSE). The software has no license-key
+gates for agent count, graph size, local/self-hosted runs, repositories,
+compiler or validator behavior, evidence, replay, security controls, or custom
+providers. A future managed service may charge for infrastructure; it cannot
+make the self-hosted software intentionally incomplete.
 
-Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md) · Security:
-[`SECURITY.md`](SECURITY.md)
+[Contributing](CONTRIBUTING.md) · [Governance](GOVERNANCE.md) ·
+[Support](SUPPORT.md) · [Security](SECURITY.md) ·
+[Code of Conduct](CODE_OF_CONDUCT.md) · [Release process](docs/release/process.md) ·
+[Changelog](CHANGELOG.md)
 
-## Workspace
-
-```text
-apps/web          Local React control UI (routes/, components/, lib/, test/)
-apps/daemon       Fastify local daemon + orchestrator
-apps/cli          roflock executable
-packages/*        Contracts, database, runtime, providers, approvals
-docs/prd          Roflock open-source PRD
-docs/implementation  Migration plan, repo audit, backlog
-docs/rfc          Proposed contracts (Graph IR v1)
-docs/adr          Architecture decision records
-docs/product      Historical RoleFlock PRD + plans
-docs/security     Threat model
-docs/public       Public site draft copy
-docs/test-plans   Exit gates + manual checklist
-docs/benchmarks   Local fixture baselines
-```
+Historical RoleFlock names remain in specific package namespaces, wire headers,
+database filenames, media types, Git refs, and status-check identifiers for
+compatibility. They are not the current product name and must not be mass
+renamed.

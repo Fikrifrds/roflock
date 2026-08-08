@@ -1,46 +1,47 @@
-# RoleFlock
+# Roflock
 
-**Keep your coding agent. Ship with proof — local-first.**
+**AI coding teams as code.**
 
-RoleFlock is becoming the independent delivery-assurance layer for AI-generated software.
-Coding agents propose and implement changes; RoleFlock binds authorised intent,
-planner-owned decisions, independent verification, policy, and human acceptance to the
-exact change that is allowed to ship.
+Roflock is an open-source workflow language, compiler, and governed local
+runtime for coding agents. Keep Codex, Claude Code, Cursor Agent, OpenCode, or a
+compatible provider; define how they plan, write, review, verify, retry, and ask
+for approval in a readable `.roflock` file.
 
-RoleFlock runs on your machine and works with the coding agents you already use. The
-current local beta provides the governed execution foundation while Change Contracts,
-independent verification, and portable Change Passports are implemented milestone by
-milestone.
+## Why Roflock
 
-## Why local-first
+- Source workflows compile to canonical, immutable Graph IR.
+- The runtime validates every graph, bounds every loop, and serializes writers.
+- Deterministic checks and human approval remain outside model prompts.
+- Runs survive daemon restarts and retain ordered events and evidence.
+- Drivers report installation, authentication, permissions, sessions, usage,
+  and cancellation truthfully.
+- The local daemon and Studio do not require a cloud account.
+- The public Playground compiles in the browser and cannot access the local
+  daemon, shell, filesystem, providers, or credentials.
 
-- Daemon binds to **127.0.0.1** by default — not exposed to your LAN.
-- Repository contents stay on disk unless **you** attach them to a task or a provider CLI reads them under your OS user.
-- Update checks send **product name, version, and platform only** — never repository paths or file contents.
-- Local SQLite data can be **backed up, exported, and deleted** from the Privacy controls.
+## Public-alpha surfaces
 
-## What you can do today (Phase 0 MVP)
+- **Language** — author `.roflock`, compile/validate/hash/render locally.
+- **CLI** — start and control runs, decide approvals, inspect evidence, operate
+  the daemon, and expose MCP stdio tools.
+- **Studio** — private authenticated control surface bundled with the daemon.
+- **Playground** — separately deployed static language explorer.
+- **AgentDriver** — production seam for existing coding harnesses.
 
-- Register local Git projects and run **Verified Fix** bug workflows.
-- Connect **Claude, Codex, Cursor**, or custom OpenAI-compatible providers via CLI discovery.
-- Approve reviewer gates; inspect disclosure manifests and evidence bundles.
-- Export audit and diagnostics with secret redaction.
+Roflock is currently a `0.1.0` public-alpha release candidate. See the
+[repository README](../../README.md) for the exact installation state and
+[documentation index](../README.md) for complete guides.
 
-## Get started
+## Open-source promise
 
-See the repository README for build and run instructions. First-run guide: [`docs/product/verified-fix-onboarding.md`](../product/verified-fix-onboarding.md).
+Roflock is Apache-2.0. Agent count, graph size, local/self-hosted runs,
+repositories, compiler and validator behavior, evidence, replay, security
+controls, and custom providers are not license-gated. Managed infrastructure
+may become a service; the software itself remains complete.
 
-## Privacy
+## Privacy and security
 
-Summary: [`privacy.md`](privacy.md)  
-Live claims from a running daemon: `GET /api/privacy`
-
-## Safety
-
-Threat model (local boundary): [`docs/security/threat-model.md`](../security/threat-model.md)
-
-## Status
-
-Phase 0 — ready for local testing. No installer DMG yet; run from source with Node 24+ and pnpm.
-
-**RoleFlock by Mlola** — https://roleflock.com
+Read the [privacy summary](privacy.md), [threat model](../security/threat-model.md),
+and [security reporting policy](../../SECURITY.md). The product is local-first,
+not “nothing ever leaves the machine”: selected prompts/context go to the
+provider the operator chooses during a live run.
