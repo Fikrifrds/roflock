@@ -870,3 +870,79 @@ the daemon with no workflow.
 | 17  | The template registry is module-level mutable state, so test order can affect which graphs resolve                   | Medium   | Tests clear it in `afterEach`; a per-daemon instance would remove the hazard entirely          |
 | 18  | `workflows/` is located by walking up from the daemon module, which will not survive being packaged for npm          | Medium   | RF-DIST-001 must decide how templates ship inside the published artifact                       |
 | 19  | The shipped templates declare no `authority`, so Role Protocol artifact gates are still unused by built-in workflows | Low      | Matches the built-ins exactly today; tightening is a deliberate follow-up with its own fixture |
+
+---
+
+## 16. R5 progress — durable runtime (partial)
+
+**R5 is not complete.** This section records what landed, what did not, and why
+the remaining work is smaller than the backlog implies.
+
+Verification: build, lint, typecheck pass; **616 tests pass**
+(432 → 459 → 537 → 556 → 589 → 601 → 616). Prettier's flagged set is 66 tracked
+files, two fewer than baseline, with nothing added.
+
+### Gate: ADR-020
+
+The `database` layering question §4.2 raised is decided. The package is a
+storage kernel whose dependencies are already correct, plus forty domain
+repositories whose upward imports are a recorded exception. New durable runtime
+state is defined in `contracts` and persisted through the kernel.
+
+### Landed
+
+**The repair budget survives a restart (RF-EVO-073).** `runGraph`'s loop counter
+started at zero on every call, so resuming a crashed run handed the task a whole
+new budget — a run that had already spent three attempts could spend three more,
+paying a provider each time. It now accepts `resumeLoopIterations` and reports
+each re-entry through `onLoopIteration` _before_ the target resets, so an
+attempt that was paid for is recorded even if the daemon dies between the
+decision and the retry. The orchestrator writes those to `loop_attempts`, a
+table that had existed since migration 001 and had never been written to.
+
+**A billable turn has a stable identity (RF-EVO-080).** Invocation ids were
+random per attempt, leaving a resumed run unable to tell work already paid for
+from work that never started. `stableInvocationKey` hashes task, graph version,
+semantic hash, node, attempt and loop iteration; migration 034 stores it behind
+a partial unique index so the database refuses a duplicate even from a caller
+that skipped the lookup.
+
+### Already existed — the backlog overstates R5
+
+Audit §9.1 predicted this and R5 confirmed it. These need no work:
+
+| Backlog ticket                         | Reality                                                       |
+| -------------------------------------- | ------------------------------------------------------------- |
+| RF-EVO-076/077 EventStore + SQLite     | Exists, with idempotent replay and optimistic sequencing      |
+| RF-EVO-079 snapshots                   | `state_snapshots` + `SnapshotRepository`, used by the reducer |
+| RF-EVO-081 explicit OUTCOME_UNKNOWN    | Exists in `run-control` and is applied at boot                |
+| RF-EVO-082 boot reconciliation         | `reconcileInterruptedGraphRuns` marks leftovers `interrupted` |
+| RF-EVO-083 process reconciliation      | `reconcileOrphanedProcesses` probes liveness before the sweep |
+| RF-EVO-084 writer lease reconciliation | `reconcileWriterLeases` releases leases a process cannot hold |
+
+One thing worth correcting from an earlier reading: the boot sequence runs
+orphan-process reconciliation **before** the interrupted-run sweep, so a
+billable invocation with a live process handle gets `OUTCOME_UNKNOWN` rather
+than being flattened to `interrupted`. ADR-010 is honoured.
+
+### Not done
+
+| Ticket             | Remaining work                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------- |
+| RF-EVO-070         | A typed runtime event envelope. Events are appended as loose `(type, payload)` pairs today         |
+| RF-EVO-071/072     | `GraphRun` / `NodeRun` as typed contracts. They exist as tables the orchestrator writes by raw SQL |
+| RF-EVO-074/075/078 | Reducers and projections for runtime state; only `task-reducer` exists                             |
+| RF-EVO-085 (full)  | An end-to-end forced-restart test through the real daemon, not just the storage contract           |
+
+The honest summary: R5's _safety_ properties — no duplicated billable work, no
+refreshed repair budget — are done and tested. R5's _modelling_ work, turning
+raw SQL writes into typed contracts with reducers, is not, and is the larger
+half by volume.
+
+### New risks
+
+| #   | Risk                                                                                                                            | Severity | Mitigation                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 20  | `loop_attempts` rows attach to the node run that _triggered_ the loop; if that run's row is missing the attempt is not recorded | Medium   | The orchestrator keeps `lastNodeRunId`, but a node that never opened a run would be silently uncounted                                            |
+| 21  | An invocation found under an existing key is reported as an event but does not yet stop the node                                | **High** | The record cannot be duplicated, but the provider can still be re-invoked — completing RF-EVO-086 requires the node to pause for a human decision |
+| 22  | Semantic hash reaches the key only for compiled templates; built-ins pass `undefined`                                           | Low      | Intentional and distinguished from any hash; built-ins have no source to change                                                                   |
