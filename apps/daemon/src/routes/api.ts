@@ -122,7 +122,7 @@ export function registerApi(
   dataDir: string,
   providerSecrets: LocalSecretStore,
   reviewApps: ReviewAppService,
-  runtime: { host: string; port: number },
+  runtime: { host: string; port: number; ownerId?: string },
 ): void {
   const projects = new ProjectRepository(db),
     tasks = new TaskRepository(db),
@@ -254,6 +254,7 @@ export function registerApi(
       csrf: session.csrf,
       version: getLocalVersion(),
       forcedProvider: readEnv('FORCE_FAKE') === '1' ? 'fake' : null,
+      ...(runtime.ownerId === undefined ? {} : { ownerId: runtime.ownerId }),
     };
   });
   app.get('/api/events/stream', async (request, reply) => {

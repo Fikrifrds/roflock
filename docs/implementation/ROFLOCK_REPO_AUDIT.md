@@ -1808,3 +1808,34 @@ ambiguous external-work detail are `7`. Starting and control commands return
 The output-contract matrix covers every run-state class, daemon start failure,
 HTTP metadata, JSON usage failures, and command-level JSON error wiring. The
 full CLI suite passes 67/67 with typecheck clean.
+
+---
+
+## 36. Public-alpha runtime CLI — owned daemon lifecycle
+
+RF-CLI-006 adds `roflock daemon start`, `status`, and `stop`. Start first probes
+the configured loopback endpoint: a healthy Roflock daemon is reported as
+external and reused without spawning or claiming it. Otherwise the CLI launches
+the packaged/built daemon entry as a detached local process, keeps stdout/stderr
+in the local data directory, waits for health plus session readiness, and writes
+a mode-`0600` ownership record. No account, hosted API, or Cloud control plane is
+consulted. Owned mode suppresses the token-bearing browser launch URL and forces
+its daemon log to mode `0600`; the authenticated session stays in its existing
+mode-`0600` file rather than being copied into logs.
+
+Stopping is intentionally stronger than trusting a PID file. The CLI gives its
+child a random ownership nonce; the daemon exposes only its SHA-256 identity and
+only from the authenticated runtime-info endpoint. Stop requires the active
+process, endpoint, owner record, and authenticated identity to agree before it
+sends SIGTERM. A missing record, external daemon, PID reuse, stale/mismatched
+identity, or unreachable ownership endpoint is a refusal—not permission to kill.
+The daemon now handles SIGTERM/SIGINT by closing Fastify and SQLite cleanly.
+
+Unit tests prove spawn/connect distinction, owner-file permissions, ownership
+verification, graceful stop, mismatch refusal, missing-artifact errors, and JSON
+command behavior. The daemon ownership boundary test proves the identity is not
+present on unauthenticated health. A real built-artifact smoke test on isolated
+loopback port 4328 reported `owned`, stopped through SIGTERM, and then reported
+`stopped`. Its session and daemon log were both mode `0600`, and the log contained
+no token-bearing launch URL. The full CLI suite passes 73/73, and daemon/CLI
+typechecks are clean.

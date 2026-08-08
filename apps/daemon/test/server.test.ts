@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { readEnv, resetEnvDeprecationNotices } from '@roleflock/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer, resolvePort } from '../src/server.js';
@@ -60,6 +61,26 @@ describe('daemon boundary', () => {
     });
     expect(health.json()).toMatchObject({ host: '127.0.0.1', port: 4312 });
     expect(runtime.json()).toMatchObject({ host: '127.0.0.1', port: 4312 });
+  });
+
+  it('reports ownership proof only through the authenticated runtime endpoint', async () => {
+    const ownerToken = 'owned-by-cli';
+    const instance = await createServer({
+      dataDir: await mkdtemp(join(tmpdir(), 'roflock-owner-')),
+      session: { token: 'test-token', csrf: 'test-csrf' },
+      ownerToken,
+    });
+    servers.push(instance);
+    const health = await instance.app.inject({ method: 'GET', url: '/api/health' });
+    const runtime = await instance.app.inject({
+      method: 'GET',
+      url: '/api/runtime/info',
+      headers: { 'x-roleflock-token': 'test-token' },
+    });
+    expect(health.json()).not.toHaveProperty('ownerId');
+    expect(runtime.json()).toMatchObject({
+      ownerId: createHash('sha256').update(ownerToken).digest('hex'),
+    });
   });
 
   it('defaults to loopback-only bind', async () => expect((await server()).host).toBe('127.0.0.1'));

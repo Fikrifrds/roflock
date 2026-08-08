@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -35,6 +36,8 @@ export interface ServerOptions {
   host?: string;
   port?: number;
   session?: Session;
+  /** Ownership nonce supplied only by the CLI process that spawned this daemon. */
+  ownerToken?: string;
   /** Test/plugin seam for supplying additional local harness drivers. */
   providers?: ProviderRegistry;
 }
@@ -131,6 +134,7 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
     documents,
     signingSecrets,
   );
+  const ownerToken = options.ownerToken ?? readEnv('OWNER_TOKEN');
   registerApi(
     app,
     db,
@@ -145,6 +149,9 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
     {
       host,
       port,
+      ...(ownerToken === undefined
+        ? {}
+        : { ownerId: createHash('sha256').update(ownerToken).digest('hex') }),
     },
   );
   const webDist = join(process.cwd(), 'apps', 'web', 'dist');

@@ -38,7 +38,7 @@ export function resolveCliDataDir(
   return existsSync(legacy) ? legacy : current;
 }
 
-function readSession(dataDir: string): Session {
+export function readDaemonSession(dataDir: string): Session {
   let parsed: Partial<Session>;
   try {
     parsed = JSON.parse(readFileSync(join(dataDir, 'session.json'), 'utf8')) as Partial<Session>;
@@ -54,25 +54,30 @@ function readSession(dataDir: string): Session {
   return { token: parsed.token, csrf: parsed.csrf };
 }
 
+export function resolveDaemonBaseUrl(
+  options: Pick<DaemonClientOptions, 'baseUrl' | 'env'> = {},
+): string {
+  const env = options.env ?? process.env;
+  const port = env.ROFLOCK_PORT ?? env.ROLEFLOCK_PORT ?? '4178';
+  return (options.baseUrl ?? env.ROFLOCK_DAEMON_URL ?? `http://127.0.0.1:${port}`).replace(
+    /\/$/,
+    '',
+  );
+}
+
 export class DaemonClient {
-  private readonly baseUrl: string;
-  private readonly dataDir: string;
+  readonly baseUrl: string;
+  readonly dataDir: string;
   private readonly fetchImpl: typeof fetch;
 
   constructor(private readonly options: DaemonClientOptions = {}) {
-    const env = options.env ?? process.env;
-    const port = env.ROFLOCK_PORT ?? env.ROLEFLOCK_PORT ?? '4178';
-    this.baseUrl = (
-      options.baseUrl ??
-      env.ROFLOCK_DAEMON_URL ??
-      `http://127.0.0.1:${port}`
-    ).replace(/\/$/, '');
+    this.baseUrl = resolveDaemonBaseUrl(options);
     this.dataDir = resolveCliDataDir(options);
     this.fetchImpl = options.fetch ?? fetch;
   }
 
   async request<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
-    const session = readSession(this.dataDir);
+    const session = readDaemonSession(this.dataDir);
     let response: Response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}${path}`, {
