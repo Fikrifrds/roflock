@@ -46,9 +46,8 @@ export class WorktreeRepository {
   }
 
   getByTask(taskId: string): WorktreeRecord | undefined {
-    const row = this.db
-      .prepare(`SELECT * FROM worktrees WHERE task_id = ?`)
-      .get(taskId) as Record<string, unknown> | undefined;
+    const row = this.db.prepare(`SELECT * FROM worktrees WHERE task_id = ?`).get(taskId) as
+      Record<string, unknown> | undefined;
     return row ? mapWorktree(row) : undefined;
   }
 
@@ -85,7 +84,9 @@ export class WorktreeRepository {
 
   setStatus(taskId: string, status: WorktreeRecord['status'], archivedAt?: string): void {
     this.db
-      .prepare(`UPDATE worktrees SET status = ?, archived_at = COALESCE(?, archived_at) WHERE task_id = ?`)
+      .prepare(
+        `UPDATE worktrees SET status = ?, archived_at = COALESCE(?, archived_at) WHERE task_id = ?`,
+      )
       .run(status, archivedAt ?? null, taskId);
   }
 }

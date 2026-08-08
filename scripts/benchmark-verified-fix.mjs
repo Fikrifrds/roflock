@@ -36,7 +36,12 @@ function median(values) {
 async function benchCompile(compileContext, iterations = 200) {
   const items = [
     { id: 'brief', source: 'task.brief', content: 'Fix redirect on login', priority: 100 },
-    { id: 'doc', source: 'document:spec.md', content: 'Expected: home. Actual: 404.', priority: 50 },
+    {
+      id: 'doc',
+      source: 'document:spec.md',
+      content: 'Expected: home. Actual: 404.',
+      priority: 50,
+    },
     { id: 'env', source: 'file:.env', path: '.env', content: 'SECRET=1', priority: 1000 },
   ];
   const samples = [];

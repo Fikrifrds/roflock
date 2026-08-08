@@ -47,8 +47,7 @@ export class PriceCardRepository {
       id: String(row.id),
       providerConnectionId: String(row.provider_connection_id),
       modelId: String(row.model_id),
-      inputPerMTokUsd:
-        row.input_per_mtok_usd === null ? undefined : Number(row.input_per_mtok_usd),
+      inputPerMTokUsd: row.input_per_mtok_usd === null ? undefined : Number(row.input_per_mtok_usd),
       outputPerMTokUsd:
         row.output_per_mtok_usd === null ? undefined : Number(row.output_per_mtok_usd),
       currency: String(row.currency),
@@ -78,13 +77,7 @@ export class QuotaSnapshotRepository {
            confidence = excluded.confidence,
            captured_at = excluded.captured_at`,
       )
-      .run(
-        row.id,
-        row.providerConnectionId,
-        row.snapshotJson,
-        row.confidence,
-        row.capturedAt,
-      );
+      .run(row.id, row.providerConnectionId, row.snapshotJson, row.confidence, row.capturedAt);
     return row;
   }
 

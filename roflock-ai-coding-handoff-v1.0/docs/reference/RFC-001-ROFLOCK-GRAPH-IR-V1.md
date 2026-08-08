@@ -170,7 +170,7 @@ interface WorkflowIdentity {
   tags?: string[];
   taskTypes?: string[];
   source?: {
-    language: "roflock";
+    language: 'roflock';
     languageVersion: string;
     uri?: string;
     sourceHash?: string;
@@ -197,7 +197,7 @@ Goals define what successful completion means.
 interface Goal {
   id: string;
   objective: string;
-  riskClass: "low" | "medium" | "high" | "critical";
+  riskClass: 'low' | 'medium' | 'high' | 'critical';
   prohibitedOutcomes?: string[];
   outOfScope?: string[];
   criteria: AcceptanceCriterion[];
@@ -231,8 +231,8 @@ interface ArtifactType {
   name: string;
   schema?: JsonSchema;
   mediaType?: string;
-  confidentiality?: "public" | "internal" | "confidential" | "secret";
-  retention?: "ephemeral" | "run" | "project" | "persistent";
+  confidentiality?: 'public' | 'internal' | 'confidential' | 'secret';
+  retention?: 'ephemeral' | 'run' | 'project' | 'persistent';
 }
 ```
 
@@ -243,7 +243,7 @@ interface Port {
   name: string;
   artifactType: string;
   required: boolean;
-  cardinality: "one" | "many";
+  cardinality: 'one' | 'many';
 }
 ```
 
@@ -282,7 +282,7 @@ interface RoleDefinition {
   requiredCapabilities?: string[];
   preferredCapabilities?: string[];
 
-  accessMode?: "readonly" | "write";
+  accessMode?: 'readonly' | 'write';
 
   permissionProfileRef?: string;
 
@@ -318,7 +318,7 @@ interface ExecutionProfile {
     accountRef?: string;
   }>;
 
-  fallbackPolicy?: "none" | "compatible" | "approval_required";
+  fallbackPolicy?: 'none' | 'compatible' | 'approval_required';
 }
 ```
 
@@ -343,16 +343,16 @@ Graph IR v1 defines the following canonical node kinds:
 
 ```ts
 type NodeKind =
-  | "agent"
-  | "model_call"
-  | "action"
-  | "check"
-  | "route"
-  | "join"
-  | "human"
-  | "event"
-  | "context"
-  | "evidence";
+  | 'agent'
+  | 'model_call'
+  | 'action'
+  | 'check'
+  | 'route'
+  | 'join'
+  | 'human'
+  | 'event'
+  | 'context'
+  | 'evidence';
 ```
 
 These are canonical IR kinds.
@@ -378,7 +378,7 @@ interface NodeBase {
 
   timeout?: {
     durationMs: number;
-    onTimeout: "fail" | "pause" | "route";
+    onTimeout: 'fail' | 'pause' | 'route';
     outcome?: string;
   };
 
@@ -422,12 +422,12 @@ Outcomes are node contracts, not free-form model prose.
 
 ```ts
 interface AgentNode extends NodeBase {
-  kind: "agent";
+  kind: 'agent';
   roleRef: string;
 
   agent: {
     objective: string;
-    mode: "tool_loop";
+    mode: 'tool_loop';
     contextPolicyRef?: string;
     structuredOutputSchema?: JsonSchema;
   };
@@ -440,7 +440,7 @@ A bounded single structured model request without an autonomous tool loop.
 
 ```ts
 interface ModelCallNode extends NodeBase {
-  kind: "model_call";
+  kind: 'model_call';
   roleRef?: string;
 
   modelCall: {
@@ -456,10 +456,10 @@ A deterministic predefined operation.
 
 ```ts
 interface ActionNode extends NodeBase {
-  kind: "action";
+  kind: 'action';
 
   action: {
-    driver: "command" | "git" | "http" | "connector" | "domain";
+    driver: 'command' | 'git' | 'http' | 'connector' | 'domain';
     operation: string;
     args?: Record<string, unknown>;
   };
@@ -470,10 +470,10 @@ interface ActionNode extends NodeBase {
 
 ```ts
 interface CheckNode extends NodeBase {
-  kind: "check";
+  kind: 'check';
 
   check: {
-    driver: "command" | "test" | "schema" | "assertion" | "domain";
+    driver: 'command' | 'test' | 'schema' | 'assertion' | 'domain';
     operation: string;
     args?: Record<string, unknown>;
   };
@@ -490,11 +490,11 @@ Graph IR v1 deliberately avoids an unrestricted expression language.
 
 ```ts
 interface RouteNode extends NodeBase {
-  kind: "route";
+  kind: 'route';
 
   route: {
     selector: {
-      source: "artifact" | "state" | "budget" | "quota" | "policy";
+      source: 'artifact' | 'state' | 'budget' | 'quota' | 'policy';
       ref: string;
       path?: string;
     };
@@ -508,10 +508,10 @@ Edges from a route node define allowed values/outcomes.
 
 ```ts
 interface JoinNode extends NodeBase {
-  kind: "join";
+  kind: 'join';
 
   join: {
-    strategy: "all" | "all_successful" | "quorum";
+    strategy: 'all' | 'all_successful' | 'quorum';
     requiredNodeIds: string[];
     quorum?: number;
     preserveDisagreement: boolean;
@@ -523,10 +523,10 @@ interface JoinNode extends NodeBase {
 
 ```ts
 interface HumanNode extends NodeBase {
-  kind: "human";
+  kind: 'human';
 
   human: {
-    requestType: "approval" | "clarification" | "decision";
+    requestType: 'approval' | 'clarification' | 'decision';
     title: string;
     requiredArtifactTypes?: string[];
     allowedDecisions: string[];
@@ -542,7 +542,7 @@ An entry/resume event.
 
 ```ts
 interface EventNode extends NodeBase {
-  kind: "event";
+  kind: 'event';
 
   event: {
     eventType: string;
@@ -559,24 +559,24 @@ Protected side effects are declared statically.
 
 ```ts
 type EffectClass =
-  | "workspace_write"
-  | "dependency_change"
-  | "network_access"
-  | "database_write"
-  | "external_side_effect"
-  | "secret_access"
-  | "git_push"
-  | "merge"
-  | "deploy"
-  | "production_access"
-  | "payment_mutation"
-  | "public_publish"
-  | "destructive";
+  | 'workspace_write'
+  | 'dependency_change'
+  | 'network_access'
+  | 'database_write'
+  | 'external_side_effect'
+  | 'secret_access'
+  | 'git_push'
+  | 'merge'
+  | 'deploy'
+  | 'production_access'
+  | 'payment_mutation'
+  | 'public_publish'
+  | 'destructive';
 
 interface EffectDeclaration {
   class: EffectClass;
   scope?: string[];
-  risk: "low" | "medium" | "high" | "critical";
+  risk: 'low' | 'medium' | 'high' | 'critical';
 }
 ```
 
@@ -620,10 +620,10 @@ Graph IR v1 permits only restricted declarative guards.
 
 ```ts
 type EdgeGuard =
-  | { type: "always" }
-  | { type: "outcome"; equals: string }
-  | { type: "value"; sourceRef: string; path?: string; equals: JsonValue }
-  | { type: "policy"; policyRef: string; result: string };
+  | { type: 'always' }
+  | { type: 'outcome'; equals: string }
+  | { type: 'value'; sourceRef: string; path?: string; equals: JsonValue }
+  | { type: 'policy'; policyRef: string; result: string };
 ```
 
 No arbitrary JavaScript/Python expression is allowed in v1 IR.
@@ -654,10 +654,7 @@ interface LoopGroup {
 
     requireNewEvidence: boolean;
 
-    exhaustion:
-      | { action: "fail" }
-      | { action: "pause" }
-      | { action: "route"; nodeId: string };
+    exhaustion: { action: 'fail' } | { action: 'pause' } | { action: 'route'; nodeId: string };
   };
 }
 ```
@@ -692,10 +689,7 @@ interface BudgetPolicy {
   shadowCostLimit?: number;
   warningAtPercent?: number;
 
-  onExceeded:
-    | "fail"
-    | "pause"
-    | "approval";
+  onExceeded: 'fail' | 'pause' | 'approval';
 }
 ```
 
@@ -705,7 +699,7 @@ interface BudgetPolicy {
 interface ConcurrencyPolicy {
   maxParallelNodes?: number;
   oneWriterPerWorkspace: boolean;
-  writerScope: "worktree" | "repository" | "project";
+  writerScope: 'worktree' | 'repository' | 'project';
 }
 ```
 
@@ -716,7 +710,7 @@ For the coding pack, `oneWriterPerWorkspace` SHOULD default to true.
 ```ts
 interface ApprovalPolicy {
   protectedEffects: EffectClass[];
-  reusableGrantMaxRisk?: "low" | "medium" | "high";
+  reusableGrantMaxRisk?: 'low' | 'medium' | 'high';
   alwaysFreshEffects?: EffectClass[];
 }
 ```
@@ -747,10 +741,13 @@ interface DebugInfo {
     loops?: Record<string, SourceSpan>;
   };
 
-  editorLayout?: Record<string, {
-    x: number;
-    y: number;
-  }>;
+  editorLayout?: Record<
+    string,
+    {
+      x: number;
+      y: number;
+    }
+  >;
 }
 
 interface SourceSpan {
@@ -864,7 +861,7 @@ Diagnostics should be stable enough for IDE tooling and tests.
 ```ts
 interface Diagnostic {
   code: string;
-  severity: "error" | "warning" | "info";
+  severity: 'error' | 'warning' | 'info';
   message: string;
   span?: SourceSpan;
   related?: Array<{

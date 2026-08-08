@@ -318,22 +318,13 @@ interface AgentDriver {
 
   capabilities(): Promise<DriverCapabilities>;
 
-  start(
-    request: AgentRunRequest
-  ): AsyncIterable<AgentEvent>;
+  start(request: AgentRunRequest): AsyncIterable<AgentEvent>;
 
-  resume?(
-    sessionId: string,
-    request: AgentResumeRequest
-  ): AsyncIterable<AgentEvent>;
+  resume?(sessionId: string, request: AgentResumeRequest): AsyncIterable<AgentEvent>;
 
-  interrupt?(
-    runId: string
-  ): Promise<InterruptResult>;
+  interrupt?(runId: string): Promise<InterruptResult>;
 
-  dispose?(
-    sessionId: string
-  ): Promise<void>;
+  dispose?(sessionId: string): Promise<void>;
 }
 ```
 
@@ -358,11 +349,7 @@ interface DriverCapabilities {
   sessions: boolean;
   resume: boolean;
 
-  cancellation:
-    | "none"
-    | "local-process"
-    | "cooperative"
-    | "remote-confirmed";
+  cancellation: 'none' | 'local-process' | 'cooperative' | 'remote-confirmed';
 
   usageReporting: boolean;
   modelSelection: boolean;
@@ -942,42 +929,55 @@ Native Studio/binaries are a separate later distribution stream.
 # 29. Atomic ticket additions
 
 ### RF-DIST-001 — Define CLI package boundary
+
 Identify runtime dependencies required in the published package.
 
 ### RF-DIST-002 — Stable `roflock` executable
+
 Must work from packaged artifact.
 
 ### RF-DIST-003 — CLI help/version
+
 Cross-platform smoke tests.
 
 ### RF-DIST-004 — `npm pack` verification
+
 Validate included files.
 
 ### RF-DIST-005 — Clean packed-package install fixture
+
 Run `--version`, `--help`, and `check`.
 
 ### RF-DIST-006 — `roflock doctor`
+
 Truthful environment/harness detection.
 
 ### RF-DIST-007 — `roflock drivers`
+
 List driver status and capabilities.
 
 ### RF-DIST-008 — Authentication status contract
+
 Separate installed/detected/authenticated.
 
 ### RF-DIST-009 — `roflock init`
+
 Create safe project bootstrap.
 
 ### RF-DIST-010 — Structured CLI output
+
 Machine-readable mode for documented commands.
 
 ### RF-DIST-011 — Exit-code contract
+
 Document and test.
 
 ### RF-DIST-012 — npm publish workflow
+
 Dry-run/package validation before publish.
 
 ### RF-DIST-013 — npm alpha release checklist
+
 No Cloud dependency.
 
 ### RF-HARNESS-001 — AgentDriver interoperability RFC scope
@@ -997,11 +997,13 @@ No Cloud dependency.
 ### RF-HARNESS-008 — Roflock MCP RFC
 
 ### RF-HARNESS-009 — Initial MCP read/run tools
+
 No implicit approval delegation.
 
 ### RF-HARNESS-010 — Control-surface integration API
 
 ### RF-HARNESS-011 — Harness portability E2E
+
 One `.roflock`, two different execution profiles.
 
 ### RF-HARNESS-012 — Cancellation truthfulness tests

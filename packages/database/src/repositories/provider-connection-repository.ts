@@ -15,9 +15,7 @@ export class ProviderConnectionRepository {
   constructor(private readonly db: SqliteDb) {}
 
   has(id: string): boolean {
-    return Boolean(
-      this.db.prepare('SELECT 1 FROM provider_connections WHERE id = ?').get(id),
-    );
+    return Boolean(this.db.prepare('SELECT 1 FROM provider_connections WHERE id = ?').get(id));
   }
 
   createCustom(connection: CustomProviderConnection): CustomProviderConnection {

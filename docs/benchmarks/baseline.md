@@ -7,10 +7,10 @@ These numbers time **local RoleFlock components** (context compile + sandboxed `
 
 ## Results
 
-| Step | Iterations | Median (ms) | Total (ms) |
-|------|------------|-------------|------------|
-| Context compile (planner, incl. .env deny) | 200 | 0.020 | 5.8 |
-| Command runner (`echo` in sandbox) | 20 | 1.599 | 34.2 |
+| Step                                       | Iterations | Median (ms) | Total (ms) |
+| ------------------------------------------ | ---------- | ----------- | ---------- |
+| Context compile (planner, incl. .env deny) | 200        | 0.020       | 5.8        |
+| Command runner (`echo` in sandbox)         | 20         | 1.599       | 34.2       |
 
 ## Methodology — compare vs direct agent
 

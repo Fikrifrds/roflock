@@ -9,21 +9,27 @@ The coding harness must re-evaluate ticket dependencies after the baseline audit
 # R0 — Audit and guardrails
 
 ### RF-EVO-001 — Capture repository baseline
+
 Run root build/lint/typecheck/test/format checks and store results.
 
 ### RF-EVO-002 — Create migration audit
+
 Inventory packages, apps, tests, data contracts, graph versions, env/config, CLI, database.
 
 ### RF-EVO-003 — Classify current packages
+
 Mark KEEP/ADAPT/GENERALIZE/REPLACE/RETIRE with rationale.
 
 ### RF-EVO-004 — Freeze graph-runtime semantic regression suite
+
 Add/confirm tests for scheduling, retries, writer serialization, failure routes, artifact gates.
 
 ### RF-EVO-005 — Freeze persisted compatibility inventory
+
 Document DB schema, environment variables, data directory, config filenames, graph-version IDs.
 
 ### RF-EVO-006 — Install PRD/implementation docs into repo
+
 Add current Roflock development docs without removing historical docs.
 
 **R0 exit:** baseline is measurable; no ambiguity about what is being preserved.
@@ -33,24 +39,31 @@ Add current Roflock development docs without removing historical docs.
 # R1 — Safe Roflock rebrand
 
 ### RF-EVO-010 — Rebrand README/product description
+
 Roflock positioning only; no runtime semantic change.
 
 ### RF-EVO-011 — Add `roflock` CLI binary
+
 Keep compatibility alias if needed.
 
 ### RF-EVO-012 — Add `ROFLOCK_*` environment names
+
 Legacy `ROLEFLOCK_*` fallback.
 
 ### RF-EVO-013 — Data directory migration strategy
+
 Support existing `~/.roleflock` safely.
 
 ### RF-EVO-014 — Config filename compatibility
+
 Prefer `roflock.config.*`; accept legacy config during transition.
 
 ### RF-EVO-015 — Package namespace audit
+
 Determine whether `@roleflock/*` has external consumers before rename.
 
 ### RF-EVO-016 — OSS governance/license completeness
+
 License, security, contribution, charter/boundary docs.
 
 **R1 exit:** fresh user sees Roflock; old local data/config still works.
@@ -60,30 +73,39 @@ License, security, contribution, charter/boundary docs.
 # R2 — Language + Graph IR integration
 
 ### RF-EVO-020 — Add `packages/graph-ir`
+
 Integrate reference Graph IR foundation.
 
 ### RF-EVO-021 — Graph IR tests
+
 Normalization, hash, semantic diagnostics.
 
 ### RF-EVO-022 — Add `packages/language`
+
 Tokenizer/parser/AST/compiler.
 
 ### RF-EVO-023 — Language tests
+
 Valid/invalid fixtures.
 
 ### RF-EVO-024 — Add example `.roflock`
+
 At least linear and BugFix examples.
 
 ### RF-EVO-025 — CLI `roflock check`
+
 Compile + validate source.
 
 ### RF-EVO-026 — CLI `roflock compile`
+
 Emit canonical Graph IR.
 
 ### RF-EVO-027 — CLI IR utilities
+
 validate/normalize/hash as needed.
 
 ### RF-EVO-028 — Root verification integration
+
 New packages join build/lint/typecheck/test.
 
 **R2 exit:** language foundation lives in the actual repo and passes all old + new tests.
@@ -93,36 +115,47 @@ New packages join build/lint/typecheck/test.
 # R3 — Graph IR compatibility bridge
 
 ### RF-EVO-030 — Define runtime graph adapter contract
+
 Explicit boundary Graph IR → current runtime graph.
 
 ### RF-EVO-031 — Map linear nodes/edges
+
 No loops/providers yet.
 
 ### RF-EVO-032 — Map node kinds
+
 agent/check/action/human compatibility.
 
 ### RF-EVO-033 — Map structured outcomes/failure conditions
+
 Preserve current typed routing.
 
 ### RF-EVO-034 — Map writer semantics
+
 Graph IR effect/permission → existing writer behavior.
 
 ### RF-EVO-035 — Map required checks
+
 Cannot bypass deterministic verification.
 
 ### RF-EVO-036 — Map bounded loops
+
 IR LoopGroup → existing retry/loop ceiling where equivalent.
 
 ### RF-EVO-037 — Map human approval
+
 Pause/approval path via existing approval infrastructure.
 
 ### RF-EVO-038 — Map role/artifact gate
+
 Use existing role-protocol compatibility.
 
 ### RF-EVO-039 — Fake executor integration test
+
 Compiled `.roflock` executes through existing runtime.
 
 ### RF-EVO-040 — Fail/retry/pass E2E
+
 Reference deterministic workflow.
 
 **R3 exit:** executable `.roflock` exists without a second runtime.
@@ -156,6 +189,7 @@ Reference deterministic workflow.
 ### RF-EVO-061 — New-task workflow loader uses compiled templates
 
 ### RF-EVO-062 — Preserve historical graph resolver
+
 Existing pinned graph runs remain supported.
 
 **R4 exit:** hard-coded workflows are compatibility/history; new source of truth is `.roflock`.

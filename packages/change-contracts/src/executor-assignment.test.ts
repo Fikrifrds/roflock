@@ -79,11 +79,7 @@ describe('executor assignment', () => {
   });
 
   it('rejects draft and tampered plans', () => {
-    const {
-      reviewedBy: _reviewedBy,
-      approvedAt: _approvedAt,
-      ...unapproved
-    } = planInput();
+    const { reviewedBy: _reviewedBy, approvedAt: _approvedAt, ...unapproved } = planInput();
     expect(() =>
       parseApprovedExecutionPlan(sealExecutionPlan({ ...unapproved, status: 'proposed' })),
     ).toThrow(/requires an approved plan/);

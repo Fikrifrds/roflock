@@ -38,10 +38,7 @@ export class EventStore {
         );
     } catch (error) {
       if (event.metadata.idempotencyKey) {
-        const raced = this.findByIdempotencyKey(
-          event.aggregateId,
-          event.metadata.idempotencyKey,
-        );
+        const raced = this.findByIdempotencyKey(event.aggregateId, event.metadata.idempotencyKey);
         if (raced) return raced;
       }
       throw error;
@@ -52,9 +49,7 @@ export class EventStore {
 
   getLastSequence(aggregateId: string): number {
     const row = this.db
-      .prepare(
-        'SELECT COALESCE(MAX(sequence), 0) AS seq FROM events WHERE aggregate_id = ?',
-      )
+      .prepare('SELECT COALESCE(MAX(sequence), 0) AS seq FROM events WHERE aggregate_id = ?')
       .get(aggregateId) as { seq: number } | undefined;
     return row?.seq ?? 0;
   }
@@ -90,10 +85,7 @@ export class EventStore {
     }));
   }
 
-  findByIdempotencyKey(
-    aggregateId: string,
-    idempotencyKey: string,
-  ): EventEnvelope | undefined {
+  findByIdempotencyKey(aggregateId: string, idempotencyKey: string): EventEnvelope | undefined {
     const row = this.db
       .prepare(
         `SELECT id, aggregate_type, aggregate_id, sequence, event_type, payload_json, metadata_json, created_at

@@ -45,7 +45,9 @@ export class LocalKnowledgeRepository {
     return item;
   }
 
-  list(filter: { projectId?: string; type?: string; state?: KnowledgeState; q?: string } = {}): LocalKnowledgeItem[] {
+  list(
+    filter: { projectId?: string; type?: string; state?: KnowledgeState; q?: string } = {},
+  ): LocalKnowledgeItem[] {
     const clauses: string[] = [];
     const params: unknown[] = [];
     if (filter.projectId) {

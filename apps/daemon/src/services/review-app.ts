@@ -159,7 +159,8 @@ export class ReviewAppService {
     const manifest = join(root, 'package.json');
     if (existsSync(manifest)) {
       try {
-        const scripts = JSON.parse(readFileSync(manifest, 'utf8')).scripts as Record<string, string> | undefined;
+        const scripts = JSON.parse(readFileSync(manifest, 'utf8')).scripts as
+          Record<string, string> | undefined;
         const script = scripts?.dev ? 'dev' : scripts?.start ? 'start' : undefined;
         if (script && scripts?.[script]) {
           // A plain python static server + index.html is better served by our
@@ -187,8 +188,16 @@ export class ReviewAppService {
       }
     }
     if (hasIndex)
-      return { available: true, mode: 'static', state: 'ready', detail: 'Open the static result in an isolated preview.' };
-    return { available: false, detail: 'No runnable app or static entry file was detected in this task.' };
+      return {
+        available: true,
+        mode: 'static',
+        state: 'ready',
+        detail: 'Open the static result in an isolated preview.',
+      };
+    return {
+      available: false,
+      detail: 'No runnable app or static entry file was detected in this task.',
+    };
   }
 
   async start(taskId: string, root: string): Promise<ReviewApp> {
@@ -206,7 +215,9 @@ export class ReviewAppService {
     const handle = this.previews.get(taskId);
     if (!handle) return;
     handle.process?.kill('SIGTERM');
-    await new Promise<void>((resolveClose) => handle.server?.close(() => resolveClose()) ?? resolveClose());
+    await new Promise<void>(
+      (resolveClose) => handle.server?.close(() => resolveClose()) ?? resolveClose(),
+    );
     this.previews.delete(taskId);
   }
 
@@ -216,7 +227,9 @@ export class ReviewAppService {
 
   private async startStatic(taskId: string, root: string): Promise<ReviewApp> {
     const server = createServer(async (request, response) => {
-      const rawPath = decodeURIComponent(new URL(request.url ?? '/', 'http://preview.local').pathname);
+      const rawPath = decodeURIComponent(
+        new URL(request.url ?? '/', 'http://preview.local').pathname,
+      );
       const requested = rawPath === '/' ? 'index.html' : rawPath.replace(/^\/+/, '');
       let file = resolve(root, requested);
       if (relative(root, file).startsWith('..')) {
@@ -303,7 +316,9 @@ export class ReviewAppService {
     });
     child.once('exit', (code) => {
       handle.state = code === 0 ? 'stopped' : 'failed';
-      handle.detail = output ? `Preview stopped: ${output.trim().slice(-500)}` : 'Preview process stopped.';
+      handle.detail = output
+        ? `Preview stopped: ${output.trim().slice(-500)}`
+        : 'Preview process stopped.';
     });
     return serialize(handle);
   }

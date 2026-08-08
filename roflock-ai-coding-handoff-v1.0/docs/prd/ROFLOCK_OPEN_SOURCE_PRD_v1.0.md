@@ -1259,23 +1259,23 @@ interface ConfirmationRequest {
   nodeRunId: string;
   attempt: number;
   requestType:
-    | "clarify_requirement"
-    | "expand_scope"
-    | "write_path"
-    | "run_command"
-    | "network_access"
-    | "dependency_change"
-    | "database_change"
-    | "external_side_effect"
-    | "provider_switch"
-    | "additional_budget"
-    | "policy_exception";
+    | 'clarify_requirement'
+    | 'expand_scope'
+    | 'write_path'
+    | 'run_command'
+    | 'network_access'
+    | 'dependency_change'
+    | 'database_change'
+    | 'external_side_effect'
+    | 'provider_switch'
+    | 'additional_budget'
+    | 'policy_exception';
   title: string;
   rationale: string;
   exactAction: unknown;
   affectedPaths?: string[];
   estimatedAdditionalCost?: number;
-  riskClass: "low" | "medium" | "high" | "critical";
+  riskClass: 'low' | 'medium' | 'high' | 'critical';
   proposedResumeEdge?: string;
   expiresAt?: string;
   fingerprint: string;

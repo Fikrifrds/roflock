@@ -707,26 +707,26 @@ Do not rename all packages as a prerequisite to runtime integration.
 
 Current concepts → target concepts:
 
-| Current | Target | Migration |
-|---|---|---|
-| `WorkflowGraph` | Graph IR / runtime graph | compatibility adapter |
-| `GraphNode` | IR node | generalize |
-| `WorkflowRole` fixed union | `RoleId` | generic role |
-| `NodeKind.agent` | `agent` | keep |
-| `model_call` | `model_call` | keep |
-| `command` | `action` or compatibility kind | adapt |
-| `test` | `check` | adapt |
-| `router` | `route` | adapt |
-| `join` | `join` | keep |
-| `human_approval` | `human` | adapt |
-| `context_compile` | `context` | adapt |
-| `evidence_aggregate` | `evidence` | adapt |
-| `EdgeCondition` failure enum | structured outcomes | compatibility mapping |
-| `maxAttempts` | LoopPolicy/LoopGroup | generalize |
-| `maxLoopIterations` | run safety ceiling | retain as secondary failsafe |
-| `required` | acceptance/check policy | generalize |
-| `writer` | effect/lease semantics | preserve strongly |
-| built-in mode | workflow package/template | migrate |
+| Current                      | Target                         | Migration                    |
+| ---------------------------- | ------------------------------ | ---------------------------- |
+| `WorkflowGraph`              | Graph IR / runtime graph       | compatibility adapter        |
+| `GraphNode`                  | IR node                        | generalize                   |
+| `WorkflowRole` fixed union   | `RoleId`                       | generic role                 |
+| `NodeKind.agent`             | `agent`                        | keep                         |
+| `model_call`                 | `model_call`                   | keep                         |
+| `command`                    | `action` or compatibility kind | adapt                        |
+| `test`                       | `check`                        | adapt                        |
+| `router`                     | `route`                        | adapt                        |
+| `join`                       | `join`                         | keep                         |
+| `human_approval`             | `human`                        | adapt                        |
+| `context_compile`            | `context`                      | adapt                        |
+| `evidence_aggregate`         | `evidence`                     | adapt                        |
+| `EdgeCondition` failure enum | structured outcomes            | compatibility mapping        |
+| `maxAttempts`                | LoopPolicy/LoopGroup           | generalize                   |
+| `maxLoopIterations`          | run safety ceiling             | retain as secondary failsafe |
+| `required`                   | acceptance/check policy        | generalize                   |
+| `writer`                     | effect/lease semantics         | preserve strongly            |
+| built-in mode                | workflow package/template      | migrate                      |
 
 Avoid forced public renames when a compatibility mapping is cheaper and safer.
 

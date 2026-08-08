@@ -25,7 +25,7 @@ that matter when a human is sitting there:
 
 - **Context loss per round.** A chat follow-up ("not that one, the sidebar") lands in
   a conversation that still holds every prior turn. In RoleFlock the writer receives
-  a *compiled* context (`packages/context-compiler`) in a fresh invocation; the
+  a _compiled_ context (`packages/context-compiler`) in a fresh invocation; the
   conversational history is not carried. One-line feedback to an agent that has
   forgotten the last twenty minutes produces a worse revision than chat does.
 - **Wrong latency order.** Chat answers in seconds. A RoleFlock round is a new CLI
@@ -41,20 +41,20 @@ not try to win here.
 > without being re-read.
 
 Litmus test for any future feature: if the answer to "why not just use Claude Code"
-is not *"because I was not there"* or *"because someone else has to be able to trust
-this"*, the feature is probably pointed the wrong way.
+is not _"because I was not there"_ or _"because someone else has to be able to trust
+this"_, the feature is probably pointed the wrong way.
 
 ## Differentiator audit
 
 Honest sorting of what exists in the repo today.
 
-| Capability | Verdict |
-|---|---|
-| Enforced verification, fails closed (`test` node, `NodeFailure`) | **Replicable.** A `Stop`/`PostToolUse` hook in `settings.json` can force a test run and fail hard. This is hygiene, not a differentiator. |
-| Evidence, audit trail, disclosure manifest, approval grants with expiry and use limits | **Real, but only with a second party.** Claude Code produces a transcript; RoleFlock produces a record. The difference is worth nothing to a solo developer on a private project, and a great deal to a reviewer, client, or auditor who must trust the change without redoing the work. |
-| Multi-provider routing with quota failover | **Real and immediate.** But it is a feature, not a product category. |
-| Running many tasks unattended and in parallel | **Required parity, currently dormant.** It creates throughput but is also native to leading coding-agent products. |
-| Contract-bound intent, independent verification, policy authority, and portable commit-bound acceptance evidence | **Primary product boundary.** The coding agent is the worker; RoleFlock is the independent authority. |
+| Capability                                                                                                       | Verdict                                                                                                                                                                                                                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Enforced verification, fails closed (`test` node, `NodeFailure`)                                                 | **Replicable.** A `Stop`/`PostToolUse` hook in `settings.json` can force a test run and fail hard. This is hygiene, not a differentiator.                                                                                                                                                |
+| Evidence, audit trail, disclosure manifest, approval grants with expiry and use limits                           | **Real, but only with a second party.** Claude Code produces a transcript; RoleFlock produces a record. The difference is worth nothing to a solo developer on a private project, and a great deal to a reviewer, client, or auditor who must trust the change without redoing the work. |
+| Multi-provider routing with quota failover                                                                       | **Real and immediate.** But it is a feature, not a product category.                                                                                                                                                                                                                     |
+| Running many tasks unattended and in parallel                                                                    | **Required parity, currently dormant.** It creates throughput but is also native to leading coding-agent products.                                                                                                                                                                       |
+| Contract-bound intent, independent verification, policy authority, and portable commit-bound acceptance evidence | **Primary product boundary.** The coding agent is the worker; RoleFlock is the independent authority.                                                                                                                                                                                    |
 
 ## The architectural contradiction
 

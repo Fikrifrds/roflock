@@ -66,7 +66,9 @@ type RoutedPath = {
 
 function nodeDescriptor(node: GraphNode) {
   return [
-    node.role === 'reviewer' ? 'AI reviews, then you approve' : (KIND_LABELS[node.kind] ?? node.kind),
+    node.role === 'reviewer'
+      ? 'AI reviews, then you approve'
+      : (KIND_LABELS[node.kind] ?? node.kind),
     node.writer ? 'writer' : '',
     node.required ? 'required gate' : '',
     node.maxAttempts > 1 ? `up to ${node.maxAttempts} attempts` : '',
@@ -182,11 +184,7 @@ function smoothForwardPath(from: NodePosition, to: NodePosition) {
 }
 
 /** Branch curves into a shared merge point with a horizontal end tangent. */
-function smoothBranchPath(
-  from: NodePosition,
-  mergeX: number,
-  mergeY: number,
-) {
+function smoothBranchPath(from: NodePosition, mergeX: number, mergeY: number) {
   const startX = from.x + NODE_WIDTH;
   const startY = midY(from);
   const dx = Math.max(28, mergeX - startX);
@@ -333,7 +331,11 @@ export function GraphRunView({
         <div className="graph-canvas graph-canvas-loading">
           <div className="graph-skeleton" aria-hidden="true">
             {[0, 1, 2, 3].map((index) => (
-              <div key={index} className="graph-skeleton-node" style={{ animationDelay: `${index * 90}ms` }} />
+              <div
+                key={index}
+                className="graph-skeleton-node"
+                style={{ animationDelay: `${index * 90}ms` }}
+              />
             ))}
           </div>
           <p className="graph-loading-copy">Preparing the visual workflow…</p>
@@ -349,7 +351,9 @@ export function GraphRunView({
             <span className="eyebrow">Governed workflow</span>
             <strong>Workflow map unavailable</strong>
             <small>
-              {error instanceof Error ? error.message : 'Unable to load the run graph for this task.'}
+              {error instanceof Error
+                ? error.message
+                : 'Unable to load the run graph for this task.'}
             </small>
           </div>
         </div>
@@ -376,9 +380,9 @@ export function GraphRunView({
   const completedCount = graph.nodes.filter((node) => node.state === 'completed').length;
   const activeLabel = activeNode?.id.replaceAll('_', ' ');
   const currentActivity = isWorking
-    ? execution?.currentActivity ??
+    ? (execution?.currentActivity ??
       execution?.activeCommandPreview ??
-      (activeLabel ? `Running the ${activeLabel} step` : null)
+      (activeLabel ? `Running the ${activeLabel} step` : null))
     : null;
   // Failure edges are the interesting ones: they are the routes a user cannot
   // infer from the happy-path node list alone.

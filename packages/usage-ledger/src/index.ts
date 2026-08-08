@@ -99,12 +99,10 @@ export function findPriceCard(
 ): PriceCard | undefined {
   return (
     cards.find(
-      (card) =>
-        card.providerConnectionId === providerConnectionId && card.modelId === modelId,
+      (card) => card.providerConnectionId === providerConnectionId && card.modelId === modelId,
     ) ??
     cards.find(
-      (card) =>
-        card.providerConnectionId === providerConnectionId && card.modelId === '*',
+      (card) => card.providerConnectionId === providerConnectionId && card.modelId === '*',
     ) ??
     cards.find((card) => card.providerConnectionId === 'custom' && card.modelId === '*')
   );
@@ -126,9 +124,8 @@ export function estimateInvocationCost(input: {
   const cards = input.cards ?? DEFAULT_PRICE_CARDS;
   const card = findPriceCard(cards, input.providerConnectionId, input.modelId);
   const shadow =
-    ((input.tokens.inputTokens / 1_000_000) * (card?.inputPerMTokUsd ?? 1) +
-      (input.tokens.outputTokens / 1_000_000) * (card?.outputPerMTokUsd ?? 3)) ||
-    0.01;
+    (input.tokens.inputTokens / 1_000_000) * (card?.inputPerMTokUsd ?? 1) +
+      (input.tokens.outputTokens / 1_000_000) * (card?.outputPerMTokUsd ?? 3) || 0.01;
 
   if (input.providerConnectionId === 'fake' || input.providerConnectionId === 'deterministic') {
     return {

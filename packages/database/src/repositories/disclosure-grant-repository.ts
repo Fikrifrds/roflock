@@ -38,9 +38,8 @@ export class DisclosureGrantRepository {
   }
 
   get(id: string): DisclosureGrant | undefined {
-    const row = this.db
-      .prepare(`SELECT * FROM disclosure_grants WHERE id = ?`)
-      .get(id) as Record<string, unknown> | undefined;
+    const row = this.db.prepare(`SELECT * FROM disclosure_grants WHERE id = ?`).get(id) as
+      Record<string, unknown> | undefined;
     return row ? mapGrant(row) : undefined;
   }
 

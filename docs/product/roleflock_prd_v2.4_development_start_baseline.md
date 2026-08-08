@@ -13,7 +13,6 @@
 **Initial environment:** macOS, Git repositories, local CLIs, OpenAI-compatible APIs  
 **Status:** Final development baseline — implementation may begin; changes require ADR, RFC, or verified blocker
 
-
 ### Version 2.4 development-start update
 
 This version preserves the frozen graph, loop, control, approval, security, and brand architecture, then incorporates the final product decisions made immediately before development:
@@ -158,18 +157,17 @@ Independent Verifier
 
 RoleFlock initially coordinates:
 
-| Connection | Default responsibility |
-|---|---|
-| Claude Code subscription | Chief Architect and Planner |
-| Cursor Agent subscription | Primary Implementer |
-| Codex subscription | Independent Verifier and Final Judge |
-| Custom Provider connection A, currently Qwen | Plan Critic and Broad Reviewer |
+| Connection                                          | Default responsibility                |
+| --------------------------------------------------- | ------------------------------------- |
+| Claude Code subscription                            | Chief Architect and Planner           |
+| Cursor Agent subscription                           | Primary Implementer                   |
+| Codex subscription                                  | Independent Verifier and Final Judge  |
+| Custom Provider connection A, currently Qwen        | Plan Critic and Broad Reviewer        |
 | Custom Provider connection B, currently Xiaomi MiMo | Test Designer and Low-cost Specialist |
 
 Qwen and Xiaomi are editable examples, not hard-coded providers. Any compatible provider can be configured using provider name, protocol, base URL, API key, model IDs, custom headers, price cards, and optional quota endpoints.
 
 RoleFlock supports feature development, bug fixing, refactoring, test improvement, performance work, security remediation, dependency updates, migrations, documentation, and read-only investigations.
-
 
 At every moment, RoleFlock must make the active execution understandable in one sentence, for example:
 
@@ -279,7 +277,6 @@ Budget thresholds can prevent a stage from starting, select a cheaper fallback, 
 
 MVP never pushes or merges without explicit human approval.
 
-
 ### 4.9 No hidden work
 
 The UI must always identify the active task, graph, node, role, configured provider/model, permission profile, process phase, and reason for waiting. Background execution cannot be represented only by a spinner.
@@ -299,7 +296,6 @@ Identical safe requests can be grouped and approved together. Reusable approval 
 ### 4.13 Smallest sufficient graph
 
 RoleFlock chooses the least complex execution mode that can meet the outcome contract. More agents, providers, branches, and loops are not considered improvements unless evaluation evidence justifies them.
-
 
 ---
 
@@ -408,7 +404,6 @@ Browser refresh, daemon restart, provider disconnection, model context reset, or
 
 Human decisions are graph nodes, not informal interruptions. They are durable, auditable, and resumable.
 
-
 #### Control is outside the model
 
 The model may request an action but cannot grant itself permission, hide its execution state, clear a stop request, extend its own budget, or decide that a human confirmation is unnecessary.
@@ -437,17 +432,17 @@ interface WorkflowGraph {
 interface WorkflowNode {
   id: string;
   type:
-    | "agent"
-    | "model_call"
-    | "command"
-    | "test"
-    | "router"
-    | "join"
-    | "human_approval"
-    | "context_compile"
-    | "knowledge_retrieve"
-    | "evidence_aggregate"
-    | "external_event";
+    | 'agent'
+    | 'model_call'
+    | 'command'
+    | 'test'
+    | 'router'
+    | 'join'
+    | 'human_approval'
+    | 'context_compile'
+    | 'knowledge_retrieve'
+    | 'evidence_aggregate'
+    | 'external_event';
 
   roleId?: string;
   permissionProfileId?: string;
@@ -500,22 +495,22 @@ Durably pauses execution. Browser closure or daemon restart must not lose the pe
 
 ```typescript
 type EdgeCondition =
-  | "always"
-  | "passed"
-  | "failed"
-  | "tests_passed"
-  | "tests_failed"
-  | "changes_required"
-  | "plan_invalid"
-  | "risk_high"
-  | "ambiguous"
-  | "human_approved"
-  | "human_rejected"
-  | "quota_low"
-  | "budget_warning"
-  | "budget_exceeded"
-  | "provider_unavailable"
-  | "timeout";
+  | 'always'
+  | 'passed'
+  | 'failed'
+  | 'tests_passed'
+  | 'tests_failed'
+  | 'changes_required'
+  | 'plan_invalid'
+  | 'risk_high'
+  | 'ambiguous'
+  | 'human_approved'
+  | 'human_rejected'
+  | 'quota_low'
+  | 'budget_warning'
+  | 'budget_exceeded'
+  | 'provider_unavailable'
+  | 'timeout';
 ```
 
 ### 4A.7 Loop policy
@@ -530,7 +525,7 @@ interface LoopPolicy {
   maxShadowCost?: number;
   requireNewEvidence: boolean;
   feedbackSchema: JsonSchema;
-  onExhausted: "escalate" | "pause" | "fail";
+  onExhausted: 'escalate' | 'pause' | 'fail';
   escalationNodeId?: string;
 }
 ```
@@ -539,15 +534,15 @@ interface LoopPolicy {
 
 ```typescript
 type FailureClass =
-  | "implementation_error"
-  | "missing_test"
-  | "plan_error"
-  | "requirement_ambiguity"
-  | "environment_failure"
-  | "provider_failure"
-  | "policy_violation"
-  | "budget_exceeded"
-  | "unfixable";
+  | 'implementation_error'
+  | 'missing_test'
+  | 'plan_error'
+  | 'requirement_ambiguity'
+  | 'environment_failure'
+  | 'provider_failure'
+  | 'policy_violation'
+  | 'budget_exceeded'
+  | 'unfixable';
 ```
 
 Default routes:
@@ -586,7 +581,7 @@ interface ParallelisationPolicy {
   maxConcurrentReadNodes: number;
   maxConcurrentWriteNodesPerWorktree: 1;
   maxParallelActualCost?: number;
-  joinStrategy: "all" | "quorum" | "first_success";
+  joinStrategy: 'all' | 'quorum' | 'first_success';
 }
 ```
 
@@ -603,7 +598,6 @@ RoleFlock rejects a graph containing:
 - an edge referencing unavailable state;
 - a provider fallback without compatible capabilities;
 - a final evaluator identical to the sole implementer without an independent gate.
-
 
 ---
 
@@ -645,20 +639,20 @@ The UI renders this record prominently. Model identity is adapter-supplied and i
 
 ```typescript
 type ExecutionPhase =
-  | "preparing_context"
-  | "waiting_for_provider"
-  | "reasoning"
-  | "reading_repository"
-  | "calling_tool"
-  | "running_command"
-  | "writing_files"
-  | "running_tests"
-  | "reviewing_diff"
-  | "waiting_for_confirmation"
-  | "pausing"
-  | "stopping"
-  | "finalising"
-  | "recovering";
+  | 'preparing_context'
+  | 'waiting_for_provider'
+  | 'reasoning'
+  | 'reading_repository'
+  | 'calling_tool'
+  | 'running_command'
+  | 'writing_files'
+  | 'running_tests'
+  | 'reviewing_diff'
+  | 'waiting_for_confirmation'
+  | 'pausing'
+  | 'stopping'
+  | 'finalising'
+  | 'recovering';
 ```
 
 Example status lines:
@@ -693,13 +687,13 @@ A stale threshold creates an alert but does not automatically duplicate a paid i
 
 These actions are deliberately different:
 
-| Action | Meaning | Result |
-|---|---|---|
-| **Pause task** | Stop scheduling new nodes and request the active node to reach the next safe boundary | Task becomes `PAUSED`; state and worktree remain resumable |
-| **Stop active node** | Send cooperative cancellation to the current provider/process | Node becomes `STOPPING`, then `INTERRUPTED` or `STOPPED` |
-| **Force terminate** | Kill the local process after a grace period | Node becomes `INTERRUPTED_UNCLEAN`; recovery inspection is mandatory |
-| **Cancel task** | Prevent all future graph transitions | Task becomes `CANCELLING`, then `CANCELLED`; artefacts and worktree are preserved by default |
-| **Emergency stop workspace** | Block new starts, revoke runtime leases, terminate all child processes | Workspace enters `EMERGENCY_STOPPED` until acknowledged and reconciled |
+| Action                       | Meaning                                                                               | Result                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **Pause task**               | Stop scheduling new nodes and request the active node to reach the next safe boundary | Task becomes `PAUSED`; state and worktree remain resumable                                   |
+| **Stop active node**         | Send cooperative cancellation to the current provider/process                         | Node becomes `STOPPING`, then `INTERRUPTED` or `STOPPED`                                     |
+| **Force terminate**          | Kill the local process after a grace period                                           | Node becomes `INTERRUPTED_UNCLEAN`; recovery inspection is mandatory                         |
+| **Cancel task**              | Prevent all future graph transitions                                                  | Task becomes `CANCELLING`, then `CANCELLED`; artefacts and worktree are preserved by default |
+| **Emergency stop workspace** | Block new starts, revoke runtime leases, terminate all child processes                | Workspace enters `EMERGENCY_STOPPED` until acknowledged and reconciled                       |
 
 No stop action silently resets or discards edits. The UI shows whether files changed before termination and offers inspect, keep worktree, create patch, revert RoleFlock-owned changes, or resume from a safe checkpoint.
 
@@ -719,20 +713,15 @@ The UI must show `Pause requested — waiting for current command to finish`, ra
 
 ```typescript
 type ControlCommandType =
-  | "pause_task"
-  | "resume_task"
-  | "stop_node"
-  | "force_terminate_node"
-  | "cancel_task"
-  | "emergency_stop_workspace";
+  | 'pause_task'
+  | 'resume_task'
+  | 'stop_node'
+  | 'force_terminate_node'
+  | 'cancel_task'
+  | 'emergency_stop_workspace';
 
 type ControlCommandStatus =
-  | "requested"
-  | "acknowledged"
-  | "in_progress"
-  | "completed"
-  | "failed"
-  | "superseded";
+  'requested' | 'acknowledged' | 'in_progress' | 'completed' | 'failed' | 'superseded';
 ```
 
 Every command records requester, timestamp, reason, target, acknowledgement, completion, and resulting state.
@@ -748,17 +737,17 @@ interface ConfirmationRequest {
   nodeRunId: string;
   attempt: number;
   requestType:
-    | "clarify_requirement"
-    | "expand_scope"
-    | "write_path"
-    | "run_command"
-    | "network_access"
-    | "dependency_change"
-    | "database_change"
-    | "external_side_effect"
-    | "provider_switch"
-    | "additional_budget"
-    | "policy_exception";
+    | 'clarify_requirement'
+    | 'expand_scope'
+    | 'write_path'
+    | 'run_command'
+    | 'network_access'
+    | 'dependency_change'
+    | 'database_change'
+    | 'external_side_effect'
+    | 'provider_switch'
+    | 'additional_budget'
+    | 'policy_exception';
   title: string;
   rationale: string;
   exactAction: StructuredAction;
@@ -766,7 +755,7 @@ interface ConfirmationRequest {
   commandPreview?: string;
   diffPreviewRef?: string;
   estimatedAdditionalCost?: number;
-  riskClass: "low" | "medium" | "high" | "critical";
+  riskClass: 'low' | 'medium' | 'high' | 'critical';
   proposedResumeEdge: string;
   expiresAt?: string;
   fingerprint: string;
@@ -832,24 +821,24 @@ interface ApprovalGrant {
   createdBy: string;
   sourceRequestId: string;
   scope:
-    | "single_request"
-    | "node_attempt"
-    | "task"
-    | "task_request_type"
-    | "repository_session"
-    | "exact_fingerprint";
+    | 'single_request'
+    | 'node_attempt'
+    | 'task'
+    | 'task_request_type'
+    | 'repository_session'
+    | 'exact_fingerprint';
   fingerprint: string;
   projectId: string;
   repositoryId: string;
   taskId?: string;
   allowedPathPatterns?: string[];
   allowedCommandTemplates?: string[];
-  maximumRisk: "low" | "medium" | "high";
+  maximumRisk: 'low' | 'medium' | 'high';
   maximumAdditionalCost?: number;
   maximumApplications?: number;
   applicationsUsed: number;
   expiresAt: string;
-  status: "active" | "exhausted" | "expired" | "revoked";
+  status: 'active' | 'exhausted' | 'expired' | 'revoked';
 }
 ```
 
@@ -874,16 +863,16 @@ The following always require a fresh, explicit confirmation:
 
 ```typescript
 type ApprovalStatus =
-  | "pending"
-  | "grouped"
-  | "approved"
-  | "rejected"
-  | "changes_requested"
-  | "auto_applied"
-  | "expired"
-  | "withdrawn"
-  | "superseded"
-  | "cancelled";
+  | 'pending'
+  | 'grouped'
+  | 'approved'
+  | 'rejected'
+  | 'changes_requested'
+  | 'auto_applied'
+  | 'expired'
+  | 'withdrawn'
+  | 'superseded'
+  | 'cancelled';
 ```
 
 Approvals are idempotent. Double-clicking approve or receiving duplicate network requests cannot apply an action twice.
@@ -919,7 +908,6 @@ The UI must never merely say `Agent working`. It must show as much of the follow
 - next possible graph transitions.
 
 ---
-
 
 ## 4C. Local Web Application, CLI Execution, and Data Boundary
 
@@ -1049,24 +1037,24 @@ The Context Inspector exposes a disclosure manifest containing provider, configu
 
 ### 5.2 MVP success metrics
 
-| Metric | Target |
-|---|---:|
-| Successful provider connection tests | ≥ 95% |
-| Tasks with complete stage audit trail | 100% |
-| Writer collisions | 0 |
-| Critical tasks merged without final human approval | 0 |
-| API invocations with captured token usage | ≥ 98% |
-| Deterministic test results attached before final verdict | 100% |
-| Quota values carrying a confidence label | 100% |
-| Workflow resumed after process restart | 100% |
-| Median time to create a task | < 60 seconds |
-| User can identify blocking stage from dashboard | < 10 seconds |
-| User can identify active role, provider, model, and action | < 3 seconds |
-| Stop request visibly acknowledged | < 1 second |
-| Orphaned child processes after completed stop/cancel | 0 |
-| Duplicate approval action applications | 0 |
-| Eligible identical approvals correctly grouped | 100% |
-| Sensitive actions auto-approved by reusable grant | 0 |
+| Metric                                                     |       Target |
+| ---------------------------------------------------------- | -----------: |
+| Successful provider connection tests                       |        ≥ 95% |
+| Tasks with complete stage audit trail                      |         100% |
+| Writer collisions                                          |            0 |
+| Critical tasks merged without final human approval         |            0 |
+| API invocations with captured token usage                  |        ≥ 98% |
+| Deterministic test results attached before final verdict   |         100% |
+| Quota values carrying a confidence label                   |         100% |
+| Workflow resumed after process restart                     |         100% |
+| Median time to create a task                               | < 60 seconds |
+| User can identify blocking stage from dashboard            | < 10 seconds |
+| User can identify active role, provider, model, and action |  < 3 seconds |
+| Stop request visibly acknowledged                          |   < 1 second |
+| Orphaned child processes after completed stop/cancel       |            0 |
+| Duplicate approval action applications                     |            0 |
+| Eligible identical approvals correctly grouped             |         100% |
+| Sensitive actions auto-approved by reusable grant          |            0 |
 
 ---
 
@@ -1324,7 +1312,6 @@ Cursor is the sole primary writer for the active task. Alternative implementers 
 - No implementation.
 - Cannot override failed deterministic tests.
 
-
 ---
 
 ## 8.7 Custom Provider and Role Mapping
@@ -1384,7 +1371,6 @@ No workflow migration is required because the workflow references the role, not 
 
 ---
 
-
 ## 9. Workflow Modes
 
 ### 9.0 Graph Necessity Gate
@@ -1392,11 +1378,7 @@ No workflow migration is required because the workflow references the role, not 
 Before launch, RoleFlock selects the smallest sufficient execution mode:
 
 ```typescript
-type ExecutionMode =
-  | "direct"
-  | "simple_loop"
-  | "fixed_graph"
-  | "critical_graph";
+type ExecutionMode = 'direct' | 'simple_loop' | 'fixed_graph' | 'critical_graph';
 ```
 
 - **Direct:** one agent plus deterministic checks.
@@ -1408,12 +1390,12 @@ The gate considers risk, diff scope, independent branches, permission changes, m
 
 Default complexity budgets:
 
-| Mode | Maximum agent nodes | Maximum parallel agents | Maximum fix attempts |
-|---|---:|---:|---:|
-| Direct | 1 | 1 | 0 |
-| Simple loop | 2 | 1 | 1 |
-| Fixed graph | 4 | 2 | 2 |
-| Critical graph | 7 | 3 | 2 |
+| Mode           | Maximum agent nodes | Maximum parallel agents | Maximum fix attempts |
+| -------------- | ------------------: | ----------------------: | -------------------: |
+| Direct         |                   1 |                       1 |                    0 |
+| Simple loop    |                   2 |                       1 |                    1 |
+| Fixed graph    |                   4 |                       2 |                    2 |
+| Critical graph |                   7 |                       3 |                    2 |
 
 Adding nodes beyond the template requires a visible justification and estimated incremental cost.
 
@@ -1490,7 +1472,6 @@ A workflow validator must reject:
 - a merge stage without human approval in MVP;
 - loops without a maximum retry count.
 
-
 ---
 
 ## 9A. Task Types, Outcome Contracts, and Graph Templates
@@ -1499,20 +1480,19 @@ A workflow validator must reject:
 
 ```typescript
 type TaskType =
-  | "new_product"
-  | "feature"
-  | "bug_fix"
-  | "refactor"
-  | "test_improvement"
-  | "performance"
-  | "security_fix"
-  | "documentation"
-  | "dependency_update"
-  | "migration"
-  | "investigation"
-  | "review_changes";
+  | 'new_product'
+  | 'feature'
+  | 'bug_fix'
+  | 'refactor'
+  | 'test_improvement'
+  | 'performance'
+  | 'security_fix'
+  | 'documentation'
+  | 'dependency_update'
+  | 'migration'
+  | 'investigation'
+  | 'review_changes';
 ```
-
 
 ### 9A.1A Task-intent chooser
 
@@ -1551,10 +1531,7 @@ Every attachment has an authority level:
 
 ```typescript
 type DocumentAuthority =
-  | "authoritative_requirement"
-  | "approved_plan"
-  | "reference"
-  | "inspiration_only";
+  'authoritative_requirement' | 'approved_plan' | 'reference' | 'inspiration_only';
 ```
 
 Supporting documents are optional. A user can begin from a plain-language brief.
@@ -1621,7 +1598,7 @@ interface OutcomeContract {
   acceptanceCriteria: AcceptanceCriterion[];
   prohibitedOutcomes: string[];
   requiredEvidence: EvidenceRequirement[];
-  riskClass: "low" | "medium" | "high" | "critical";
+  riskClass: 'low' | 'medium' | 'high' | 'critical';
   outOfScope: string[];
 }
 ```
@@ -1633,13 +1610,13 @@ interface AcceptanceCriterion {
   id: string;
   statement: string;
   verificationType:
-    | "test"
-    | "command"
-    | "database_assertion"
-    | "browser_assertion"
-    | "schema"
-    | "model_review"
-    | "human";
+    | 'test'
+    | 'command'
+    | 'database_assertion'
+    | 'browser_assertion'
+    | 'schema'
+    | 'model_review'
+    | 'human';
   verifierRef: string;
   blocking: boolean;
 }
@@ -1894,7 +1871,6 @@ Compact cards for Claude, Cursor, Codex, and every configured Custom Provider co
 - Human plan approval requirement.
 - Auto-open pull request after approval.
 
-
 ### Requirement and document preview
 
 Before launch, the UI shows:
@@ -1915,14 +1891,14 @@ Implementation cannot start while a blocking authoritative conflict is unresolve
 
 Before launch, the UI shows:
 
-| Stage | Role | Model | Access | Estimated cost | Quota impact |
-|---|---|---|---|---:|---|
-| Planning | Architect | Claude Opus 5 High | Read-only | Included / shadow | Medium |
-| Plan review | Critic | Custom Provider A / Qwen 3.8 Max Review | Read-only | Estimated API | Low |
-| Test design | Test Designer | Custom Provider B / MiMo v2.5 Pro | Read-only | Estimated API | Very low |
-| Implementation | Implementer | Cursor Grok 4.5 High | Write | Included / shadow | High |
-| Verification | Verifier | GPT-5.6 Terra | Read-only | Included / shadow | Medium |
-| Final review | Judge | GPT-5.6 Sol | Read-only | Included / shadow | High |
+| Stage          | Role          | Model                                   | Access    |    Estimated cost | Quota impact |
+| -------------- | ------------- | --------------------------------------- | --------- | ----------------: | ------------ |
+| Planning       | Architect     | Claude Opus 5 High                      | Read-only | Included / shadow | Medium       |
+| Plan review    | Critic        | Custom Provider A / Qwen 3.8 Max Review | Read-only |     Estimated API | Low          |
+| Test design    | Test Designer | Custom Provider B / MiMo v2.5 Pro       | Read-only |     Estimated API | Very low     |
+| Implementation | Implementer   | Cursor Grok 4.5 High                    | Write     | Included / shadow | High         |
+| Verification   | Verifier      | GPT-5.6 Terra                           | Read-only | Included / shadow | Medium       |
+| Final review   | Judge         | GPT-5.6 Sol                             | Read-only | Included / shadow | High         |
 
 The launch button must state the expected policy, for example:
 
@@ -2136,6 +2112,7 @@ For every call RoleFlock:
 - calls optional quota or billing endpoints only when configured;
 - otherwise reports locally metered usage or a manual snapshot;
 - never assumes all providers implement the same billing API.
+
 ---
 
 ## 11.6 Cost & Usage Screen
@@ -2187,7 +2164,6 @@ RoleFlock stores three separate values:
 - Fallback to cheaper model.
 - Disable optional stages.
 - Never skip required critical review due solely to budget; instead pause for approval.
-
 
 ---
 
@@ -2273,14 +2249,13 @@ Show:
 - remaining budget;
 - next escalation.
 
-
 ### 11A.4 Run Control and Approval Inbox
 
 The global Run Control drawer shows every active node in a compact table:
 
-| Task | Node | Role | Provider / model | Phase | Elapsed | Control |
-|---|---|---|---|---|---:|---|
-| RM-1043 | Plan | Chief Architect | Claude / Opus 5 High | Reading repository | 03:42 | Inspect · Pause · Stop |
+| Task    | Node | Role            | Provider / model     | Phase              | Elapsed | Control                |
+| ------- | ---- | --------------- | -------------------- | ------------------ | ------: | ---------------------- |
+| RM-1043 | Plan | Chief Architect | Claude / Opus 5 High | Reading repository |   03:42 | Inspect · Pause · Stop |
 
 The Approval Inbox groups requests by fingerprint while retaining individual task details. The default card shows:
 
@@ -2302,6 +2277,7 @@ Approval controls:
 - Review each request separately.
 
 Sensitive actions are never included in reusable approval grants in MVP.
+
 ### 11A.5 Skills and Memory
 
 Sections:
@@ -2344,12 +2320,12 @@ Cost analytics add:
 
 ## 12. Quota and Usage Feasibility Matrix
 
-| Provider | Run-level usage | Account-wide remaining quota | Cost source | MVP confidence |
-|---|---|---|---|---|
-| Claude Code subscription | Tokens and estimated cost can be captured locally | No assumption of public personal quota API; manual or supported local source | Included usage + shadow price | Mixed |
-| Codex subscription | Local events and app-server information | App-server rate-limit buckets or verified status | Included usage + optional credits + shadow price | High where app-server available |
-| Cursor individual | RoleFlock local invocations | Manual dashboard snapshot unless supported account endpoint exists | Included usage and local shadow estimate | Mixed |
-| Cursor Teams/Enterprise | Usage events and spend via Admin API | Team usage/spend API | Official event cost | High |
+| Provider                    | Run-level usage                                         | Account-wide remaining quota                                                                 | Cost source                                         | MVP confidence                                          |
+| --------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------- |
+| Claude Code subscription    | Tokens and estimated cost can be captured locally       | No assumption of public personal quota API; manual or supported local source                 | Included usage + shadow price                       | Mixed                                                   |
+| Codex subscription          | Local events and app-server information                 | App-server rate-limit buckets or verified status                                             | Included usage + optional credits + shadow price    | High where app-server available                         |
+| Cursor individual           | RoleFlock local invocations                             | Manual dashboard snapshot unless supported account endpoint exists                           | Included usage and local shadow estimate            | Mixed                                                   |
+| Cursor Teams/Enterprise     | Usage events and spend via Admin API                    | Team usage/spend API                                                                         | Official event cost                                 | High                                                    |
 | Custom Provider connections | Response usage when provided; otherwise local estimates | Optional configured quota/billing endpoint, rate-limit headers, imported snapshot, or manual | Per-model configurable price card or provider event | High for calls made by RoleFlock when usage is returned |
 
 RoleFlock must never fabricate an account-wide percentage. When a provider does not expose it, the UI says:
@@ -2425,7 +2401,6 @@ FAILED
 - `STOPPED` and `INTERRUPTED` nodes require an explicit resume, retry, skip, or cancel decision.
 - Emergency stop prevents new runtime leases until the user acknowledges reconciliation results.
 - Approval decisions are idempotent; duplicate API calls cannot apply the underlying action twice.
-
 
 ---
 
@@ -2561,7 +2536,6 @@ interface SessionHandoff {
 }
 ```
 
-
 ---
 
 ## 13B. Runtime Leases, Process Control, and Recovery
@@ -2672,7 +2646,6 @@ Recommended stack:
 - Zod for internal validation.
 - JSON Schema for model outputs.
 
-
 ### 15.3 Run Control Manager
 
 - Maintains `ActiveExecution` snapshots.
@@ -2724,7 +2697,7 @@ Uniform interface:
 ```ts
 interface ProviderAdapter {
   id: string;
-  connectionType: "cli" | "app-server" | "openai-compatible" | "custom-api";
+  connectionType: 'cli' | 'app-server' | 'openai-compatible' | 'custom-api';
 
   healthCheck(): Promise<ProviderHealth>;
   listModels(): Promise<ModelDescriptor[]>;
@@ -2763,7 +2736,6 @@ Every invocation writes immutable ledger entries:
 
 ---
 
-
 ## 16. Provider Integration Requirements
 
 Every adapter must implement or explicitly mark unsupported:
@@ -2781,7 +2753,6 @@ Every adapter must implement or explicitly mark unsupported:
 - final process exit classification.
 
 The UI must not advertise pause, remote cancellation, or resumability when the adapter cannot provide it.
-
 
 ### 16.0 Provider strategy and capability routing
 
@@ -2930,11 +2901,7 @@ type CustomProviderConnection = {
   id: string;
   providerName: string;
   connectionName: string;
-  protocol:
-    | "openai-chat-completions"
-    | "openai-responses"
-    | "anthropic-messages"
-    | "custom-http";
+  protocol: 'openai-chat-completions' | 'openai-responses' | 'anthropic-messages' | 'custom-http';
   baseUrl: string;
   apiKeySecretId: string;
   defaultHeaders?: Record<string, string>;
@@ -3027,7 +2994,7 @@ Both examples are ordinary editable records and can be deleted or replaced.
 type PriceCard = {
   providerId: string;
   modelId: string;
-  currency: "USD" | "CNY" | string;
+  currency: 'USD' | 'CNY' | string;
   effectiveFrom: string;
   inputPerMillion?: number;
   cachedInputPerMillion?: number;
@@ -3035,7 +3002,7 @@ type PriceCard = {
   outputPerMillion?: number;
   perRequest?: number;
   subscriptionMonthly?: number;
-  source: "official" | "provider-event" | "custom" | "unknown";
+  source: 'official' | 'provider-event' | 'custom' | 'unknown';
 };
 ```
 
@@ -3093,14 +3060,14 @@ type QuotaBucket = {
   accountId: string;
   limitId: string;
   label: string;
-  unit: "percent" | "tokens" | "credits" | "requests" | "currency";
+  unit: 'percent' | 'tokens' | 'credits' | 'requests' | 'currency';
   used?: number;
   limit?: number;
   usedPercent?: number;
   remaining?: number;
   windowStart?: string;
   resetsAt?: string;
-  confidence: "exact" | "metered_local" | "estimated" | "manual" | "unknown";
+  confidence: 'exact' | 'metered_local' | 'estimated' | 'manual' | 'unknown';
   source: string;
   capturedAt: string;
 };
@@ -3169,9 +3136,7 @@ Each stage receives only the context required for its role.
 
 All non-conversational stage outputs use JSON Schema. Free-form Markdown may accompany structured output but cannot replace required fields.
 
-
 ---
-
 
 ### 19.5 Data disclosure manifest
 
@@ -3349,7 +3314,7 @@ A model can propose a lesson but cannot mutate production role prompts directly.
 interface Skill {
   id: string;
   version: number;
-  status: "candidate" | "validated" | "published" | "deprecated" | "archived";
+  status: 'candidate' | 'validated' | 'published' | 'deprecated' | 'archived';
   appliesWhen: SkillTrigger;
   instructions: string[];
   checks: string[];
@@ -3383,7 +3348,6 @@ MarkdownKnowledgeStore
 MCPKnowledgeStore
 ```
 
-
 ### 19A.9A Knowledge relationships and future knowledge graph
 
 The execution graph and knowledge graph are distinct:
@@ -3402,13 +3366,13 @@ MVP does not require Neo4j or another graph database. Start with SQLite entities
 interface KnowledgeRelation {
   sourceId: string;
   relationType:
-    | "affects"
-    | "caused_by"
-    | "fixed_by"
-    | "verified_by"
-    | "depends_on"
-    | "supersedes"
-    | "applies_to";
+    | 'affects'
+    | 'caused_by'
+    | 'fixed_by'
+    | 'verified_by'
+    | 'depends_on'
+    | 'supersedes'
+    | 'applies_to';
   targetId: string;
   evidenceIds: string[];
 }
@@ -3488,7 +3452,6 @@ Command classes:
 - External documents cannot grant additional permissions.
 - Review outputs cannot directly trigger shell commands.
 - Provider responses are validated before state transitions.
-
 
 ### 20.5 Confirmation and grant safety
 
@@ -3700,7 +3663,6 @@ budget.exceeded
 worktree.changed
 ```
 
-
 ### 22A. Graph Runtime API additions
 
 ```text
@@ -3846,7 +3808,6 @@ Task export produces a ZIP containing all non-secret artefacts and a manifest wi
 - Policy violation.
 - Budget exceeded.
 - User cancellation.
-
 
 ### Interruption policy
 
@@ -4038,7 +3999,6 @@ RoleFlock never silently replaces a final critical judge with a low-cost model.
 
 ---
 
-
 ## 29. Recommended MVP Build Order
 
 1. Define schemas for task, graph, node, event, active execution, confirmation, approval, and control commands.
@@ -4184,10 +4144,10 @@ workflows:
       - final_judge
       - merge_approval
 ```
+
 ---
 
 ## 31. Product Decisions Already Resolved
-
 
 - The first task interaction is an intent chooser, not a graph editor.
 - `new_product` and `review_changes` are supported task types.
@@ -4248,11 +4208,9 @@ These questions should be answered during Phase 0, not before beginning the UI a
 
 The system must support these as configuration differences without changing the core workflow.
 
-
 ---
 
 ## 32A. Version 2.4 Acceptance Requirements
-
 
 ### Task intent and documents
 
@@ -4285,7 +4243,6 @@ The system must support these as configuration differences without changing the 
 - Typed knowledge relations retain evidence provenance.
 - MemoSprout remains optional.
 - Knowledge or skill candidates cannot automatically mutate production prompts without evaluation and approval.
-
 
 ### Product identity
 
@@ -4333,7 +4290,6 @@ The system must support these as configuration differences without changing the 
 - Required checks cannot be bypassed.
 - Provider fallback is capability-compatible.
 - Merge remains human-approved.
-
 
 ### Run control and transparency
 
@@ -4438,7 +4394,6 @@ complete a small bug-fix graph with one forced daemon restart.
 - Team workspace and RBAC.
 - Hosted coordination mode.
 
-
 ---
 
 ## 32C. Implementation Freeze and Change Process
@@ -4473,7 +4428,6 @@ New major ideas must be recorded as an RFC or post-MVP experiment. They must not
 
 # End of RoleFlock PRD v2.4 — Brand-Finalised Implementation Baseline
 
-
 ---
 
 ## Appendix A — Source-informed Design Basis
@@ -4493,10 +4447,10 @@ The v2.0 architecture incorporates the following current agent-engineering findi
 
 Reference works consulted:
 
-- *3 Years of Graph Engineering with LangGraph* — LangChain, July 2026.
-- *The Art of Loop Engineering* — LangChain, June 2026.
-- *Harness Design for Long-running Application Development* — Anthropic, March 2026.
-- *Scaling Managed Agents: Decoupling the Brain from the Hands* — Anthropic, April 2026.
-- *Demystifying Evals for AI Agents* — Anthropic, January 2026.
-- *What Is Temporal?* — Temporal documentation, 2026.
-- *How Deep Agents Run Untrusted Code Without a Sandbox* — LangChain, June 2026.
+- _3 Years of Graph Engineering with LangGraph_ — LangChain, July 2026.
+- _The Art of Loop Engineering_ — LangChain, June 2026.
+- _Harness Design for Long-running Application Development_ — Anthropic, March 2026.
+- _Scaling Managed Agents: Decoupling the Brain from the Hands_ — Anthropic, April 2026.
+- _Demystifying Evals for AI Agents_ — Anthropic, January 2026.
+- _What Is Temporal?_ — Temporal documentation, 2026.
+- _How Deep Agents Run Untrusted Code Without a Sandbox_ — LangChain, June 2026.

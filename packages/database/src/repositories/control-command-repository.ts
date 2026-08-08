@@ -61,8 +61,7 @@ export class ControlCommandRepository {
 
   get(id: string): ControlCommandRecord | undefined {
     const row = this.db.prepare(`SELECT * FROM control_commands WHERE id = ?`).get(id) as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     return row ? mapControl(row) : undefined;
   }
 

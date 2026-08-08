@@ -46,8 +46,8 @@ export function BlockedBanner({
       <p className="eyebrow">STOPPED — NEEDS A DIFFERENT MODEL</p>
       <h3>Nothing configured for the {role} would answer</h3>
       <p className="hint">
-        The steps that already finished are kept. Change the model for this role, then start
-        again — the run picks up where it stopped rather than repeating paid work.
+        The steps that already finished are kept. Change the model for this role, then start again —
+        the run picks up where it stopped rather than repeating paid work.
       </p>
 
       <ul className="doc-list">

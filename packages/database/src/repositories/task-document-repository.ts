@@ -1,10 +1,7 @@
 import type { SqliteDb } from '../client.js';
 
 export type DocumentAuthority =
-  | 'authoritative_requirement'
-  | 'approved_plan'
-  | 'reference'
-  | 'inspiration_only';
+  'authoritative_requirement' | 'approved_plan' | 'reference' | 'inspiration_only';
 
 export type DocumentKind =
   | 'prd'
@@ -79,9 +76,8 @@ export class TaskDocumentRepository {
   }
 
   get(id: string): TaskDocument | undefined {
-    const row = this.db
-      .prepare(`SELECT * FROM task_documents WHERE id = ?`)
-      .get(id) as Record<string, unknown> | undefined;
+    const row = this.db.prepare(`SELECT * FROM task_documents WHERE id = ?`).get(id) as
+      Record<string, unknown> | undefined;
     if (!row) return undefined;
     return {
       id: String(row.id),

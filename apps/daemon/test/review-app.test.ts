@@ -72,7 +72,10 @@ describe('review app service', () => {
   it('serves ES modules with a JavaScript MIME type', async () => {
     const root = mkdtempSync(join(tmpdir(), 'roleflock-preview-mjs-'));
     mkdirSync(join(root, 'lib'), { recursive: true });
-    writeFileSync(join(root, 'index.html'), '<script type="module" src="/lib/notes-store.mjs"></script>');
+    writeFileSync(
+      join(root, 'index.html'),
+      '<script type="module" src="/lib/notes-store.mjs"></script>',
+    );
     writeFileSync(join(root, 'lib/notes-store.mjs'), 'export const ok = true;\n');
     const service = new ReviewAppService();
     services.push(service);

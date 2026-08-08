@@ -319,18 +319,18 @@ Implement contracts before provider code.
 
 ```typescript
 type TaskType =
-  | "new_product"
-  | "feature"
-  | "bug_fix"
-  | "refactor"
-  | "test_improvement"
-  | "performance"
-  | "security_fix"
-  | "documentation"
-  | "dependency_update"
-  | "migration"
-  | "investigation"
-  | "review_changes";
+  | 'new_product'
+  | 'feature'
+  | 'bug_fix'
+  | 'refactor'
+  | 'test_improvement'
+  | 'performance'
+  | 'security_fix'
+  | 'documentation'
+  | 'dependency_update'
+  | 'migration'
+  | 'investigation'
+  | 'review_changes';
 
 interface Task {
   id: string;
@@ -338,7 +338,7 @@ interface Task {
   type: TaskType;
   title: string;
   brief: string;
-  risk: "low" | "medium" | "high" | "critical";
+  risk: 'low' | 'medium' | 'high' | 'critical';
   state: TaskState;
   workflowGraphVersionId: string;
   budgetPolicyId: string;
@@ -365,18 +365,18 @@ interface ActiveExecution {
   effort?: string;
 
   phase:
-    | "preparing"
-    | "compiling_context"
-    | "waiting_for_provider"
-    | "reasoning"
-    | "reading"
-    | "writing"
-    | "running_tool"
-    | "running_tests"
-    | "awaiting_confirmation"
-    | "stopping"
-    | "recovering"
-    | "finalising";
+    | 'preparing'
+    | 'compiling_context'
+    | 'waiting_for_provider'
+    | 'reasoning'
+    | 'reading'
+    | 'writing'
+    | 'running_tool'
+    | 'running_tests'
+    | 'awaiting_confirmation'
+    | 'stopping'
+    | 'recovering'
+    | 'finalising';
 
   permissionProfileId: string;
   currentActivity?: string;
@@ -410,17 +410,17 @@ interface ConfirmationRequest {
   nodeRunId: string;
 
   requestType:
-    | "clarify_requirement"
-    | "expand_scope"
-    | "write_path"
-    | "run_command"
-    | "network_access"
-    | "dependency_change"
-    | "database_change"
-    | "external_side_effect"
-    | "provider_switch"
-    | "additional_budget"
-    | "policy_exception";
+    | 'clarify_requirement'
+    | 'expand_scope'
+    | 'write_path'
+    | 'run_command'
+    | 'network_access'
+    | 'dependency_change'
+    | 'database_change'
+    | 'external_side_effect'
+    | 'provider_switch'
+    | 'additional_budget'
+    | 'policy_exception';
 
   rationale: string;
   exactAction: StructuredAction;
@@ -428,11 +428,11 @@ interface ConfirmationRequest {
   commandPreview?: string;
   destination?: string;
   estimatedAdditionalCost?: number;
-  riskClass: "low" | "medium" | "high" | "critical";
+  riskClass: 'low' | 'medium' | 'high' | 'critical';
 
   stateHash: string;
   fingerprint: string;
-  status: "pending" | "approved" | "rejected" | "expired" | "invalidated";
+  status: 'pending' | 'approved' | 'rejected' | 'expired' | 'invalidated';
   createdAt: string;
 }
 ```
@@ -444,12 +444,12 @@ interface ApprovalGrant {
   id: string;
   projectId: string;
   scope:
-    | "single_request"
-    | "node_attempt"
-    | "task"
-    | "task_request_type"
-    | "repository_session"
-    | "exact_fingerprint";
+    | 'single_request'
+    | 'node_attempt'
+    | 'task'
+    | 'task_request_type'
+    | 'repository_session'
+    | 'exact_fingerprint';
 
   fingerprint?: string;
   requestTypes?: string[];
@@ -457,7 +457,7 @@ interface ApprovalGrant {
   allowedCommandTemplates?: string[];
   allowedDestinations?: string[];
 
-  maximumRisk: "low" | "medium" | "high";
+  maximumRisk: 'low' | 'medium' | 'high';
   maximumAdditionalCost?: number;
   maximumApplications?: number;
   applicationsUsed: number;
@@ -488,11 +488,7 @@ Never reuse approval for:
 interface ProviderAdapter {
   readonly id: string;
   readonly connectionType:
-    | "cli"
-    | "app-server"
-    | "openai-compatible"
-    | "anthropic-compatible"
-    | "custom-http";
+    'cli' | 'app-server' | 'openai-compatible' | 'anthropic-compatible' | 'custom-http';
 
   healthCheck(): Promise<ProviderHealth>;
   detectCapabilities(): Promise<AdapterCapabilities>;
@@ -509,19 +505,19 @@ interface ProviderAdapter {
 
 ```typescript
 type InvocationEvent =
-  | { type: "invocation.started"; invocationId: string }
-  | { type: "model.output.delta"; text: string }
-  | { type: "phase.changed"; phase: ActiveExecution["phase"]; detail?: string }
-  | { type: "heartbeat"; at: string }
-  | { type: "tool.requested"; tool: string; input: unknown }
-  | { type: "tool.started"; tool: string }
-  | { type: "tool.completed"; tool: string; outputRef?: string }
-  | { type: "confirmation.requested"; request: ConfirmationRequestDraft }
-  | { type: "usage.updated"; usage: UsageDelta }
-  | { type: "quota.updated"; quota: QuotaSnapshot }
-  | { type: "invocation.interrupted"; reason: string }
-  | { type: "invocation.completed"; output: unknown }
-  | { type: "invocation.failed"; error: NormalisedProviderError };
+  | { type: 'invocation.started'; invocationId: string }
+  | { type: 'model.output.delta'; text: string }
+  | { type: 'phase.changed'; phase: ActiveExecution['phase']; detail?: string }
+  | { type: 'heartbeat'; at: string }
+  | { type: 'tool.requested'; tool: string; input: unknown }
+  | { type: 'tool.started'; tool: string }
+  | { type: 'tool.completed'; tool: string; outputRef?: string }
+  | { type: 'confirmation.requested'; request: ConfirmationRequestDraft }
+  | { type: 'usage.updated'; usage: UsageDelta }
+  | { type: 'quota.updated'; quota: QuotaSnapshot }
+  | { type: 'invocation.interrupted'; reason: string }
+  | { type: 'invocation.completed'; output: unknown }
+  | { type: 'invocation.failed'; error: NormalisedProviderError };
 ```
 
 ---

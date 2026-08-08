@@ -39,9 +39,7 @@ export class ProcessHandleRepository {
   }
 
   heartbeat(id: string, at: string): void {
-    this.db
-      .prepare(`UPDATE process_handles SET last_heartbeat_at = ? WHERE id = ?`)
-      .run(at, id);
+    this.db.prepare(`UPDATE process_handles SET last_heartbeat_at = ? WHERE id = ?`).run(at, id);
   }
 
   setStatus(id: string, status: ProcessHandleRecord['status'], endedAt?: string): void {
@@ -61,8 +59,7 @@ export class ProcessHandleRepository {
 
   get(id: string): ProcessHandleRecord | undefined {
     const row = this.db.prepare(`SELECT * FROM process_handles WHERE id = ?`).get(id) as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     return row ? mapProcess(row) : undefined;
   }
 }

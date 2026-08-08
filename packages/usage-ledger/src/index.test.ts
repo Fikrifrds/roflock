@@ -32,14 +32,8 @@ describe('usage ledger pricing', () => {
   });
 
   it('reports budget warning and hard stop thresholds separately', () => {
-    expect(
-      budgetStatus({ actualCostUsd: 0.85, maxActualCostUsd: 1 }).warning,
-    ).toBe(true);
-    expect(
-      budgetStatus({ actualCostUsd: 0.85, maxActualCostUsd: 1 }).hardStop,
-    ).toBe(false);
-    expect(
-      budgetStatus({ actualCostUsd: 1, maxActualCostUsd: 1 }).hardStop,
-    ).toBe(true);
+    expect(budgetStatus({ actualCostUsd: 0.85, maxActualCostUsd: 1 }).warning).toBe(true);
+    expect(budgetStatus({ actualCostUsd: 0.85, maxActualCostUsd: 1 }).hardStop).toBe(false);
+    expect(budgetStatus({ actualCostUsd: 1, maxActualCostUsd: 1 }).hardStop).toBe(true);
   });
 });

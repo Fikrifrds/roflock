@@ -1,8 +1,4 @@
-import {
-  PriceCardRepository,
-  QuotaSnapshotRepository,
-  type SqliteDb,
-} from '@roleflock/database';
+import { PriceCardRepository, QuotaSnapshotRepository, type SqliteDb } from '@roleflock/database';
 import {
   DEFAULT_PRICE_CARDS,
   localQuotaPlaceholder,

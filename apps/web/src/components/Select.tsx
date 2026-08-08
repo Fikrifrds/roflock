@@ -100,10 +100,7 @@ export function Select({
     // Offered last, so typing a prefix of a real entry still lands on that
     // entry first and the custom escape hatch is a deliberate reach.
     if (allowCustom && typed && !options.some((option) => option.value === typed)) {
-      return [
-        ...matches,
-        { value: typed, label: `Use “${typed}”`, description: customHint },
-      ];
+      return [...matches, { value: typed, label: `Use “${typed}”`, description: customHint }];
     }
     return matches;
   }, [allowCustom, customHint, options, query]);
@@ -116,14 +113,11 @@ export function Select({
     setActiveIndex(index >= 0 ? index : 0);
   }, [disabled, options, value]);
 
-  const close = useCallback(
-    (returnFocus: boolean) => {
-      setOpen(false);
-      setQuery('');
-      if (returnFocus) triggerRef.current?.focus();
-    },
-    [],
-  );
+  const close = useCallback((returnFocus: boolean) => {
+    setOpen(false);
+    setQuery('');
+    if (returnFocus) triggerRef.current?.focus();
+  }, []);
 
   const commit = useCallback(
     (index: number) => {
@@ -251,9 +245,7 @@ export function Select({
               index === activeIndex ? 'active' : '',
               option.value === value ? 'selected' : '',
               // The custom entry is the one value not drawn from the catalogue.
-              allowCustom && !options.some((item) => item.value === option.value)
-                ? 'custom'
-                : '',
+              allowCustom && !options.some((item) => item.value === option.value) ? 'custom' : '',
             ]
               .filter(Boolean)
               .join(' ')}

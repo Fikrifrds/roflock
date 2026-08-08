@@ -18,7 +18,13 @@ function Harness({ initial = 'fast' }: { initial?: string }) {
       <span id="mode-label" className="field-label">
         Workflow
       </span>
-      <Select id="mode" labelledBy="mode-label" value={value} options={OPTIONS} onChange={setValue} />
+      <Select
+        id="mode"
+        labelledBy="mode-label"
+        value={value}
+        options={OPTIONS}
+        onChange={setValue}
+      />
       <output data-testid="value">{value}</output>
     </>
   );
@@ -159,8 +165,16 @@ describe('Select with a long list', () => {
     { value: 'claude-opus-5-high', label: 'Opus 5 1M', description: 'claude-opus-5-high' },
     { value: 'claude-opus-5-low', label: 'Opus 5 1M Low', description: 'claude-opus-5-low' },
     { value: 'gpt-5.6-sol-high', label: 'GPT-5.6 Sol 1M High', description: 'gpt-5.6-sol-high' },
-    { value: 'gpt-5.6-terra-medium', label: 'GPT-5.6 Terra 1M', description: 'gpt-5.6-terra-medium' },
-    { value: 'cursor-grok-4.5-high', label: 'Cursor Grok 4.5', description: 'cursor-grok-4.5-high' },
+    {
+      value: 'gpt-5.6-terra-medium',
+      label: 'GPT-5.6 Terra 1M',
+      description: 'gpt-5.6-terra-medium',
+    },
+    {
+      value: 'cursor-grok-4.5-high',
+      label: 'Cursor Grok 4.5',
+      description: 'cursor-grok-4.5-high',
+    },
     { value: 'composer-2.5', label: 'Composer 2.5', description: 'composer-2.5' },
     { value: 'gpt-5.5-high', label: 'GPT-5.5 1M High', description: 'gpt-5.5-high' },
     { value: 'gpt-5.4-high', label: 'GPT-5.4 1M High', description: 'gpt-5.4-high' },

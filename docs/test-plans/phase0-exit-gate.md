@@ -6,19 +6,19 @@
 
 ## Exit gate checklist
 
-| Criterion | Result |
-|---|---|
-| Small real repository task completes | Pass — walking skeleton integration test |
-| Forced confirmation before write | Pass — reviewer creates Approval Inbox item |
-| Deterministic test node runs | Pass — command-runner in worktree sandbox |
-| Human accept/reject gate | Pass — task waits on acceptance |
-| Diff / tests / findings / usage / disclosure inspectable | Pass — evidence + usage APIs |
-| Daemon binds only to localhost by default | Pass — unit test |
-| No raw shell endpoint | Pass — unit test |
-| Unauthenticated API rejected | Pass — unit test |
-| Non-local origin mutations rejected | Pass — unit test |
-| Secret/symlink path deny | Pass — repository-runtime tests |
-| One-writer lease | Pass — repository-runtime tests |
+| Criterion                                                | Result                                      |
+| -------------------------------------------------------- | ------------------------------------------- |
+| Small real repository task completes                     | Pass — walking skeleton integration test    |
+| Forced confirmation before write                         | Pass — reviewer creates Approval Inbox item |
+| Deterministic test node runs                             | Pass — command-runner in worktree sandbox   |
+| Human accept/reject gate                                 | Pass — task waits on acceptance             |
+| Diff / tests / findings / usage / disclosure inspectable | Pass — evidence + usage APIs                |
+| Daemon binds only to localhost by default                | Pass — unit test                            |
+| No raw shell endpoint                                    | Pass — unit test                            |
+| Unauthenticated API rejected                             | Pass — unit test                            |
+| Non-local origin mutations rejected                      | Pass — unit test                            |
+| Secret/symlink path deny                                 | Pass — repository-runtime tests             |
+| One-writer lease                                         | Pass — repository-runtime tests             |
 
 ## Remaining hardening (post Phase 0 / early Phase 1)
 

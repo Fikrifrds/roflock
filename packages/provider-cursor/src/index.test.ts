@@ -181,7 +181,9 @@ describe('extractStreamText', () => {
       ),
     ).toBe('Done.');
     expect(
-      extractStreamText('{"type":"tool_call","tool_call":{"writeToolCall":{"args":{"fileText":"a\\nb'),
+      extractStreamText(
+        '{"type":"tool_call","tool_call":{"writeToolCall":{"args":{"fileText":"a\\nb',
+      ),
     ).toBeUndefined();
   });
 

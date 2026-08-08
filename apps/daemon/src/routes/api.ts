@@ -2050,8 +2050,7 @@ export function registerApi(
     const result = deleteLocalData(dataDir);
     return {
       ...result,
-      note:
-        'Local SQLite, documents, worktrees, and Roflock-owned secret stores were wiped. Backups, logs, and session authentication were retained. Restart the daemon to continue.',
+      note: 'Local SQLite, documents, worktrees, and Roflock-owned secret stores were wiped. Backups, logs, and session authentication were retained. Restart the daemon to continue.',
     };
   });
   app.get('/api/version', async () => getLocalVersion());

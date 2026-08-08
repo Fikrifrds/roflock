@@ -66,9 +66,8 @@ export class ConfirmationRepository {
   }
 
   get(id: string): ConfirmationRequest | undefined {
-    const row = this.db
-      .prepare(`SELECT * FROM confirmation_requests WHERE id = ?`)
-      .get(id) as Record<string, unknown> | undefined;
+    const row = this.db.prepare(`SELECT * FROM confirmation_requests WHERE id = ?`).get(id) as
+      Record<string, unknown> | undefined;
     return row ? mapConfirmation(row) : undefined;
   }
 

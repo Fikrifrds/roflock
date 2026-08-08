@@ -16,42 +16,42 @@ This is a planning map. The coding harness must verify it against the local chec
 
 ---
 
-| Current package/area | Classification | Target role in Roflock | Key rule |
-|---|---|---|---|
-| `graph-core` | ADAPT + GENERALIZE | legacy runtime graph compatibility, templates, validation migration | Do not delete before Graph IR bridge is complete |
-| `graph-runtime` | KEEP + HARDEN | one canonical execution runtime | No second runtime |
-| `contracts` | KEEP + EVOLVE | shared runtime/API contracts | Version public contracts |
-| `agent-events` | KEEP + CONVERGE | driver/runtime agent event model | Avoid duplicate event taxonomies |
-| `approval-engine` | KEEP | typed human authority | Expand to generic human nodes |
-| `policy-engine` | KEEP | permissions/effects/budgets | Model never controls policy |
-| `repository-runtime` | KEEP | Git/worktree/diff/leases | One-writer remains first-class |
-| `command-runner` | KEEP | deterministic action execution | Do not turn into generic agent tool |
-| `verification-runner` | KEEP + ADAPT | native check runner | Map to Roflock `check` |
-| `evidence` | KEEP + GENERALIZE | artifacts/provenance/evidence | Preserve existing depth |
-| `change-contracts` | KEEP + GENERALIZE | coding Outcome Contract/profile | Do not throw away |
-| `change-passport` | KEEP + GENERALIZE | portable evidence bundle | Can remain a coding-specific export |
-| `context-compiler` | KEEP | invocation context builder | Driver formatting separated |
-| `role-protocol` | GENERALIZE | coding authority profile + generic RoleId bridge | Preserve current enforcement |
-| `role-recommender` | KEEP / CODING PACK | role/profile recommendation | Not universal Graph IR semantics |
-| `provider-core` | ADAPT | `driver-core` compatibility path | Preserve capability/process logic |
-| `provider-codex` | ADAPT | Codex AgentDriver | Existing code is starting asset |
-| `provider-claude` | ADAPT | Claude AgentDriver | Existing code is starting asset |
-| `provider-cursor` | ADAPT | Cursor driver if stable | Do not promise unsupported capabilities |
-| `provider-custom` | ADAPT | custom HTTP/compatible driver | Keep BYOK/local support |
-| `usage-ledger` | KEEP | cost/usage | Distinguish actual/estimated |
-| `database` | KEEP + MIGRATE | local durable store | Explicit migrations |
-| `run-control` | KEEP + HARDEN | pause/stop/cancel/recovery | Truthful cancellation |
-| `secret-store` | KEEP | secret abstraction | Never log secrets |
-| `observability` | KEEP | logs/traces/runtime truth | Unknown stays unknown |
-| `test-support` | EXPAND | fake driver/test repo/fault injection | Crucial for migration |
-| `apps/daemon` | KEEP + EVOLVE | local runtime/API host | No browser shell execution |
-| `apps/web` | EVOLVE | Roflock Studio | Preserve working operational UI during transition |
-| `apps/cli` | EXPAND | `roflock` CLI + compatibility | Add language/runtime commands |
-| hard-coded workflow modes | MIGRATE | `.roflock` built-in templates | Historical versions remain |
-| `roleflock.config.example.yaml` | MIGRATE | `roflock.config...` + fallback | Compatibility |
-| `ROLEFLOCK_*` env | MIGRATE | `ROFLOCK_*` + legacy fallback | No sudden break |
-| `~/.roleflock` | MIGRATE | `~/.roflock` with safe migration | Never silently lose data |
-| `@roleflock/*` package namespace | PHASED MIGRATION | `@roflock/*` | Do not combine with semantic rewrite |
+| Current package/area             | Classification     | Target role in Roflock                                              | Key rule                                          |
+| -------------------------------- | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------- |
+| `graph-core`                     | ADAPT + GENERALIZE | legacy runtime graph compatibility, templates, validation migration | Do not delete before Graph IR bridge is complete  |
+| `graph-runtime`                  | KEEP + HARDEN      | one canonical execution runtime                                     | No second runtime                                 |
+| `contracts`                      | KEEP + EVOLVE      | shared runtime/API contracts                                        | Version public contracts                          |
+| `agent-events`                   | KEEP + CONVERGE    | driver/runtime agent event model                                    | Avoid duplicate event taxonomies                  |
+| `approval-engine`                | KEEP               | typed human authority                                               | Expand to generic human nodes                     |
+| `policy-engine`                  | KEEP               | permissions/effects/budgets                                         | Model never controls policy                       |
+| `repository-runtime`             | KEEP               | Git/worktree/diff/leases                                            | One-writer remains first-class                    |
+| `command-runner`                 | KEEP               | deterministic action execution                                      | Do not turn into generic agent tool               |
+| `verification-runner`            | KEEP + ADAPT       | native check runner                                                 | Map to Roflock `check`                            |
+| `evidence`                       | KEEP + GENERALIZE  | artifacts/provenance/evidence                                       | Preserve existing depth                           |
+| `change-contracts`               | KEEP + GENERALIZE  | coding Outcome Contract/profile                                     | Do not throw away                                 |
+| `change-passport`                | KEEP + GENERALIZE  | portable evidence bundle                                            | Can remain a coding-specific export               |
+| `context-compiler`               | KEEP               | invocation context builder                                          | Driver formatting separated                       |
+| `role-protocol`                  | GENERALIZE         | coding authority profile + generic RoleId bridge                    | Preserve current enforcement                      |
+| `role-recommender`               | KEEP / CODING PACK | role/profile recommendation                                         | Not universal Graph IR semantics                  |
+| `provider-core`                  | ADAPT              | `driver-core` compatibility path                                    | Preserve capability/process logic                 |
+| `provider-codex`                 | ADAPT              | Codex AgentDriver                                                   | Existing code is starting asset                   |
+| `provider-claude`                | ADAPT              | Claude AgentDriver                                                  | Existing code is starting asset                   |
+| `provider-cursor`                | ADAPT              | Cursor driver if stable                                             | Do not promise unsupported capabilities           |
+| `provider-custom`                | ADAPT              | custom HTTP/compatible driver                                       | Keep BYOK/local support                           |
+| `usage-ledger`                   | KEEP               | cost/usage                                                          | Distinguish actual/estimated                      |
+| `database`                       | KEEP + MIGRATE     | local durable store                                                 | Explicit migrations                               |
+| `run-control`                    | KEEP + HARDEN      | pause/stop/cancel/recovery                                          | Truthful cancellation                             |
+| `secret-store`                   | KEEP               | secret abstraction                                                  | Never log secrets                                 |
+| `observability`                  | KEEP               | logs/traces/runtime truth                                           | Unknown stays unknown                             |
+| `test-support`                   | EXPAND             | fake driver/test repo/fault injection                               | Crucial for migration                             |
+| `apps/daemon`                    | KEEP + EVOLVE      | local runtime/API host                                              | No browser shell execution                        |
+| `apps/web`                       | EVOLVE             | Roflock Studio                                                      | Preserve working operational UI during transition |
+| `apps/cli`                       | EXPAND             | `roflock` CLI + compatibility                                       | Add language/runtime commands                     |
+| hard-coded workflow modes        | MIGRATE            | `.roflock` built-in templates                                       | Historical versions remain                        |
+| `roleflock.config.example.yaml`  | MIGRATE            | `roflock.config...` + fallback                                      | Compatibility                                     |
+| `ROLEFLOCK_*` env                | MIGRATE            | `ROFLOCK_*` + legacy fallback                                       | No sudden break                                   |
+| `~/.roleflock`                   | MIGRATE            | `~/.roflock` with safe migration                                    | Never silently lose data                          |
+| `@roleflock/*` package namespace | PHASED MIGRATION   | `@roflock/*`                                                        | Do not combine with semantic rewrite              |
 
 ---
 

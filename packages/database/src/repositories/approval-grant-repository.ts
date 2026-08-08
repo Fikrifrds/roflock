@@ -51,9 +51,8 @@ export class ApprovalGrantRepository {
   }
 
   get(id: string): ApprovalGrant | undefined {
-    const row = this.db
-      .prepare(`SELECT * FROM approval_grants WHERE id = ?`)
-      .get(id) as Record<string, unknown> | undefined;
+    const row = this.db.prepare(`SELECT * FROM approval_grants WHERE id = ?`).get(id) as
+      Record<string, unknown> | undefined;
     return row ? mapGrant(row) : undefined;
   }
 
