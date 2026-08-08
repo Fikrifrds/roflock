@@ -3,6 +3,7 @@ import { ExitCode } from './exit-codes.js';
 import { runEvidence, runWhy } from './evidence-command.js';
 import { runCheck, runCompile, runHash, runRender, runValidateIr } from './language-commands.js';
 import { runPassportCli } from './passport-command.js';
+import { runControl, type RuntimeControl } from './runtime-control-command.js';
 import { runEvents, runStatus } from './runtime-inspection-command.js';
 import { runWorkflow } from './runtime-command.js';
 
@@ -41,6 +42,9 @@ Runtime
                                     Start an authored workflow on the local daemon
   status <run-id>                   Show the durable run projection
   events <run-id> [--after <seq>]   Show ordered durable runtime events
+  pause <run-id>                    Pause the current execution
+  resume <run-id>                   Resume a paused execution
+  cancel <run-id>                   Cancel scheduling and interrupt selected drivers
 
 Evidence
   evidence <task-id>                Explain a run from what was recorded
@@ -109,5 +113,8 @@ export async function runCliAsync(argv: string[], io: CliIo): Promise<number> {
   if (argv[0] === 'run') return runWorkflow(argv.slice(1), io);
   if (argv[0] === 'status') return runStatus(argv.slice(1), io);
   if (argv[0] === 'events') return runEvents(argv.slice(1), io);
+  if (['pause', 'resume', 'cancel'].includes(argv[0] ?? '')) {
+    return runControl(argv[0] as RuntimeControl, argv.slice(1), io);
+  }
   return runCli(argv, io);
 }

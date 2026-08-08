@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { ActiveExecution, Task } from '@roleflock/contracts';
 import {
   availableWorkflowGraphs,
@@ -1185,8 +1185,8 @@ export function registerApi(
       });
     }
   });
-  app.post('/api/tasks/:id/start', async (request, reply) => {
-    const task = tasks.get((request.params as { id: string }).id);
+  const startTask = async (taskId: string, reply: FastifyReply) => {
+    const task = tasks.get(taskId);
     if (!task) return reply.code(404).send({ error: 'Task not found' });
     // `paused` belongs here: the UI's Resume button posts to this route, and
     // rejecting it left Pause as a one-way door with no way back.
@@ -1255,10 +1255,24 @@ export function registerApi(
       }
       return reply.code(500).send({ error: message });
     }
-  });
-  for (const action of ['pause', 'resume', 'cancel'] as const)
-    app.post(`/api/tasks/:id/${action}`, async (request) => {
-      return orchestrator.control((request.params as { id: string }).id, action);
+  };
+  app.post('/api/tasks/:id/start', async (request, reply) =>
+    startTask((request.params as { id: string }).id, reply),
+  );
+  app.post('/api/tasks/:id/resume', async (request, reply) =>
+    startTask((request.params as { id: string }).id, reply),
+  );
+  for (const action of ['pause', 'cancel'] as const)
+    app.post(`/api/tasks/:id/${action}`, async (request, reply) => {
+      const taskId = (request.params as { id: string }).id;
+      if (!tasks.get(taskId)) return reply.code(404).send({ error: 'Task not found' });
+      try {
+        return await orchestrator.control(taskId, action);
+      } catch (error) {
+        return reply.code(409).send({
+          error: error instanceof Error ? error.message : `Cannot ${action} task`,
+        });
+      }
     });
   app.post('/api/tasks/:id/stop', async (request) => {
     return orchestrator.control((request.params as { id: string }).id, 'stop');
@@ -1403,6 +1417,49 @@ export function registerApi(
     }
     return events.list(id, after);
   });
+  for (const action of ['pause', 'resume', 'cancel'] as const) {
+    app.post(`/api/runs/:id/${action}`, async (request, reply) => {
+      const runId = (request.params as { id: string }).id;
+      const run = db.prepare('SELECT task_id FROM graph_runs WHERE id = ?').get(runId) as
+        { task_id: string } | undefined;
+      if (!run) return reply.code(404).send({ error: 'Run not found' });
+      const latest = db
+        .prepare(
+          'SELECT id FROM graph_runs WHERE task_id = ? ORDER BY created_at DESC, id DESC LIMIT 1',
+        )
+        .get(run.task_id) as { id: string } | undefined;
+      if (latest?.id !== runId) {
+        return reply.code(409).send({
+          error: `Run ${runId} is historical and cannot control the current task execution`,
+        });
+      }
+      const task = tasks.get(run.task_id);
+      if (!task) return reply.code(404).send({ error: 'Task not found' });
+      if (action === 'resume') return startTask(task.id, reply);
+      const allowed =
+        action === 'pause'
+          ? ['running', 'awaiting_confirmation', 'awaiting_acceptance'].includes(task.state)
+          : [
+              'running',
+              'paused',
+              'awaiting_confirmation',
+              'awaiting_acceptance',
+              'stopping',
+            ].includes(task.state);
+      if (!allowed) {
+        return reply.code(409).send({
+          error: `Cannot ${action} run in task state ${task.state}`,
+        });
+      }
+      try {
+        return await orchestrator.control(task.id, action);
+      } catch (error) {
+        return reply.code(409).send({
+          error: error instanceof Error ? error.message : `Cannot ${action} run`,
+        });
+      }
+    });
+  }
   app.get(
     '/api/runs/:id/active-execution',
     async (request) =>

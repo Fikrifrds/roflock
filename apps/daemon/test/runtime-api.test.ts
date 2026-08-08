@@ -128,12 +128,70 @@ describe('runtime CLI API', () => {
     });
     expect(runtimeEvents[0]).toHaveProperty('payload');
 
+    const paused = await app.inject({
+      method: 'POST',
+      url: `/api/runs/${body.graphRunId}/pause`,
+      headers,
+      payload: {},
+    });
+    expect(paused.statusCode).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/api/tasks/${body.taskId}`,
+          headers,
+        })
+      ).json(),
+    ).toMatchObject({ state: 'paused' });
+
+    const resumed = await app.inject({
+      method: 'POST',
+      url: `/api/runs/${body.graphRunId}/resume`,
+      headers,
+      payload: {},
+    });
+    expect(resumed.statusCode).toBe(202);
+    expect(resumed.json()).toMatchObject({ graphRunId: body.graphRunId });
+
+    const cancelled = await app.inject({
+      method: 'POST',
+      url: `/api/runs/${body.graphRunId}/cancel`,
+      headers,
+      payload: {},
+    });
+    expect(cancelled.statusCode).toBe(200);
+    expect(cancelled.json()).toMatchObject({ accepted: true });
+
     const db = openMigratedDatabase(join(dataDir, DATABASE_FILE_NAME));
     const snapshot = new WorkflowSnapshotRepository(db).get(body.taskId)!;
     expect(snapshot.source).toBe(source);
     expect(snapshot.semanticHash).toBe(body.semanticHash);
     expect(JSON.parse(snapshot.workflowGraphJson)).toMatchObject({ id: 'cli_smoke' });
+    db.prepare(
+      `INSERT INTO graph_runs
+        (id, task_id, graph_version_id, state, started_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    ).run(
+      'newer_run',
+      body.taskId,
+      'cli_smoke@3',
+      'running',
+      '2099-01-01T00:00:00.000Z',
+      '2099-01-01T00:00:00.000Z',
+    );
     db.close();
+
+    const historical = await app.inject({
+      method: 'POST',
+      url: `/api/runs/${body.graphRunId}/pause`,
+      headers,
+      payload: {},
+    });
+    expect(historical.statusCode).toBe(409);
+    expect(historical.json()).toMatchObject({
+      error: expect.stringContaining('historical'),
+    });
   });
 
   it('fails closed unless uncontracted execution is explicit and source is valid', async () => {

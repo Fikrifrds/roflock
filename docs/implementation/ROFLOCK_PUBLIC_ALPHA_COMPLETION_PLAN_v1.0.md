@@ -89,7 +89,7 @@ approvals, shared output semantics, and owned-daemon lifecycle remain below.
 | ---------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | RF-CLI-001 | complete | `roflock run <workflow>` compiles exact source through the daemon, starts local execution, and returns stable run/task IDs. Simulation remains the explicit daemon profile. |
 | RF-CLI-002 | complete | `status` and cursor-based `events` query stable authenticated projections from durable run state and event history.                                                         |
-| RF-CLI-003 | open     | `pause`, `resume`, and `cancel` use the existing run-control contracts.                                                                                                     |
+| RF-CLI-003 | complete | Run-scoped `pause`, `resume`, and `cancel` use the existing durable control and truthful AgentDriver interruption contracts.                                                |
 | RF-CLI-004 | open     | Approval list/inspect/resolve commands never delegate approval implicitly.                                                                                                  |
 | RF-CLI-005 | open     | Runtime commands support documented JSON output and exit codes.                                                                                                             |
 | RF-CLI-006 | open     | A local daemon lifecycle contract is explicit: connect to an existing daemon or start an owned process without hidden Cloud dependency.                                     |

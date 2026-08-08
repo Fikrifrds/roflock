@@ -1738,3 +1738,29 @@ without explanatory text on stdout. Tests prove stable status identity, parsed
 event payloads, ordered sequence/cursor behavior, missing-run handling, JSON
 round trips, and CLI request construction. The focused CLI inspection set
 passes 3/3 and runtime API tests pass 2/2, with daemon and CLI typechecks clean.
+
+---
+
+## 33. Public-alpha runtime CLI — run-scoped control
+
+RF-CLI-003 adds `roflock pause`, `resume`, and `cancel` against stable run IDs.
+The daemon resolves the run to its task but refuses to control a historical run
+after a newer run exists for that task. Pause and cancel continue through the
+existing durable `ControlCommandRepository` and `Orchestrator.control()` path;
+cancel therefore invokes the AgentDriver selected for each active turn and
+returns its bounded interruption capability rather than claiming every stop was
+remote-confirmed.
+
+Resume now shares the same guarded start path used by Studio. This also fixes
+the older task-level `/resume` route, which previously recorded a no-op control
+command and left the task paused. An active in-memory scheduler is resumed
+without creating a second graph run; restart recovery creates a continuation
+only through the existing start semantics. Human CLI output distinguishes a
+remote-confirmed stop, an unconfirmed capability, and the absence of an active
+provider turn. JSON preserves the daemon result unchanged.
+
+Tests cover all three exact run endpoints, pause state, same-run resume,
+cancellation, truthful unconfirmed output, conflict exit mapping, missing IDs,
+and rejection of historical-run control. Focused CLI control tests pass 5/5;
+the runtime API, restart recovery, cancellation, and production driver lifecycle
+set passes 9/9, with daemon and CLI typechecks clean.
