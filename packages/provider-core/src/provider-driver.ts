@@ -101,10 +101,10 @@ export class ProviderBackedDriver implements AgentDriver {
     // `allowCommands: false` — enforced by the CLI's own sandbox. Treating this
     // regex as the boundary would be exactly the mistake of putting a security
     // control in text matching.
-    if (
-      !request.permissions.workspaceWrite &&
-      /\b(write|edit|modify|patch)\b/i.test(request.objective)
-    ) {
+    const requiresWorkspaceWrite =
+      request.requiresWorkspaceWrite ?? /\b(write|edit|modify|patch)\b/i.test(request.objective);
+    if (!request.permissions.workspaceWrite && requiresWorkspaceWrite) {
+      yield { type: 'started' };
       yield {
         type: 'settled',
         outcome: 'refused',
@@ -125,12 +125,21 @@ export class ProviderBackedDriver implements AgentDriver {
         signal: controller.signal,
         permissionEnvelope: {
           worktree: request.workspacePath,
-          allowedPaths: request.permissions.workspaceWrite ? [request.workspacePath] : [],
-          allowCommands: request.permissions.workspaceWrite,
+          allowedPaths:
+            request.permissions.allowedPaths === undefined
+              ? request.permissions.workspaceWrite
+                ? [request.workspacePath]
+                : []
+              : [...request.permissions.allowedPaths],
+          allowCommands:
+            request.permissions.allowCommands ??
+            (request.permissions.allowedCommands?.length ?? 0) > 0,
         },
         ...(request.model === undefined ? {} : { model: request.model }),
         ...(request.effort === undefined ? {} : { effort: request.effort }),
-        ...(this.options.onSpawn === undefined ? {} : { onSpawn: this.options.onSpawn }),
+        ...(request.onSpawn === undefined && this.options.onSpawn === undefined
+          ? {}
+          : { onSpawn: request.onSpawn ?? this.options.onSpawn }),
         ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }),
       })) {
         const mapped = toAgentEvent(event);
@@ -221,6 +230,8 @@ function toAgentEvent(event: InvocationEvent): AgentEvent | undefined {
       return event.sessionId === undefined
         ? { type: 'started' }
         : { type: 'started', sessionId: event.sessionId };
+    case 'heartbeat':
+      return { type: 'heartbeat', at: event.at };
     case 'model.output.delta':
       return { type: 'output', text: event.text };
     case 'model.reasoning.delta':
@@ -247,9 +258,9 @@ function toAgentEvent(event: InvocationEvent): AgentEvent | undefined {
     case 'invocation.interrupted':
       return { type: 'settled', outcome: 'failed', detail: event.reason };
     default:
-      // Heartbeats, phase changes and confirmation requests carry no meaning in
-      // the driver contract. Dropping them is deliberate; inventing an
-      // equivalent would put runtime concepts into a provider seam.
+      // Phase changes and confirmation requests carry no meaning in the driver
+      // contract. Heartbeats do: they prevent the runtime from treating a live,
+      // quiet harness as abandoned.
       return undefined;
   }
 }

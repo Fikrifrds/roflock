@@ -9,6 +9,7 @@ import {
 } from '@roleflock/database';
 import {
   isEffort,
+  type AgentDriver,
   type Effort,
   type ProviderAdapter,
   type ProviderFailureKind,
@@ -33,6 +34,8 @@ export interface RoleRoute {
   modelDisplayName: string;
   effort?: Effort;
   adapter: ProviderAdapter;
+  /** Production execution contract; adapter is retained for compatibility metadata only. */
+  driver: AgentDriver;
   /** True when an earlier candidate could not serve this turn. */
   fallbackUsed: boolean;
   /** Why each earlier candidate was passed over, in order. */
@@ -298,6 +301,7 @@ export class RoleRouter {
         modelDisplayName: await this.modelDisplayName(providerId, modelId),
         effort: isEffort(candidate.effort) ? candidate.effort : undefined,
         adapter,
+        driver: this.registry.getDriver(providerId),
         fallbackUsed: skipped.length > 0,
         skipped,
       };
@@ -343,6 +347,7 @@ export class RoleRouter {
       modelId: 'phase0-fake',
       modelDisplayName: 'Deterministic stand-in',
       adapter,
+      driver: this.registry.getDriver('fake'),
       fallbackUsed: skipped.length > 0,
       skipped,
     };

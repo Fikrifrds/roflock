@@ -90,15 +90,30 @@ export interface AgentRunRequest {
   permissions: {
     workspaceWrite: boolean;
     network: boolean;
+    /** Exact path ceiling supplied by the runtime; never widen this list. */
+    allowedPaths?: readonly string[];
+    /** Whether command execution is permitted at all. */
+    allowCommands?: boolean;
     allowedCommands?: readonly string[];
   };
+  /**
+   * Whether this turn is expected to modify the workspace.
+   *
+   * This is explicit because role prompts commonly contain phrases such as
+   * "do not modify files". Inferring authority from prompt text would reject
+   * a read-only verifier merely because it described the forbidden action.
+   */
+  requiresWorkspaceWrite?: boolean;
   /** Resume an earlier session when the driver supports it. */
   sessionId?: string;
+  /** Reports a spawned local process for crash reconciliation. */
+  onSpawn?: (pid: number) => void;
   signal?: AbortSignal;
 }
 
 export type AgentEvent =
   | { type: 'started'; sessionId?: string; pid?: number }
+  | { type: 'heartbeat'; at?: string }
   | { type: 'output'; text: string }
   | { type: 'reasoning'; text: string }
   | { type: 'tool'; name: string; detail?: string }

@@ -2,6 +2,8 @@ import {
   FakeProvider,
   ProviderRegistry as AdapterRegistry,
   normalizeProviderModel,
+  providerDriver,
+  type AgentDriver,
   type ProviderAdapter,
   type ProviderCapabilities,
   type ProviderHealth,
@@ -119,14 +121,22 @@ const DISCOVERY_CACHE_TTL_MS = 15_000;
  */
 export class ProviderRegistry {
   private readonly adapters = new AdapterRegistry();
+  private readonly drivers = new Map<string, AgentDriver>();
   private readonly customNames = new Map<string, string>();
   private readonly discovery = new Map<string, { at: number; value: Promise<unknown> }>();
 
   constructor() {
-    if (fakeProviderEnabled()) this.adapters.register(new FakeProvider());
-    this.adapters.register(new ClaudeAdapter());
-    this.adapters.register(new CodexAdapter());
-    this.adapters.register(new CursorWriterAdapter(createFsCursorWriter()));
+    if (fakeProviderEnabled()) this.register(new FakeProvider());
+    const claude = new ClaudeAdapter();
+    const codex = new CodexAdapter();
+    this.register(claude, providerDriver(claude, { capabilities: { usageReporting: true } }));
+    this.register(
+      codex,
+      providerDriver(codex, {
+        capabilities: { toolEvents: true, structuredOutput: false, usageReporting: true },
+      }),
+    );
+    this.register(new CursorWriterAdapter(createFsCursorWriter()));
 
     void Promise.all(this.adapters.list().map((adapter) => this.healthCheck(adapter.id))).catch(
       () => undefined,
@@ -161,6 +171,18 @@ export class ProviderRegistry {
     return this.adapters.get(id);
   }
 
+  /** The production invocation seam. Adapters remain only for compatibility metadata. */
+  getDriver(id: string): AgentDriver {
+    const driver = this.drivers.get(id);
+    if (!driver) throw new Error(`Driver not registered: ${id}`);
+    return driver;
+  }
+
+  private register(adapter: ProviderAdapter, driver: AgentDriver = providerDriver(adapter)): void {
+    this.adapters.register(adapter);
+    this.drivers.set(adapter.id, driver);
+  }
+
   has(id: string): boolean {
     try {
       this.adapters.get(id);
@@ -178,7 +200,7 @@ export class ProviderRegistry {
     if (!input.endpoint.trim() || !input.model.trim()) {
       throw new Error('endpoint and model are required');
     }
-    this.adapters.register(
+    this.register(
       new OpenAiCompatibleAdapter(id, input.endpoint.trim(), input.apiKey, input.model.trim()),
     );
     this.customNames.set(id, input.displayName.trim() || id);

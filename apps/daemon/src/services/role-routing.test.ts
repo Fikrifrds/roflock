@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { migrate, openDatabase, type SqliteDb } from '@roleflock/database';
-import type { ProviderAdapter } from '@roleflock/provider-core';
+import { providerDriver, type ProviderAdapter } from '@roleflock/provider-core';
 import { RoleRouter } from './role-routing.js';
 import type { ProviderRegistry } from './provider-registry.js';
 
@@ -30,6 +30,7 @@ describe('RoleRouter task pinning', () => {
     };
     const registry = {
       get: () => adapter,
+      getDriver: () => providerDriver(adapter),
       healthCheck: async () => ({ status: 'ready' as const }),
       list: async () => [
         {
@@ -53,12 +54,14 @@ describe('RoleRouter task pinning', () => {
       { providerConnectionId: 'codex', modelId: 'global-model', effort: 'medium' },
     ]);
 
-    await expect(router.route('writer', { taskId: 'task_1' })).resolves.toMatchObject({
+    const taskRoute = await router.route('writer', { taskId: 'task_1' });
+    expect(taskRoute).toMatchObject({
       providerId: 'codex',
       modelId: 'task-model',
       modelDisplayName: 'Pinned task model',
       effort: 'high',
     });
+    expect(taskRoute?.driver.id).toBe('codex');
     await expect(router.route('writer')).resolves.toMatchObject({
       providerId: 'codex',
       modelId: 'global-model',

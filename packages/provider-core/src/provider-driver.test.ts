@@ -26,7 +26,7 @@ function adapter(
   return {
     id: 'fake-cli',
     capabilities: CAPABILITIES,
-    // eslint-disable-next-line @typescript-eslint/require-await
+
     async *invoke(_request: InvocationRequest): AsyncIterable<InvocationEvent> {
       for (const event of events) yield event;
     },
@@ -112,7 +112,7 @@ describe('mapping an adapter onto the driver contract', () => {
     expect(events[0]).toEqual({ type: 'started' });
   });
 
-  it('drops runtime concepts that have no place in a provider seam', async () => {
+  it('preserves liveness but drops runtime concepts that have no place in a provider seam', async () => {
     const driver = providerDriver(
       adapter([
         { type: 'invocation.started', invocationId: 'inv_1' },
@@ -124,6 +124,7 @@ describe('mapping an adapter onto the driver contract', () => {
 
     expect((await collect(driver.start(request))).map((event) => event.type)).toEqual([
       'started',
+      'heartbeat',
       'settled',
     ]);
   });
@@ -174,6 +175,7 @@ describe('the wrapper is pessimistic about what it promises', () => {
     // An adapter cannot enforce a restriction the envelope never told it about,
     // so the refusal happens here rather than being sent and hoped about.
     expect(events).toEqual([
+      { type: 'started' },
       {
         type: 'settled',
         outcome: 'refused',
@@ -186,7 +188,6 @@ describe('the wrapper is pessimistic about what it promises', () => {
     let seen: InvocationRequest | undefined;
     const driver = providerDriver(
       adapter([{ type: 'invocation.completed', output: 'ok' }], {
-        // eslint-disable-next-line @typescript-eslint/require-await
         async *invoke(input: InvocationRequest): AsyncIterable<InvocationEvent> {
           seen = input;
           yield { type: 'invocation.completed', output: 'ok' };
@@ -204,6 +205,75 @@ describe('the wrapper is pessimistic about what it promises', () => {
       allowCommands: false,
     });
   });
+
+  it('preserves the runtime path and command ceiling exactly', async () => {
+    let seen: InvocationRequest | undefined;
+    const driver = providerDriver(
+      adapter([], {
+        async *invoke(input: InvocationRequest): AsyncIterable<InvocationEvent> {
+          seen = input;
+          yield { type: 'invocation.completed', output: 'ok' };
+        },
+      }),
+    );
+
+    await collect(
+      driver.start({
+        ...request,
+        permissions: {
+          workspaceWrite: true,
+          network: false,
+          allowedPaths: ['src/**', 'package.json'],
+          allowCommands: false,
+        },
+      }),
+    );
+
+    expect(seen?.permissionEnvelope).toEqual({
+      worktree: '/tmp/worktree',
+      allowedPaths: ['src/**', 'package.json'],
+      allowCommands: false,
+    });
+  });
+
+  it('uses explicit write intent instead of reading authority from prompt prose', async () => {
+    let reached = false;
+    const driver = providerDriver(
+      adapter([], {
+        async *invoke(): AsyncIterable<InvocationEvent> {
+          reached = true;
+          yield { type: 'invocation.completed', output: 'ok' };
+        },
+      }),
+    );
+
+    await collect(
+      driver.start({
+        ...request,
+        objective: 'Review this change. Do not modify files.',
+        requiresWorkspaceWrite: false,
+        permissions: { workspaceWrite: false, network: false },
+      }),
+    );
+
+    expect(reached).toBe(true);
+  });
+
+  it('reports a spawned process through the per-run lifecycle hook', async () => {
+    let seenPid: number | undefined;
+    const driver = providerDriver(
+      adapter([], {
+        async *invoke(input: InvocationRequest): AsyncIterable<InvocationEvent> {
+          input.onSpawn?.(4321);
+          yield { type: 'invocation.completed', output: 'ok' };
+        },
+      }),
+    );
+
+    await collect(driver.start({ ...request, onSpawn: (pid) => (seenPid = pid) }));
+
+    expect(seenPid).toBe(4321);
+  });
 });
 
 describe('what the permission guard does and does not do', () => {
@@ -211,7 +281,6 @@ describe('what the permission guard does and does not do', () => {
     let reached: InvocationRequest | undefined;
     const driver = providerDriver(
       adapter(adapterEvents, {
-        // eslint-disable-next-line @typescript-eslint/require-await
         async *invoke(input: InvocationRequest): AsyncIterable<InvocationEvent> {
           reached = input;
           for (const event of adapterEvents) yield event;
@@ -258,7 +327,7 @@ describe('an adapter that throws', () => {
   it('becomes a failure with its reason, not an exception the caller must expect', async () => {
     const driver = providerDriver(
       adapter([], {
-        // eslint-disable-next-line @typescript-eslint/require-await, require-yield
+        // eslint-disable-next-line require-yield
         async *invoke(): AsyncIterable<InvocationEvent> {
           throw new Error('Codex CLI is not installed or not available on PATH.');
         },

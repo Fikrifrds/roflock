@@ -72,9 +72,9 @@ import {
 } from '@roleflock/repository-runtime';
 import {
   classifyProviderFailure,
+  type AgentDriver,
   type Effort,
   type ReportedUsage,
-  type ProviderAdapter,
 } from '@roleflock/provider-core';
 import { CursorWriterAdapter, assertChangedPathsAllowed } from '@roleflock/provider-cursor';
 import { budgetStatus, estimateInvocationCost } from '@roleflock/usage-ledger';
@@ -1465,6 +1465,7 @@ export class Orchestrator {
           graphRunId,
           nodeRunId,
           invocationId,
+          invocationKey,
           prompt,
           cwd: worktreePath,
           signal: controller.signal,
@@ -1605,6 +1606,7 @@ export class Orchestrator {
             graphRunId,
             nodeRunId,
             invocationId,
+            invocationKey,
             prompt: [
               node.objective ? `Authored objective: ${node.objective}` : '',
               'Review the proposed source-code change and confirm whether its repository scope is appropriate.',
@@ -1800,6 +1802,7 @@ export class Orchestrator {
               graphRunId,
               nodeRunId,
               invocationId,
+              invocationKey,
               prompt,
               cwd: worktreePath,
               signal: controller.signal,
@@ -2386,6 +2389,7 @@ export class Orchestrator {
     graphRunId: string;
     nodeRunId: string;
     invocationId: string;
+    invocationKey: string;
     prompt: string | ((route: RoleRoute) => string);
     cwd: string;
     signal: AbortSignal;
@@ -2432,8 +2436,9 @@ export class Orchestrator {
 
       try {
         const invoked = await this.consumeInvocation({
-          adapter: route.adapter,
+          driver: route.driver,
           invocationId: input.invocationId,
+          invocationKey: input.invocationKey,
           nodeRunId: input.nodeRunId,
           prompt: typeof input.prompt === 'function' ? input.prompt(route) : input.prompt,
           cwd: input.cwd,
@@ -2512,8 +2517,9 @@ export class Orchestrator {
   }
 
   private async consumeInvocation(input: {
-    adapter: ProviderAdapter;
+    driver: AgentDriver;
     invocationId: string;
+    invocationKey: string;
     nodeRunId: string;
     prompt: string;
     cwd: string;
@@ -2536,7 +2542,26 @@ export class Orchestrator {
     let lastPublish = 0;
     let lastReasoningPublish = 0;
     let lastDiffAt = 0;
+    let settled = false;
+    const spawnedPids = new Set<number>();
     const worktree = input.permissionEnvelope?.worktree;
+
+    const recordSpawn = (pid: number): void => {
+      if (spawnedPids.has(pid)) return;
+      spawnedPids.add(pid);
+      this.processHandles.create({
+        id: randomUUID(),
+        nodeRunId: input.nodeRunId,
+        invocationId: input.invocationId,
+        pid,
+        // No pgid: these children are not spawned detached, so they share
+        // the daemon's process group. Killing "their" group would signal
+        // the daemon itself.
+        status: 'running',
+        startedAt: now(),
+        lastHeartbeatAt: now(),
+      });
+    };
 
     const flushLive = async (force = false): Promise<void> => {
       const at = Date.now();
@@ -2581,58 +2606,64 @@ export class Orchestrator {
     };
 
     try {
-      for await (const event of input.adapter.invoke({
-        invocationId: input.invocationId,
-        prompt: input.prompt,
-        cwd: input.cwd,
+      for await (const event of input.driver.start({
+        invocationKey: input.invocationKey,
+        objective: input.prompt,
+        workspacePath: input.permissionEnvelope?.worktree ?? input.cwd,
         signal: watchdog.signal,
-        permissionEnvelope: input.permissionEnvelope,
+        permissions: {
+          workspaceWrite: (input.permissionEnvelope?.allowedPaths.length ?? 0) > 0,
+          network: false,
+          allowedPaths: input.permissionEnvelope?.allowedPaths ?? [],
+          allowCommands: input.permissionEnvelope?.allowCommands ?? false,
+        },
+        requiresWorkspaceWrite: input.permissionEnvelope !== undefined,
         model: input.model,
         effort: input.effort,
-        onSpawn: (pid) => {
-          this.processHandles.create({
-            id: randomUUID(),
-            nodeRunId: input.nodeRunId,
-            invocationId: input.invocationId,
-            pid,
-            // No pgid: these children are not spawned detached, so they share
-            // the daemon's process group. Killing "their" group would signal
-            // the daemon itself.
-            status: 'running',
-            startedAt: now(),
-            lastHeartbeatAt: now(),
-          });
-        },
+        onSpawn: recordSpawn,
       })) {
         // Any event is proof of life. The turn is only abandoned when the
         // provider goes quiet, never for taking its time.
         watchdog.touch();
+        if (event.type === 'started' && event.pid !== undefined) recordSpawn(event.pid);
         if (event.type === 'heartbeat') {
           const execution = this.executions.getByNodeRun(input.nodeRunId);
           if (execution) {
-            execution.lastHeartbeatAt = event.at;
+            execution.lastHeartbeatAt = event.at ?? now();
             this.executions.upsert(execution);
             this.bus.publish('execution.updated', execution);
           }
         }
-        if (event.type === 'model.output.delta') {
+        if (event.type === 'output') {
           output += event.text;
           await flushLive();
         }
-        if (event.type === 'model.reasoning.delta') {
+        if (event.type === 'reasoning') {
           reasoningChars += event.text.length;
           flushReasoning();
         }
+        if (event.type === 'tool') {
+          this.publishLiveProgress(input.nodeRunId, {
+            activity: event.detail ? `${event.name} · ${event.detail}` : event.name,
+          });
+        }
         // The CLI's own numbers. Anything shown as a token count or a cost has
         // to come from here rather than from a plausible-looking constant.
-        if (event.type === 'usage.updated') usage = event.usage as ReportedUsage;
-        if (event.type === 'invocation.failed') {
-          throw new Error(event.error.message);
+        if (event.type === 'usage') {
+          usage = {
+            ...(event.inputTokens === undefined ? {} : { inputTokens: event.inputTokens }),
+            ...(event.outputTokens === undefined ? {} : { outputTokens: event.outputTokens }),
+            ...(event.costUsd === undefined ? {} : { totalCostUsd: event.costUsd }),
+          };
         }
-        if (event.type === 'invocation.interrupted') {
-          throw new Error(event.reason);
+        if (event.type === 'settled') {
+          settled = true;
+          if (event.outcome !== 'completed') {
+            throw new Error(event.detail ?? `Driver ${event.outcome} the invocation`);
+          }
         }
       }
+      if (!settled) throw new Error('Driver ended without reporting an outcome');
       if (reasoningChars) flushReasoning(true);
       await flushLive(true);
     } catch (error) {

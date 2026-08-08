@@ -1603,3 +1603,36 @@ listed by the API, selected for task creation, versioned as `release_train@3`,
 and persisted with an executable graph whose ID is `release_train`. Targeted
 workflow/template and API tests pass 13/13, with graph-core and daemon typechecks
 clean. Historical task resolution remains unchanged.
+
+---
+
+## 28. Public-alpha correction — AgentDriver is the production seam
+
+RF-EVO-184 moves production role invocation from direct
+`ProviderAdapter.invoke()` calls to `AgentDriver.start()`. The daemon provider
+registry now owns a driver for every registered adapter, including custom
+OpenAI-compatible connections. `RoleRoute` carries that driver, and the
+orchestrator consumes only driver events for output, reasoning, tool activity,
+usage, liveness, process lifecycle, and final outcome. The adapter remains on
+the route temporarily for writer capability compatibility; it is no longer the
+execution contract.
+
+The migration preserves the stable idempotency key as the driver invocation
+identity and does not widen authority while crossing the compatibility wrapper.
+The exact runtime `allowedPaths` and command permission are forwarded unchanged,
+and write intent is explicit rather than guessed from prompt words. This avoids
+both a security regression (turning a narrow path list into the whole worktree)
+and a correctness regression where a read-only prompt such as “do not modify
+files” was mistaken for a write request. Per-run spawn callbacks retain crash
+reconciliation, and adapter heartbeats remain driver liveness events so quiet
+but healthy turns do not hit the idle watchdog.
+
+Verification: provider-core wrapper tests pass 22/22; the focused daemon
+integration set passes 59/59, including the walking skeleton, authored
+workflows, routing/failover, provider timeout, unknown-outcome protection,
+cancellation, and forced-restart recovery. The full daemon suite passes 187/190
+inside the sandbox; the three listener-denied cases belong to the preview
+package, whose complete test file passes 7/7 outside the sandbox. Package
+typechecks are clean. RF-EVO-185 remains separate: durable driver session IDs,
+resume selection, and selected-driver cancellation reporting are not claimed by
+this ticket.
