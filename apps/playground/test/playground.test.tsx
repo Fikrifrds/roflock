@@ -116,6 +116,31 @@ describe('examples', () => {
     expect(diagram.textContent).toContain('ReviewCorrectness');
     expect(diagram.textContent).toContain('ReviewScope');
   });
+
+  it('imports a local workflow without contacting a server', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network forbidden'));
+    render(<Playground initialSource={VALID} />);
+    const input = screen.getByLabelText('Import Roflock workflow');
+    const source = EXAMPLES.find((example) => example.id === 'parallel')!.source;
+
+    await userEvent.upload(input, new File([source], 'parallel.roflock', { type: 'text/plain' }));
+
+    expect(await screen.findByText('Loaded parallel.roflock locally.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Workflow source')).toHaveValue(source);
+    expect(fetch).not.toHaveBeenCalled();
+    fetch.mockRestore();
+  });
+
+  it('reveals the exact normalized Graph IR on demand', async () => {
+    render(<Playground initialSource={VALID} />);
+
+    await userEvent.click(screen.getByText('Inspect canonical Graph IR'));
+
+    expect(
+      screen.getByText(/This normalized document is what the runtime bridge receives/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/"irVersion": "1.0"/)).toBeInTheDocument();
+  });
 });
 
 describe('share links', () => {

@@ -26,6 +26,15 @@ The result pane shows:
 - node, edge, and bounded-loop counts; and
 - successful, typed-failure, and writer-node visual distinctions.
 
+The three-step reading guide points out the intended review order: source intent,
+graph control, then compiled identity. Expand **Inspect canonical Graph IR** to
+read the normalized local document the runtime bridge would receive. This is an
+inspection aid, not a second authoring format.
+
+Use **Import .roflock** to load a local file into browser memory, or **Download
+source** to save the current editor text as `workflow.roflock`. Neither action
+contacts a server; imported source still needs to be reviewed and compiled.
+
 The Playground never draws a partial graph after an error. Fix all error
 diagnostics before treating the displayed graph as executable. Warnings do not
 prevent compilation, but should still be reviewed.

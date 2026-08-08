@@ -1,7 +1,7 @@
 import { isExecutable, type Diagnostic, type GraphIR } from '@roleflock/graph-ir';
 import { layoutGraph, toSvg } from '@roleflock/graph-ui';
 import { compile } from '@roleflock/language';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { DEFAULT_EXAMPLE, EXAMPLES } from './examples.js';
 import { encodeShareLink } from './share.js';
 import './styles.css';
@@ -31,6 +31,8 @@ interface CompileState {
 export function Playground({ initialSource = DEFAULT_EXAMPLE.source }: PlaygroundProps) {
   const [source, setSource] = useState(initialSource);
   const [copied, setCopied] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | undefined>();
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const result = useMemo<CompileState>(() => {
     const compiled = compile(source, { uri: 'playground.roflock' });
@@ -79,6 +81,27 @@ export function Playground({ initialSource = DEFAULT_EXAMPLE.source }: Playgroun
         </div>
       </section>
 
+      <section className="playground-tutorial" aria-label="How the Playground works">
+        <div>
+          <p className="panel-kicker">A short path to confidence</p>
+          <h2>Three things to check before a workflow runs.</h2>
+        </div>
+        <ol>
+          <li>
+            <strong>01 · intent</strong>
+            <span>Read the roles and objectives in source; they are the public contract.</span>
+          </li>
+          <li>
+            <strong>02 · control</strong>
+            <span>Follow graph edges, bounded repair loops, checks, and human gates.</span>
+          </li>
+          <li>
+            <strong>03 · identity</strong>
+            <span>Use the compiled Graph IR and semantic hash when reviewing a change.</span>
+          </li>
+        </ol>
+      </section>
+
       <section className="example-toolbar" aria-label="Examples">
         <div className="toolbar-label">
           <span className="toolbar-kicker">Start from a pattern</span>
@@ -96,6 +119,45 @@ export function Playground({ initialSource = DEFAULT_EXAMPLE.source }: Playgroun
             {example.title}
           </button>
         ))}
+        <input
+          ref={fileInput}
+          className="visually-hidden"
+          type="file"
+          accept=".roflock,text/plain"
+          aria-label="Import Roflock workflow"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            void file
+              .text()
+              .then((text) => {
+                setSource(text);
+                setCopied(false);
+                setImportNotice(`Loaded ${file.name} locally.`);
+              })
+              .catch(() => setImportNotice(`Could not read ${file.name}.`));
+            event.target.value = '';
+          }}
+        />
+        <button type="button" className="toolbar-button" onClick={() => fileInput.current?.click()}>
+          Import .roflock
+        </button>
+        <button
+          type="button"
+          className="toolbar-button"
+          onClick={() => {
+            const url = URL.createObjectURL(
+              new Blob([source], { type: 'text/plain;charset=utf-8' }),
+            );
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'workflow.roflock';
+            link.click();
+            URL.revokeObjectURL(url);
+          }}
+        >
+          Download source
+        </button>
         <button
           type="button"
           className="share-button"
@@ -109,6 +171,7 @@ export function Playground({ initialSource = DEFAULT_EXAMPLE.source }: Playgroun
           <span aria-hidden="true">↗</span> {copied ? 'Link copied' : 'Copy share link'}
         </button>
       </section>
+      {importNotice ? <p className="import-notice">{importNotice}</p> : null}
 
       <div className="playground-grid">
         <section className="playground-panel editor-panel" aria-label="Source">
@@ -202,6 +265,14 @@ export function Playground({ initialSource = DEFAULT_EXAMPLE.source }: Playgroun
                 Solid lines are the path a successful run takes. Dashed lines are typed failure
                 routes. A bold border marks the one node that may write.
               </p>
+              <details className="ir-details">
+                <summary>Inspect canonical Graph IR</summary>
+                <p>
+                  This normalized document is what the runtime bridge receives. It is generated
+                  locally from the source above.
+                </p>
+                <pre>{JSON.stringify(result.ir, null, 2)}</pre>
+              </details>
             </>
           ) : (
             <p className="empty-graph">
