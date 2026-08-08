@@ -1178,19 +1178,37 @@ enforced by the CLI's own sandbox. Calling a regex over prose a security
 boundary is the mistake this project refuses everywhere else, and tests now pin
 both what the guard catches and what it does not.
 
-### Not done
+### R7 is complete
 
-| Ticket                 | Remaining work                                               |
-| ---------------------- | ------------------------------------------------------------ |
-| ~~RF-EVO-115~~         | Done — `providerDriver()` passes the full conformance suite  |
-| ~~RF-EVO-116/118/121~~ | Done — Codex, Claude and compatible drivers pass conformance |
-| ~~RF-EVO-120~~         | Done — OpenCode driver, verified against CLI 1.18.15         |
-| RF-EVO-123/124         | Session/resume and usage events on real drivers              |
+All four drivers pass conformance. Three were verified against the real
+binaries — Claude, Codex and OpenCode — and the live suite is 43 tests behind the
+`ROFLOCK_LIVE_DRIVER_TESTS=1` gate.
 
-These need real CLI integration and cannot be proven with fixtures alone. Per
-the plan, `ProviderAdapter` compatibility is not removed until the equivalent
-driver passes conformance — so nothing is currently at risk from this being
-incomplete.
+Session identity now reaches the runtime: `InvocationEvent.invocation.started`
+carries an optional `sessionId`, and `resume()` was proven end to end against
+OpenCode — a first turn asked to remember 41, a resumed turn answered "41".
+Context genuinely carries; the capability is not a label.
+
+Usage is declared where it was measured, not where it was assumed.
+
+`ProviderAdapter` remains in place. Nothing required its removal, and the plan
+is explicit that compatibility outlives the driver it was replaced by.
+
+### What conformance learned along the way
+
+Three rules were wrong on first attempt, and each was corrected by a test rather
+than by review:
+
+1. **Resume was checked by method presence.** Every wrapped adapter has the
+   method, so a presence check failed all of them. What matters is behaviour: a
+   driver that cannot resume must _refuse_ rather than quietly start fresh, since
+   a caller would otherwise believe prior context was carried.
+2. **Usage was checked on any turn.** An exhausted quota produces none
+   legitimately, so an honest failure read as a lying capability. Now checked
+   only on a turn that succeeded.
+3. **Fake CLIs printed nothing**, which would have let a driver pass while
+   claiming capabilities the fake never exercised. They now emit the streams
+   observed from the real binaries.
 
 ---
 
