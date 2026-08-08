@@ -137,7 +137,7 @@ become a second runtime or an approval bypass.
 | RF-DOCS-002 | complete | The implemented-language reference covers exact 0.1 syntax, nodes, outcomes, loops, effects, authority, diagnostics, and immutable version/hash semantics.                    |
 | RF-DOCS-003 | complete | The shipped CLI reference covers artifact/source install, every command and option, JSON streams, IDs, exits, env compatibility, MCP, and troubleshooting.                    |
 | RF-DOCS-004 | complete | The local operator guide covers lifecycle, data/security, configuration, worktrees, recovery, approvals, evidence, consistent backup/restore, upgrades, reset, and incidents. |
-| RF-DOCS-005 | open     | Playground and Studio guides, including deployment and local handoff boundaries.                                                                                              |
+| RF-DOCS-005 | complete | Playground and Studio guides, including deployment and local handoff boundaries.                                                                                              |
 | RF-DOCS-006 | open     | Driver authoring/conformance guide and Codex, Claude, OpenCode, Pi status.                                                                                                    |
 | RF-DOCS-007 | open     | Open-source contributor, governance, security-reporting, support, and release guides.                                                                                         |
 | RF-DOCS-008 | open     | End-to-end quick starts validated against a packed artifact and clean checkout.                                                                                               |
