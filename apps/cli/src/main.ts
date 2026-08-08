@@ -3,6 +3,7 @@ import { ExitCode } from './exit-codes.js';
 import { runEvidence, runWhy } from './evidence-command.js';
 import { runCheck, runCompile, runHash, runRender, runValidateIr } from './language-commands.js';
 import { runPassportCli } from './passport-command.js';
+import { runWorkflow } from './runtime-command.js';
 
 export interface CliIo {
   stdout(message: string): void;
@@ -34,6 +35,10 @@ Language
   hash <file>                       Print a workflow's semantic hash
   validate-ir <file.ir.json>        Validate a Graph IR document
 
+Runtime
+  run <file.roflock> --repo <path> --brief <text>
+                                    Start an authored workflow on the local daemon
+
 Evidence
   evidence <task-id>                Explain a run from what was recorded
   why <task-id> --file <path>       Which recorded output touched a file
@@ -48,9 +53,9 @@ Options
   -v, --version                     Print the Roflock version
 
 Roflock runs entirely on your machine and never requires a Roflock Cloud
-account. The commands above are compiler-side only: they read and analyse a
-workflow without starting a run, spawning a provider, or touching a repository.
-Run commands arrive with the runtime surface.
+account. Language commands never start a run or touch a repository. Runtime
+commands use the authenticated loopback daemon and the same governed runtime
+as Studio.
 
 Exit codes
   0 success                 4 run failed
@@ -94,4 +99,10 @@ export function runCli(argv: string[], io: CliIo): number {
   io.stderr(`Unknown command: ${command}`);
   io.stderr("Run 'roflock --help' to see the available commands.");
   return ExitCode.Usage;
+}
+
+/** Async entry point for commands that communicate with the local daemon. */
+export async function runCliAsync(argv: string[], io: CliIo): Promise<number> {
+  if (argv[0] === 'run') return runWorkflow(argv.slice(1), io);
+  return runCli(argv, io);
 }

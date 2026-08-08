@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-import { runCli } from '../main.js';
+import { runCliAsync } from '../main.js';
 
-process.exitCode = runCli(process.argv.slice(2), {
+process.exitCode = await runCliAsync(process.argv.slice(2), {
   stdout: (message) => process.stdout.write(`${message}\n`),
   stderr: (message) => process.stderr.write(`${message}\n`),
 });

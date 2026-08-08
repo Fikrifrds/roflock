@@ -5,10 +5,13 @@ import type { FastifyInstance } from 'fastify';
 import type { ActiveExecution, Task } from '@roleflock/contracts';
 import {
   availableWorkflowGraphs,
+  graphIrToWorkflowGraph,
   registeredWorkflowIr,
   registeredWorkflowSource,
 } from '@roleflock/graph-core';
+import { isExecutable } from '@roleflock/graph-ir';
 import { layoutGraph, toSvg } from '@roleflock/graph-ui';
+import { compile } from '@roleflock/language';
 import { explainRun } from '@roleflock/evidence';
 import {
   AuditRepository,
@@ -319,6 +322,8 @@ export function registerApi(
         throw error;
       }
     }
+    const existing = projects.getByResolvedPath(repository.root);
+    if (existing) return reply.code(200).send({ ...existing, gitInitialized: false });
     const time = now();
     const folderName = repository.root.split('/').filter(Boolean).pop() ?? 'Repository';
     const project = {
@@ -413,6 +418,113 @@ export function registerApi(
     })();
     bus.publish('task.created', task);
     return reply.code(201).send(task);
+  });
+  app.post('/api/runtime/runs', async (request, reply) => {
+    const body = request.body as {
+      projectId?: string;
+      source?: string;
+      title?: string;
+      brief?: string;
+      type?: Task['type'];
+      risk?: Task['risk'];
+      allowUncontracted?: boolean;
+    };
+    if (!body.projectId || !body.source || !body.brief) {
+      return reply.code(400).send({
+        error: 'projectId, source, and brief are required',
+      });
+    }
+    if (body.allowUncontracted !== true) {
+      return reply.code(409).send({
+        code: 'CHANGE_CONTRACT_REQUIRED',
+        error:
+          'Runtime CLI execution requires explicit allowUncontracted=true until a Change Contract is supplied.',
+      });
+    }
+    if (Buffer.byteLength(body.source, 'utf8') > 1_048_576) {
+      return reply
+        .code(413)
+        .send({ error: 'Workflow source exceeds the 1 MiB local runtime limit' });
+    }
+    const project = projects.get(body.projectId);
+    if (!project) return reply.code(404).send({ error: 'Project not found' });
+
+    const compiled = compile(body.source, { uri: 'cli://workflow.roflock' });
+    if (!compiled.ir || !isExecutable(compiled.diagnostics)) {
+      return reply.code(422).send({
+        code: 'WORKFLOW_INVALID',
+        error: 'Workflow did not compile to executable Graph IR',
+        diagnostics: compiled.diagnostics,
+      });
+    }
+    const bridged = graphIrToWorkflowGraph(compiled.ir);
+    if (!bridged.graph) {
+      return reply.code(422).send({
+        code: 'WORKFLOW_NOT_EXECUTABLE',
+        error: 'Workflow cannot execute on this runtime',
+        diagnostics: bridged.diagnostics,
+      });
+    }
+
+    const createdAt = now();
+    const task: Task = {
+      id: randomUUID(),
+      projectId: project.id,
+      type: body.type ?? 'feature',
+      title: body.title?.trim() || compiled.ir.workflow.name || compiled.ir.workflow.id,
+      brief: body.brief,
+      risk: body.risk ?? 'medium',
+      state: 'ready',
+      workflowGraphVersionId: bridged.graph.version,
+      budgetPolicyId: 'local-default',
+      contractRequirement: 'legacy_uncontracted',
+      maxAttempts: 3,
+      createdAt,
+      updatedAt: createdAt,
+    };
+    const snapshot = workflowSnapshotRecord({
+      taskId: task.id,
+      graph: bridged.graph,
+      ir: compiled.ir,
+      source: body.source,
+      createdAt,
+    });
+    db.transaction(() => {
+      tasks.upsert(task);
+      workflowSnapshots.create(snapshot);
+    })();
+    bus.publish('task.created', task);
+
+    try {
+      const started = await orchestrator.start(task, project.resolvedPath, project.baseBranch);
+      const warning = evaluateContractStartGate(task, changeContracts);
+      return reply.code(202).send({
+        accepted: true,
+        taskId: task.id,
+        graphRunId: started.graphRunId,
+        workflowId: compiled.ir.workflow.id,
+        semanticHash: snapshot.semanticHash,
+        contract:
+          warning.allowed && warning.mode === 'legacy_uncontracted'
+            ? { mode: warning.mode, warning: warning.warning }
+            : undefined,
+      });
+    } catch (error) {
+      if (error instanceof ConcurrencyLimitError) {
+        return reply.code(409).send({
+          code: 'CONCURRENCY_LIMIT_REACHED',
+          error: error.message,
+          scope: error.scope,
+          activeCount: error.activeCount,
+          limit: error.limit,
+        });
+      }
+      return reply.code(422).send({
+        code: 'RUN_START_FAILED',
+        error: error instanceof Error ? error.message : 'Failed to start workflow',
+        taskId: task.id,
+      });
+    }
   });
   app.get('/api/tasks/:id/verification-suggestion', async (request, reply) => {
     const taskId = (request.params as { id: string }).id;

@@ -82,16 +82,17 @@ but a consumer must never need this monorepo to resolve `workspace:*`.
 ## 4. Runtime CLI status
 
 Language commands (`check`, `compile`, `validate-ir`, `hash`, and `render`) and
-evidence queries exist. The runtime surface does not.
+evidence queries exist. Runtime launch now exists; durable inspection, control,
+approvals, shared output semantics, and owned-daemon lifecycle remain below.
 
-| Ticket     | State | Required outcome                                                                                                                        |
-| ---------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| RF-CLI-001 | open  | `roflock run <workflow>` starts deterministic/fake local execution and returns a stable run ID.                                         |
-| RF-CLI-002 | open  | `status` and `events` query the durable run projection.                                                                                 |
-| RF-CLI-003 | open  | `pause`, `resume`, and `cancel` use the existing run-control contracts.                                                                 |
-| RF-CLI-004 | open  | Approval list/inspect/resolve commands never delegate approval implicitly.                                                              |
-| RF-CLI-005 | open  | Runtime commands support documented JSON output and exit codes.                                                                         |
-| RF-CLI-006 | open  | A local daemon lifecycle contract is explicit: connect to an existing daemon or start an owned process without hidden Cloud dependency. |
+| Ticket     | State    | Required outcome                                                                                                                                                            |
+| ---------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RF-CLI-001 | complete | `roflock run <workflow>` compiles exact source through the daemon, starts local execution, and returns stable run/task IDs. Simulation remains the explicit daemon profile. |
+| RF-CLI-002 | open     | `status` and `events` query the durable run projection.                                                                                                                     |
+| RF-CLI-003 | open     | `pause`, `resume`, and `cancel` use the existing run-control contracts.                                                                                                     |
+| RF-CLI-004 | open     | Approval list/inspect/resolve commands never delegate approval implicitly.                                                                                                  |
+| RF-CLI-005 | open     | Runtime commands support documented JSON output and exit codes.                                                                                                             |
+| RF-CLI-006 | open     | A local daemon lifecycle contract is explicit: connect to an existing daemon or start an owned process without hidden Cloud dependency.                                     |
 
 ---
 

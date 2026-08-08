@@ -1688,3 +1688,34 @@ its original objective and command while current registry resolution returns the
 second graph. The first task's executable semantic hash remains bound to its
 snapshot rather than the mutable registry. Combined authored-workflow and API
 snapshot tests pass 14/14, with daemon typecheck clean.
+
+---
+
+## 31. Public-alpha runtime CLI — authored run start
+
+RF-CLI-001 adds the first runtime command without creating a second execution
+path. `roflock run <workflow.roflock> --repo <path> --brief <text>` reads the
+exact source, authenticates to the loopback daemon using its local session file,
+registers the repository idempotently, and calls the daemon runtime API. The API
+compiles with the public language frontend, checks executable Graph IR, bridges
+through `graphIrToWorkflowGraph`, stores source, IR, and executable graph as one
+immutable task snapshot, then starts the existing `Orchestrator`. The response
+contains stable task and graph-run IDs plus the semantic hash.
+
+CLI-created runs explicitly set `allowUncontracted: true`; the task and response
+retain the `legacy_uncontracted` warning instead of inventing or silently
+authorising a Change Contract. Invalid source fails before task creation. Source
+larger than 1 MiB fails closed. The runtime profile remains daemon-owned:
+`ROFLOCK_FORCE_FAKE=1` selects the existing clearly labelled simulation path,
+while a normal daemon uses its configured AgentDrivers. JSON output is available
+on `run`; the shared JSON/exit-code contract for all remaining runtime commands
+is still RF-CLI-005.
+
+Targeted verification covers repository registration deduplication, explicit
+uncontracted acknowledgement, invalid-source rejection, immutable source and
+semantic snapshot persistence, authenticated API requests, exact-source
+forwarding, human output, JSON output, and exit-code mapping. CLI tests pass
+39/39, database tests pass 60/60, and the runtime/diagram/walking-skeleton set
+passes 12/12. The full daemon suite passes 194/197 inside the sandbox; its only
+three failures are listener-denied preview cases, and the complete preview file
+passes 7/7 outside the sandbox. Daemon, database, and CLI typechecks are clean.

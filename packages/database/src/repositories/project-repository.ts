@@ -56,6 +56,16 @@ export class ProjectRepository {
     return row ? mapProject(row) : undefined;
   }
 
+  getByResolvedPath(resolvedPath: string): ProjectRecord | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT id, workspace_id, name, repository_path, resolved_path, base_branch, status, created_at, updated_at
+         FROM projects WHERE resolved_path = ? ORDER BY created_at ASC LIMIT 1`,
+      )
+      .get(resolvedPath) as Record<string, string> | undefined;
+    return row ? mapProject(row) : undefined;
+  }
+
   updateName(id: string, name: string, updatedAt: string): ProjectRecord | undefined {
     const trimmed = name.trim();
     if (!trimmed) throw new Error('Project name is required');
