@@ -55,7 +55,7 @@ function parseArgs(args: string[]): {
 } {
   if (args[0] !== 'passport' || args[1] !== 'verify' || !args[2]) {
     throw new Error(
-      'Usage: roleflock passport verify <passport.json> --identity <runner.json> [--subject <subject.json>] [--revocation <revocation.json> | --revocation-current] [--json]',
+      'Usage: roflock passport verify <passport.json> --identity <runner.json> [--subject <subject.json>] [--revocation <revocation.json> | --revocation-current] [--json]',
     );
   }
   const options = new Map<string, string>();

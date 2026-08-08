@@ -4,13 +4,15 @@
   "private": true,
   "type": "module",
   "bin": {
-    "roleflock": "./dist/cli.js"
+    "roflock": "./apps/cli/dist/bin/roflock.js",
+    "roleflock": "./apps/cli/dist/bin/roleflock.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "clean": "rm -rf dist *.tsbuildinfo"
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "passport": "node apps/cli/dist/bin/roflock.js passport"
   },
   "dependencies": {
     "@roleflock/change-passport": "workspace:*"
