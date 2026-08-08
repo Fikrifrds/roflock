@@ -57,6 +57,7 @@ try {
     'README.md',
     'package.json',
     'dist/LICENSE',
+    'dist/bin/roflock-mcp.js',
     'dist/bin/roflock.js',
     'dist/bin/roleflock.js',
     'dist/daemon/index.js',
@@ -73,6 +74,7 @@ try {
   });
   const installedRoot = join(installDirectory, 'node_modules', 'roflock');
   const entry = join(installedRoot, 'dist', 'bin', 'roflock.js');
+  const mcpEntry = join(installedRoot, 'dist', 'bin', 'roflock-mcp.js');
   const shim = join(
     installDirectory,
     'node_modules',
@@ -80,6 +82,7 @@ try {
     process.platform === 'win32' ? 'roflock.cmd' : 'roflock',
   );
   if (!existsSync(entry) || !existsSync(shim)) throw new Error('npm did not install the CLI entry');
+  if (!existsSync(mcpEntry)) throw new Error('npm did not install the MCP entry');
 
   const version = run(process.execPath, [entry, '--version'], { cwd: scratch }).trim();
   if (version !== manifest.version) {
@@ -101,6 +104,9 @@ try {
   );
   if (initialized.created?.length !== 4)
     throw new Error('installed init did not create four files');
+  run(process.execPath, [join(packageRoot, 'scripts', 'mcp-smoke.mjs'), mcpEntry], {
+    cwd: scratch,
+  });
 
   process.stdout.write(
     `${JSON.stringify({
@@ -111,7 +117,16 @@ try {
       platform: process.platform,
       arch: process.arch,
       node: process.version,
-      checks: ['manifest', 'pack-contents', 'install', 'version', 'help', 'check', 'init'],
+      checks: [
+        'manifest',
+        'pack-contents',
+        'install',
+        'version',
+        'help',
+        'check',
+        'init',
+        'mcp-stdio',
+      ],
     })}\n`,
   );
 } finally {

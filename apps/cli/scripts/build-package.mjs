@@ -43,6 +43,7 @@ await build({
   absWorkingDir: repositoryRoot,
   entryPoints: {
     'bin/roflock': 'apps/cli/src/bin/roflock.ts',
+    'bin/roflock-mcp': 'apps/cli/src/bin/roflock-mcp.ts',
     'bin/roleflock': 'apps/cli/src/bin/roleflock.ts',
     'daemon/index': 'apps/daemon/src/index.ts',
   },

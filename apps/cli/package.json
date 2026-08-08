@@ -15,6 +15,7 @@
   },
   "bin": {
     "roflock": "./dist/bin/roflock.js",
+    "roflock-mcp": "./dist/bin/roflock-mcp.js",
     "roleflock": "./dist/bin/roleflock.js"
   },
   "files": [
@@ -41,8 +42,10 @@
     "fastify": "^5.2.1"
   },
   "devDependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
     "esbuild": "^0.25.12",
     "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "zod": "^4.4.3"
   }
 }

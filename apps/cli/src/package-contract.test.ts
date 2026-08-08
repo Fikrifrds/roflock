@@ -18,6 +18,7 @@ describe('published package contract', () => {
     expect(manifest.private).not.toBe(true);
     expect(manifest.bin).toEqual({
       roflock: './dist/bin/roflock.js',
+      'roflock-mcp': './dist/bin/roflock-mcp.js',
       roleflock: './dist/bin/roleflock.js',
     });
   });

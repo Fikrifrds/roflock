@@ -62,7 +62,7 @@ The approved source for this stream is
 | RF-DIST-001 | complete | The public `roflock` package bundles every internal workspace dependency and carries only Fastify plus `better-sqlite3` in its install closure.                       |
 | RF-DIST-002 | complete | Package-relative `roflock` and deprecated `roleflock` bins resolve correctly; the installed CLI locates its bundled daemon from a shared output chunk.                |
 | RF-DIST-003 | partial  | Version/help/check pass from a clean installed tarball on macOS; the Linux and Windows matrix remains RF-DIST-012 work.                                               |
-| RF-DIST-004 | complete | Latest package smoke produced a 36-entry, 739,317-byte tarball with bins, runtime chunks, daemon, workflows, README/license, and no private workspace dependency.     |
+| RF-DIST-004 | complete | Latest package smoke produced a 38-entry, 1,306,344-byte tarball with CLI/MCP bins, daemon, workflows, README/license, and no private workspace dependency.           |
 | RF-DIST-005 | complete | A fresh npm install outside the monorepo passed version/help/check and ownership-proven daemon start/status/stop on port 4332; the reproducible CI gate lands in 012. |
 | RF-DIST-006 | complete | `roflock doctor` verifies package/Node/Git/repository/worktree/daemon plus fresh driver auth and runnability; JSON and exit status are CI-safe.                       |
 | RF-DIST-007 | complete | `roflock drivers [doctor]` reports the daemon's production driver inventory and truthful runtime capabilities.                                                        |
@@ -98,22 +98,22 @@ approvals, shared output semantics, and owned-daemon lifecycle remain below.
 
 ## 5. Harness and ecosystem status
 
-| Ticket         | State at baseline | Evidence or remaining work                                                                                            |
-| -------------- | ----------------- | --------------------------------------------------------------------------------------------------------------------- |
-| RF-HARNESS-001 | complete          | AgentDriver scope is implemented and documented.                                                                      |
-| RF-HARNESS-002 | complete          | FakeDriver and public conformance runner exist.                                                                       |
-| RF-HARNESS-003 | complete          | Codex CLI integration has conformance and opt-in live validation.                                                     |
-| RF-HARNESS-004 | complete          | Claude Code integration has conformance and opt-in live validation.                                                   |
-| RF-HARNESS-005 | open              | No Pi driver or documented compatibility spike exists.                                                                |
-| RF-HARNESS-006 | complete          | OpenCode driver, conformance coverage, production registry wiring, and fail-closed stored-credential detection exist. |
-| RF-HARNESS-007 | open              | Add copy-paste examples for invoking Roflock from existing harnesses.                                                 |
-| RF-HARNESS-008 | open              | Accept an MCP RFC covering trust, transport, approvals, and local scope.                                              |
-| RF-HARNESS-009 | open              | Implement initial read/run MCP tools with no implicit approval delegation.                                            |
-| RF-HARNESS-010 | open              | Document and test a stable local control-surface API.                                                                 |
-| RF-HARNESS-011 | open              | Run one workflow under two execution profiles in portability E2E.                                                     |
-| RF-HARNESS-012 | complete          | Cancellation truthfulness is tested at driver and Studio wording boundaries.                                          |
-| RF-HARNESS-013 | open              | Document supported authentication reuse and explicit non-support.                                                     |
-| RF-HARNESS-014 | partial           | Studio now fails closed on Playground URLs; the complete browser-to-local-runtime security design is still required.  |
+| Ticket         | State at baseline | Evidence or remaining work                                                                                             |
+| -------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| RF-HARNESS-001 | complete          | AgentDriver scope is implemented and documented.                                                                       |
+| RF-HARNESS-002 | complete          | FakeDriver and public conformance runner exist.                                                                        |
+| RF-HARNESS-003 | complete          | Codex CLI integration has conformance and opt-in live validation.                                                      |
+| RF-HARNESS-004 | complete          | Claude Code integration has conformance and opt-in live validation.                                                    |
+| RF-HARNESS-005 | open              | No Pi driver or documented compatibility spike exists.                                                                 |
+| RF-HARNESS-006 | complete          | OpenCode driver, conformance coverage, production registry wiring, and fail-closed stored-credential detection exist.  |
+| RF-HARNESS-007 | open              | Add copy-paste examples for invoking Roflock from existing harnesses.                                                  |
+| RF-HARNESS-008 | complete          | Accepted RFC-002 fixes stdio/local-user trust, exact tool scope, immutable runtime reuse, and external human approval. |
+| RF-HARNESS-009 | complete          | Packed `roflock-mcp` exposes check/compile/run/status/events; protocol smoke proves no approval or rejection tool.     |
+| RF-HARNESS-010 | open              | Document and test a stable local control-surface API.                                                                  |
+| RF-HARNESS-011 | open              | Run one workflow under two execution profiles in portability E2E.                                                      |
+| RF-HARNESS-012 | complete          | Cancellation truthfulness is tested at driver and Studio wording boundaries.                                           |
+| RF-HARNESS-013 | open              | Document supported authentication reuse and explicit non-support.                                                      |
+| RF-HARNESS-014 | partial           | Studio now fails closed on Playground URLs; the complete browser-to-local-runtime security design is still required.   |
 
 MCP is an adapter over existing compiler/runtime/control contracts. It must not
 become a second runtime or an approval bypass.
