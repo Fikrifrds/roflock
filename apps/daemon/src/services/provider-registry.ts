@@ -13,6 +13,7 @@ import { ClaudeAdapter } from '@roleflock/provider-claude';
 import { CodexAdapter } from '@roleflock/provider-codex';
 import { CursorWriterAdapter, createFsCursorWriter } from '@roleflock/provider-cursor';
 import { OpenAiCompatibleAdapter } from '@roleflock/provider-custom';
+import { OpenCodeAdapter, openCodeDriver } from '@roleflock/provider-opencode';
 import {
   getProviderAccount,
   runProviderAuthAction,
@@ -64,6 +65,7 @@ const providerNames: Record<string, string> = {
   claude: 'Claude CLI',
   codex: 'Codex CLI',
   cursor: 'Cursor Agent CLI',
+  opencode: 'OpenCode CLI',
 };
 
 const connectionTypes: Record<string, RegisteredProvider['connectionType']> = {
@@ -71,6 +73,7 @@ const connectionTypes: Record<string, RegisteredProvider['connectionType']> = {
   claude: 'cli',
   codex: 'cli',
   cursor: 'cli',
+  opencode: 'cli',
 };
 
 /**
@@ -140,6 +143,8 @@ export class ProviderRegistry {
       }),
     );
     this.registerProvider(new CursorWriterAdapter(createFsCursorWriter()));
+    const opencode = new OpenCodeAdapter();
+    this.registerProvider(opencode, openCodeDriver());
 
     void Promise.all(this.adapters.list().map((adapter) => this.healthCheck(adapter.id))).catch(
       () => undefined,
@@ -269,7 +274,7 @@ export class ProviderRegistry {
       if (id === 'fake' || base.status === 'missing' || base.status === 'error') {
         return base;
       }
-      if (connectionTypes[id] === 'cli' || ['claude', 'codex', 'cursor'].includes(id)) {
+      if (connectionTypes[id] === 'cli') {
         return mergeAccountIntoHealth(base, await this.account(id, options));
       }
       return base;

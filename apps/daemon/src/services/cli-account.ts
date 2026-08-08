@@ -77,7 +77,7 @@ export function usageLinksFor(providerId: string): ProviderUsageLink[] {
   }
 }
 
-/** Read Claude / Codex / Cursor account state without leaking secrets. */
+/** Read supported CLI account state without leaking secrets. */
 const accountCache = new Map<string, { at: number; value: ProviderAccount }>();
 const ACCOUNT_CACHE_TTL_MS = 15_000;
 
@@ -106,6 +106,9 @@ export async function getProviderAccount(
     case 'cursor':
       value = await getCursorAccount();
       break;
+    case 'opencode':
+      value = await getOpenCodeAccount();
+      break;
     default:
       value = {
         providerId,
@@ -119,6 +122,64 @@ export async function getProviderAccount(
   }
   accountCache.set(providerId, { at: Date.now(), value });
   return value;
+}
+
+export function parseOpenCodeAuthList(output: string): { loggedIn: boolean; count?: number } {
+  const match = output.match(/\b(\d+)\s+credentials?\b/i);
+  if (!match) return { loggedIn: false };
+  const count = Number.parseInt(match[1]!, 10);
+  return { loggedIn: count > 0, count };
+}
+
+async function getOpenCodeAccount(): Promise<ProviderAccount> {
+  const { resolveOpenCodeBinary } = await import('@roleflock/provider-opencode');
+  const binary = (await whichBinary(resolveOpenCodeBinary())) ?? undefined;
+  const hints = {
+    login: `${binary ?? 'opencode'} auth login`,
+    logout: `${binary ?? 'opencode'} auth logout`,
+    switch: `${binary ?? 'opencode'} auth logout && ${binary ?? 'opencode'} auth login`,
+  };
+  if (!binary) {
+    return {
+      providerId: 'opencode',
+      loggedIn: false,
+      supportsLogin: false,
+      supportsSwitch: false,
+      detail: 'OpenCode CLI was not found. Install it or set OPENCODE_PATH.',
+      commandHints: hints,
+    };
+  }
+  try {
+    const { stdout, stderr } = await execFileAsync(binary, ['auth', 'list'], {
+      timeout: 8_000,
+      env: process.env,
+    });
+    const parsed = parseOpenCodeAuthList(`${stdout}\n${stderr}`);
+    return {
+      providerId: 'opencode',
+      loggedIn: parsed.loggedIn,
+      label: parsed.loggedIn ? `${parsed.count} configured provider credential(s)` : 'OpenCode',
+      authMethod: parsed.loggedIn ? 'opencode-provider-store' : undefined,
+      supportsLogin: true,
+      supportsSwitch: true,
+      detail:
+        parsed.count === undefined
+          ? 'OpenCode was found, but Roflock could not verify stored provider credentials.'
+          : parsed.loggedIn
+            ? `OpenCode reports ${parsed.count} stored provider credential(s).`
+            : 'OpenCode reports no stored provider credentials. Environment-only credentials are not verified by this check.',
+      commandHints: hints,
+    };
+  } catch {
+    return {
+      providerId: 'opencode',
+      loggedIn: false,
+      supportsLogin: true,
+      supportsSwitch: true,
+      detail: 'OpenCode was found, but `opencode auth list` did not verify authentication.',
+      commandHints: hints,
+    };
+  }
 }
 
 /** Parse `agent status --format json` without requiring email to be present. */
@@ -430,6 +491,21 @@ async function runLogout(
       };
     }
   }
+  if (providerId === 'opencode') {
+    const { resolveOpenCodeBinary } = await import('@roleflock/provider-opencode');
+    const binary = (await whichBinary(resolveOpenCodeBinary())) ?? 'opencode';
+    const command = `${binary} auth logout`;
+    try {
+      await execFileAsync(binary, ['auth', 'logout'], { timeout: 15_000, env: process.env });
+      return { ok: true, command, detail: 'OpenCode provider credential removed.' };
+    } catch (error) {
+      return {
+        ok: false,
+        command,
+        detail: error instanceof Error ? error.message : 'OpenCode logout failed',
+      };
+    }
+  }
   return {
     ok: false,
     command: '',
@@ -449,6 +525,9 @@ async function launchLogin(
     const { discoverCursor } = await import('@roleflock/provider-cursor');
     const discovery = await discoverCursor();
     command = `${discovery.binary ?? 'agent'} login`;
+  } else if (providerId === 'opencode') {
+    const { resolveOpenCodeBinary } = await import('@roleflock/provider-opencode');
+    command = `${(await whichBinary(resolveOpenCodeBinary())) ?? 'opencode'} auth login`;
   }
   if (!command) {
     return {
