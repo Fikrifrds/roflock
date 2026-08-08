@@ -927,17 +927,35 @@ than being flattened to `interrupted`. ADR-010 is honoured.
 
 ### Not done
 
-| Ticket             | Remaining work                                                                                     |
-| ------------------ | -------------------------------------------------------------------------------------------------- |
-| RF-EVO-070         | A typed runtime event envelope. Events are appended as loose `(type, payload)` pairs today         |
-| RF-EVO-071/072     | `GraphRun` / `NodeRun` as typed contracts. They exist as tables the orchestrator writes by raw SQL |
-| RF-EVO-074/075/078 | Reducers and projections for runtime state; only `task-reducer` exists                             |
-| RF-EVO-085 (full)  | An end-to-end forced-restart test through the real daemon, not just the storage contract           |
+| Ticket            | Remaining work                                                                              |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| RF-EVO-085 (full) | A forced-restart end-to-end through the real daemon, not only the storage contract          |
+| —                 | Switching the orchestrator's SQL writes to read _from_ the projection rather than beside it |
 
-The honest summary: R5's _safety_ properties — no duplicated billable work, no
-refreshed repair budget, no guess about an unobserved turn — are done and
-tested. R5's _modelling_ work, turning raw SQL writes into typed contracts with
-reducers, is not, and is the larger half by volume.
+R5's _safety_ properties — no duplicated billable work, no refreshed repair
+budget, no guess about an unobserved turn — are done and tested. The _modelling_
+work is now largely done too: `RuntimeEvent` gives the five transitions a
+contract, `reduceGraphRun` folds them deterministically, and the
+walking-skeleton end-to-end projects every run a real orchestrated task
+produced.
+
+What remains is the switch itself. The events are recorded **beside** the
+orchestrator's SQL writes, not instead of them, which is what the plan asks for —
+"first instrument existing behaviour, then move behaviour behind durable state".
+Moving the orchestrator to read from the projection is the last step and is
+deliberately not taken here, because doing it in the same change would have
+removed the ability to compare the two.
+
+### The reducer refuses rather than repairs
+
+Illegal histories throw: a node settling without a start, a run starting or
+settling twice, and — the one that costs money — a gap in the re-entry count,
+which would understate what was already paid for. A projection that quietly
+fixes a contradictory history hides whatever produced it.
+
+Events are keyed by graph run rather than by task, so one task's several runs
+project independently and a resumed run inherits exactly what its own start
+event says.
 
 ### RF-EVO-086, and where the guarantee stops
 

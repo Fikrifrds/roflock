@@ -37,12 +37,18 @@ CLI distribution and harness interoperability are governed by
 
 ### Next
 
-**Finish R5.** Its safety properties are done: a repair budget survives a
+**Finish R5.** Its safety properties are done — a repair budget survives a
 restart, a billable turn has a stable identity, and an unobserved turn stops the
-run instead of being repeated. What remains is modelling — turning the
-orchestrator's raw SQL writes into typed `GraphRun`/`NodeRun` contracts with
-reducers (RF-EVO-070/071/072/074/075/078), and a forced-restart end-to-end
-through the real daemon rather than only the storage contract.
+run instead of being repeated — and so is most of the modelling:
+`RuntimeEvent` types the five transitions and `reduceGraphRun` folds them
+deterministically.
+
+Two things remain. A forced-restart end-to-end through the real daemon, rather
+than only the storage contract. And the switch itself: runtime events are
+recorded _beside_ the orchestrator's SQL writes so the two can be compared, per
+the plan's "instrument first, then move behaviour behind durable state". Moving
+the orchestrator to read from the projection is the last step, and doing it in
+the same change would have removed the ability to check one against the other.
 
 Audit §16 also records what R5 does **not** give you: there is still no way for
 a human to resolve an unknown-outcome invocation. The run says why it stopped,
