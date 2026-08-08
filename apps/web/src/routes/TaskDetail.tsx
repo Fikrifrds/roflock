@@ -12,6 +12,7 @@ import { ChangePassportPanel } from '../components/ChangePassportPanel.js';
 import { TaskHandoffPanel } from '../components/TaskHandoffPanel.js';
 import { StopTruthfulness } from '../components/StopTruthfulness.js';
 import { GraphRunView } from '../components/GraphRunView.js';
+import { UnresolvedTurns } from '../components/UnresolvedTurns.js';
 import { WorkflowSource } from '../components/WorkflowSource.js';
 import { LiveTurn } from '../components/LiveTurn.js';
 import { TaskWorkspaceHeader } from '../components/TaskWorkspaceHeader.js';
@@ -458,6 +459,10 @@ export function TaskDetail() {
                     </strong>
                   </div>
                 </summary>
+                {/* Above the graph: a run halted on an unresolved paid turn is
+                    waiting on a human, and that must not be something you find
+                    by inspecting node states. */}
+                <UnresolvedTurns run={runView} />
                 <GraphRunView taskId={id} execution={execution} />
               </details>
 

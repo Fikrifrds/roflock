@@ -554,6 +554,8 @@ export type GraphRunView = {
       primaryModelDisplayName: string | null;
       state: string;
       outcome: string | null;
+      /** A paid turn whose result nobody observed. See ADR-010. */
+      unresolvedInvocation?: boolean;
       startedAt: string | null;
       completedAt: string | null;
       attempts: number;

@@ -54,7 +54,12 @@ import {
   deleteLocalData,
 } from '../services/export-service.js';
 import { getProviderAccount } from '../services/cli-account.js';
-import { ConcurrencyLimitError, Orchestrator, resolveTaskGraph } from '../services/orchestrator.js';
+import {
+  ConcurrencyLimitError,
+  Orchestrator,
+  isUnresolvedBillableTurn,
+  resolveTaskGraph,
+} from '../services/orchestrator.js';
 import {
   ROLE_DESCRIPTIONS,
   ROLE_LABELS,
@@ -563,6 +568,44 @@ export function registerApi(
     const latest = new Map<string, (typeof nodeRuns)[number]>();
     for (const nodeRun of nodeRuns) latest.set(nodeRun.node_key, nodeRun);
 
+    /**
+     * Nodes holding a paid turn whose result nobody observed (ADR-010).
+     *
+     * Decided by the same predicate the orchestrator halts on, against the same
+     * rows — not by matching the halt message, which would make a user-facing
+     * warning depend on wording nobody would think to keep stable.
+     */
+    const unresolvedNodes = new Set<string>();
+    if (run) {
+      const invocations = db
+        .prepare(
+          `SELECT node_runs.node_key AS node_key,
+                  invocations.status AS status,
+                  invocations.outcome AS outcome,
+                  invocations.provider_connection_id AS provider_connection_id
+             FROM invocations
+             JOIN node_runs ON node_runs.id = invocations.node_run_id
+            WHERE node_runs.graph_run_id = ?`,
+        )
+        .all(run.id) as Array<{
+        node_key: string;
+        status: string;
+        outcome: string | null;
+        provider_connection_id: string;
+      }>;
+      for (const invocation of invocations) {
+        if (
+          isUnresolvedBillableTurn({
+            status: invocation.status,
+            providerConnectionId: invocation.provider_connection_id,
+            ...(invocation.outcome === null ? {} : { outcome: invocation.outcome }),
+          })
+        ) {
+          unresolvedNodes.add(invocation.node_key);
+        }
+      }
+    }
+
     // A run that has stopped for good will never schedule what it never
     // started. Reporting those nodes as `pending` made a failed run look like
     // it was still queueing work. An interrupted run is genuinely resumable, so
@@ -632,6 +675,7 @@ export function registerApi(
             primaryModelDisplayName: primary?.modelId ?? null,
             state: latest.get(node.id)?.state ?? unreachedState,
             outcome: latest.get(node.id)?.outcome ?? null,
+            unresolvedInvocation: unresolvedNodes.has(node.id),
             startedAt: latest.get(node.id)?.started_at ?? null,
             completedAt: latest.get(node.id)?.completed_at ?? null,
             attempts: nodeRuns.filter((entry) => entry.node_key === node.id).length,
