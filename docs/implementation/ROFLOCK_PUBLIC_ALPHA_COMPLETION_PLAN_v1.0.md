@@ -46,10 +46,11 @@ These findings take precedence over milestone completion claims.
 | RF-EVO-185 | complete | Migration 036 persists driver/session/resume and interruption evidence. Known later attempts resume through the selected driver; ambiguous turns remain blocked. Task-specific stop status and control responses use the weakest active selected-driver guarantee. |
 | RF-EVO-186 | complete | API-created tasks from two revisions of one workflow keep distinct source, executable graph, semantic hash, and integrity hash despite sharing the compatibility version; the earlier task remains pinned after registry mutation.                                 |
 | RF-EVO-187 | complete | An explicit authority profile that the compatibility runtime cannot enforce now fails bridging; it can no longer degrade silently into an ungated role.                                                                                                            |
+| RF-EVO-188 | complete | Explicit agent/check retry budgets must be positive integers at compile time; invalid values can no longer disappear at the runtime bridge.                                                                                                                        |
 
-The implementation order is 181 → 182 → 183 → 184 → 185 → 186 → 187. Each ticket
-must preserve the single `runGraph` runtime and pass its targeted tests before a
-separate commit.
+The implementation order is 181 → 182 → 183 → 184 → 185 → 186 → 187 → 188.
+Each ticket must preserve the single `runGraph` runtime and pass its targeted
+tests before a separate commit.
 
 ---
 
@@ -123,17 +124,17 @@ become a second runtime or an approval bypass.
 
 ## 6. Product and documentation stream
 
-| Ticket      | State    | Required outcome                                                                                                                |
-| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| RF-EVO-180  | complete | Visible Roflock launch UI and isolated responsive Playground; commit `5d8b69a`.                                                 |
-| RF-DOCS-001 | complete | The user-first docs index and architecture guide define surfaces, immutable identity, single runtime, trust, and compatibility. |
-| RF-DOCS-002 | open     | Language reference for syntax, node kinds, outcomes, loops, authority, diagnostics, and versioning.                             |
-| RF-DOCS-003 | open     | CLI reference including install, commands, JSON, exit codes, and troubleshooting.                                               |
-| RF-DOCS-004 | open     | Local runtime/operator guide: configuration, data, recovery, approvals, evidence, and upgrades.                                 |
-| RF-DOCS-005 | open     | Playground and Studio guides, including deployment and local handoff boundaries.                                                |
-| RF-DOCS-006 | open     | Driver authoring/conformance guide and Codex, Claude, OpenCode, Pi status.                                                      |
-| RF-DOCS-007 | open     | Open-source contributor, governance, security-reporting, support, and release guides.                                           |
-| RF-DOCS-008 | open     | End-to-end quick starts validated against a packed artifact and clean checkout.                                                 |
+| Ticket      | State    | Required outcome                                                                                                                                           |
+| ----------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RF-EVO-180  | complete | Visible Roflock launch UI and isolated responsive Playground; commit `5d8b69a`.                                                                            |
+| RF-DOCS-001 | complete | The user-first docs index and architecture guide define surfaces, immutable identity, single runtime, trust, and compatibility.                            |
+| RF-DOCS-002 | complete | The implemented-language reference covers exact 0.1 syntax, nodes, outcomes, loops, effects, authority, diagnostics, and immutable version/hash semantics. |
+| RF-DOCS-003 | open     | CLI reference including install, commands, JSON, exit codes, and troubleshooting.                                                                          |
+| RF-DOCS-004 | open     | Local runtime/operator guide: configuration, data, recovery, approvals, evidence, and upgrades.                                                            |
+| RF-DOCS-005 | open     | Playground and Studio guides, including deployment and local handoff boundaries.                                                                           |
+| RF-DOCS-006 | open     | Driver authoring/conformance guide and Codex, Claude, OpenCode, Pi status.                                                                                 |
+| RF-DOCS-007 | open     | Open-source contributor, governance, security-reporting, support, and release guides.                                                                      |
+| RF-DOCS-008 | open     | End-to-end quick starts validated against a packed artifact and clean checkout.                                                                            |
 
 Documentation examples are executable fixtures where practical. A command that
 has not passed package/E2E verification must not be presented as shipped.
