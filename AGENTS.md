@@ -11,14 +11,19 @@ is the authority on what this repository contains. Read it before touching code:
 it supersedes the planning documents wherever they disagree with the checkout,
 and each phase appends its outcome rather than rewriting the baseline.
 
-| Phase | State   | Where                                                  |
-| ----- | ------- | ------------------------------------------------------ |
-| R0    | done    | Audit §1–11 — baseline, classification, risks          |
-| R1    | done    | §12 — rebrand, and what was deliberately _not_ renamed |
-| R2    | done    | §13 — Graph IR and the `.roflock` language             |
-| R3    | done    | §14 — the runtime bridge                               |
-| R4    | done    | §15 — built-in workflows as source                     |
-| R5    | partial | §16 — durable runtime: safety done, modelling remains  |
+| Phase | State   | Where                                                     |
+| ----- | ------- | --------------------------------------------------------- |
+| R0    | done    | Audit §1–11 — baseline, classification, risk register     |
+| R1    | done    | §12 — rebrand, and what was deliberately _not_ renamed    |
+| R2    | done    | §13 — Graph IR and the `.roflock` language                |
+| R3    | done    | §14 — the runtime bridge; one runtime, never two          |
+| R4    | done    | §15 — built-in workflows as source, at exact parity       |
+| R5    | done    | §16 — durable runtime, forced-restart recovery            |
+| R6    | done    | §17 — generic roles, coding authority preserved           |
+| R7    | done    | §18 — four drivers, three verified against real CLIs      |
+| R8    | done    | §20 — evidence chain, `roflock evidence` / `why`          |
+| R9    | done    | §21 — browser Playground, shared layout, `roflock render` |
+| R10   | partial | §22 — shared diagram contract; Studio UI outstanding      |
 
 `.roflock` compiles to canonical Graph IR, bridges to a `WorkflowGraph`, and
 executes on the existing `runGraph`. **There is no second runtime, and there

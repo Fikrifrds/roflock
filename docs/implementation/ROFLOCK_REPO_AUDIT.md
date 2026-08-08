@@ -1220,26 +1220,41 @@ than by review:
 
 ## 19. Where the migration stands
 
-| Phase | State       | Substance                                                           |
-| ----- | ----------- | ------------------------------------------------------------------- |
-| R0    | done        | Baseline frozen, 26 packages classified, risk register              |
-| R1    | done        | Rebrand with no destructive rename; ~/.roleflock still works        |
-| R2    | done        | `graph-ir` + `language`; `.roflock` compiles and round-trips        |
-| R3    | done        | Compiled IR executes on the **existing** runtime                    |
-| R4    | done        | All five built-in workflows are source, at exact parity             |
-| R5    | done        | Durable loop budget, stable invocation identity, restart recovery   |
-| R6    | done        | Generic roles without weakening coding authority                    |
-| R7    | partial     | Driver contract and conformance; real driver migrations outstanding |
-| R8    | not started | Evidence and provenance unification                                 |
-| R9    | not started | Browser playground                                                  |
-| R10   | not started | Studio                                                              |
+| Phase | State   | Substance                                                            |
+| ----- | ------- | -------------------------------------------------------------------- |
+| R0    | done    | Baseline frozen, 26 packages classified, risk register               |
+| R1    | done    | Rebrand with no destructive rename; `~/.roleflock` still works       |
+| R2    | done    | `graph-ir` + `language`; `.roflock` compiles and round-trips         |
+| R3    | done    | Compiled IR executes on the **existing** runtime                     |
+| R4    | done    | All five built-in workflows are source, at exact parity              |
+| R5    | done    | Durable loop budget, stable invocation identity, restart recovery    |
+| R6    | done    | Generic roles without weakening coding authority                     |
+| R7    | done    | Four drivers pass conformance; Claude, Codex, OpenCode verified live |
+| R8    | done    | Evidence chain that names its own gaps                               |
+| R9    | done    | Browser Playground on a shared, browser-safe compiler and layout     |
+| R10   | partial | Shared diagram contract served; Studio UI outstanding                |
 
-Tests: 432 at baseline → **672**. Prettier's flagged set is 65 tracked files,
-three fewer than baseline, with nothing added.
+Tests: 432 at baseline → **794**, plus 43 live driver tests behind
+`ROFLOCK_LIVE_DRIVER_TESTS=1`. Prettier's flagged set is 61 tracked files, seven
+fewer than baseline, with nothing added.
 
-The architectural spine is complete: source → IR → validation → bridge →
-one runtime, with durable state and honest recovery beneath it. R8 through R10
-are product surfaces built on that spine rather than changes to it.
+The architectural spine is complete and no longer changing: source → IR →
+validation → bridge → **one** runtime, with durable state, honest recovery, and
+an evidence chain beneath it. What remains in R10 is interface work on top of
+contracts that are already tested.
+
+### A note on how this document was maintained
+
+Four times during this migration an exact-match text edit to these documents
+failed silently after Prettier reflowed the paragraph or table it was matching —
+leaving a heading updated while the text beneath it went stale, most visibly a
+phase pointer that told three successive readers to start R3. Each was caught by
+something checking the result rather than by re-reading the diff.
+
+The lesson generalises past tooling: **a document that records state needs the
+same verification as code that computes it.** Tables keyed by phase turned out to
+be easier to keep honest than prose, because a missing row is visible in a way a
+stale sentence is not.
 
 ---
 
