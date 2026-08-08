@@ -20,7 +20,7 @@ describe('Shell', () => {
     );
 
     expect(await screen.findByText(/Open Roflock from the daemon/i)).toBeInTheDocument();
-    expect(screen.getByText('pnpm url')).toBeInTheDocument();
+    expect(screen.getByText('roflock studio')).toBeInTheDocument();
     expect(screen.queryByText('protected')).not.toBeInTheDocument();
   });
 
