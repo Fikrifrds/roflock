@@ -3,6 +3,7 @@ import { ExitCode } from './exit-codes.js';
 import type { CliIo } from './main.js';
 
 export function exitCodeForRun(state: string, blockedReason?: string): number {
+  if (state === 'running' || state === 'completed' || state === 'accepted') return ExitCode.Ok;
   if (state === 'failed' || state === 'rejected') return ExitCode.RunFailed;
   if (state === 'cancelled' || state === 'stopping') return ExitCode.Cancelled;
   if (state === 'interrupted') {
@@ -17,7 +18,10 @@ export function exitCodeForRun(state: string, blockedReason?: string): number {
   ) {
     return ExitCode.Blocked;
   }
-  return ExitCode.Ok;
+  // A newly introduced state is not success until its automation meaning is
+  // deliberately assigned. Failing closed prevents an upgraded daemon from
+  // making an older CLI tell CI that an unknown result passed.
+  return ExitCode.Internal;
 }
 
 export function emitRuntimeError(
@@ -37,7 +41,7 @@ export function emitRuntimeError(
     }
     if (error.status === 0 || error.status === 401 || error.status === 403) {
       exitCode = ExitCode.Config;
-    } else if (error.status === 404) exitCode = ExitCode.Usage;
+    } else if (error.status === 400 || error.status === 404) exitCode = ExitCode.Usage;
     else if (error.status === 409) exitCode = ExitCode.Blocked;
     else if (error.status === 422) {
       exitCode = code === 'RUN_START_FAILED' ? ExitCode.Driver : ExitCode.Usage;

@@ -69,7 +69,7 @@ The approved source for this stream is
 | RF-DIST-008 | complete | Driver text and JSON keep installed, registered/detected, authenticated, and runnable as four separate states.                                                        |
 | RF-DIST-009 | complete | `roflock init` creates a credential-free four-file scaffold, is byte-idempotent, preflights all conflicts, and never overwrites user content.                         |
 | RF-DIST-010 | complete | `roflock help --json` publishes the versioned stream/command/native-output contract; success and error JSON behavior is tested.                                       |
-| RF-DIST-011 | partial  | Exit constants exist; command-level mapping and public documentation are incomplete.                                                                                  |
+| RF-DIST-011 | complete | Public exit-code/HTTP/run-state mapping exists; unknown run states fail closed and command/error mappings have contract tests.                                        |
 | RF-DIST-012 | complete | GitHub-hosted OIDC publishing has no long-lived npm token, enforces tag/version identity, and follows a three-OS packed-install workflow plus full release gates.     |
 | RF-DIST-013 | open     | Add and execute the alpha release checklist; actual publish remains an operator action.                                                                               |
 

@@ -19,6 +19,7 @@ function output() {
 describe('runtime output contract', () => {
   it.each([
     ['running', undefined, ExitCode.Ok],
+    ['completed', undefined, ExitCode.Ok],
     ['accepted', undefined, ExitCode.Ok],
     ['failed', undefined, ExitCode.RunFailed],
     ['rejected', undefined, ExitCode.RunFailed],
@@ -31,6 +32,7 @@ describe('runtime output contract', () => {
     ['interrupted', 'provider_unavailable', ExitCode.Driver],
     ['interrupted', 'outcome_unknown', ExitCode.Driver],
     ['interrupted', undefined, ExitCode.Cancelled],
+    ['future_daemon_state', undefined, ExitCode.Internal],
   ] as const)('maps %s / %s to exit %s', (state, reason, expected) => {
     expect(exitCodeForRun(state, reason)).toBe(expected);
   });
@@ -61,5 +63,19 @@ describe('runtime output contract', () => {
       error: { message: 'missing id', code: 'USAGE' },
       exitCode: ExitCode.Usage,
     });
+  });
+
+  it('maps bad daemon input to usage instead of an internal Roflock fault', () => {
+    const result = output();
+    const code = emitRuntimeError(
+      new DaemonApiError('after must be non-negative', 400, {
+        error: 'after must be non-negative',
+      }),
+      result.io,
+      true,
+    );
+
+    expect(code).toBe(ExitCode.Usage);
+    expect(JSON.parse(result.stderr[0]!)).toMatchObject({ exitCode: ExitCode.Usage });
   });
 });
