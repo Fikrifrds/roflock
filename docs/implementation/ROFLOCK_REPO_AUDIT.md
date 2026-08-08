@@ -865,11 +865,11 @@ the daemon with no workflow.
 
 ### New risks
 
-| #   | Risk                                                                                                                 | Severity | Mitigation                                                                                                                        |
-| --- | -------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| 17  | The template registry is module-level mutable state, so test order can affect which graphs resolve                   | Medium   | Tests clear it in `afterEach`; a per-daemon instance would remove the hazard entirely                                             |
-| 18  | ~~`workflows/` is located by walking up from the daemon module and will not survive npm packaging~~                  | Closed   | RF-DIST-001: the build bundles templates into `dist/workflows`; a packaged daemon finds them, dev still reads the repository copy |
-| 19  | The shipped templates declare no `authority`, so Role Protocol artifact gates are still unused by built-in workflows | Low      | Matches the built-ins exactly today; tightening is a deliberate follow-up with its own fixture                                    |
+| #   | Risk                                                                                                | Severity | Mitigation                                                                                                                        |
+| --- | --------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 17  | The template registry is module-level mutable state, so test order can affect which graphs resolve  | Medium   | Tests clear it in `afterEach`; a per-daemon instance would remove the hazard entirely                                             |
+| 18  | ~~`workflows/` is located by walking up from the daemon module and will not survive npm packaging~~ | Closed   | RF-DIST-001: the build bundles templates into `dist/workflows`; a packaged daemon finds them, dev still reads the repository copy |
+| 19  | ~~Shipped templates declare no `authority`, so Role Protocol gates are unused~~                     | Closed   | Investigated: authority cannot apply uniformly — see §23. Deliberate, not pending                                                 |
 
 ---
 
@@ -1354,3 +1354,37 @@ before publish rather than at it: a packaged daemon would have found no
 templates, fallen back to the hard-coded graphs, and said nothing — everything
 appearing to work while the compiled workflows R4 made the source of truth went
 silently unused.
+
+---
+
+## 23. Why the shipped templates declare no `authority`
+
+Recorded as a risk in §15 and left open through R6, on the assumption it was a
+tightening waiting for a fixture. Investigation shows it is not, and the risk is
+closed as **deliberate** rather than pending.
+
+Role Protocol authority gates require specific input artifacts:
+
+```text
+planner    change_contract
+executor   change_contract, execution_plan, verification_specification
+verifier   change_contract, execution_plan, verification_specification,
+           execution_report, test_attestation
+```
+
+The `direct` workflow is `writer → test → accept`. It has **no planner node at
+all** — that is the entire point of the smallest-sufficient path. It can never
+produce an `execution_plan`, so giving its writer `authority executor` would
+block the workflow on every run, permanently.
+
+So authority is not a flag that can be switched on across the templates. It
+presumes the assurance pipeline's artifacts, which the lighter workflows
+deliberately do not produce. Applying it means deciding, per workflow, whether
+that workflow is _supposed_ to carry a plan and a verification specification —
+a product decision about what each mode promises, not a migration step.
+
+What is available today, and is tested: a workflow that wants Role Protocol
+enforcement declares `authority <profile>` on the role, and the gate fires before
+any work is paid for (§17). The mechanism is complete and opt-in; only the
+question of which shipped workflows should opt in remains, and that belongs with
+whoever decides what Direct and Fast are for.

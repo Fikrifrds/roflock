@@ -47,10 +47,11 @@ The rule that matters more than any of them: **capability reporting must be
 truthful**. A driver that cannot prove remote cancellation must not report work
 as stopped. Conformance enforces it; do not add an exception.
 
-Open debts, none blocking: shipped templates declare no `authority`, so Role
-Protocol gates stay unused (§15 risk 19); and resuming past an approval gate
-re-asks the human (§16). Risk 18 is closed — the build now bundles workflow
-templates into the daemon package.
+All recorded debts are closed. §23 explains the last one: `authority` cannot be
+switched on across the shipped templates because `direct` has no planner and so
+can never produce the `execution_plan` the executor gate requires. The mechanism
+is complete and opt-in; which workflows should opt in is a product decision about
+what Direct and Fast promise, not a migration step.
 
 ---
 
