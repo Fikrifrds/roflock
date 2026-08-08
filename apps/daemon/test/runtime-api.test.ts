@@ -204,6 +204,28 @@ describe('runtime CLI API', () => {
     });
     const projectId = (project.json() as { id: string }).id;
 
+    const prematureTask = await app.inject({
+      method: 'POST',
+      url: '/api/tasks',
+      headers,
+      payload: {
+        projectId,
+        type: 'feature',
+        mode: 'direct',
+        title: 'Not yet acceptable',
+        brief: 'Prove terminal decisions are state-gated',
+      },
+    });
+    expect(prematureTask.statusCode).toBe(201);
+    const premature = await app.inject({
+      method: 'POST',
+      url: `/api/tasks/${(prematureTask.json() as { id: string }).id}/accept`,
+      headers,
+      payload: {},
+    });
+    expect(premature.statusCode).toBe(409);
+    expect(premature.json()).toMatchObject({ code: 'TASK_NOT_AWAITING_ACCEPTANCE' });
+
     const gated = await app.inject({
       method: 'POST',
       url: '/api/runtime/runs',

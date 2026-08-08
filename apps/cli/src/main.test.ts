@@ -49,6 +49,8 @@ describe('roflock CLI', () => {
         'doctor',
         'drivers',
         'approvals',
+        'accept-task',
+        'reject-task',
         'studio',
         'evidence',
         'why',

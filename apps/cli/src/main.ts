@@ -12,6 +12,7 @@ import { runControl, type RuntimeControl } from './runtime-control-command.js';
 import { runEvents, runStatus } from './runtime-inspection-command.js';
 import { runWorkflow } from './runtime-command.js';
 import { runStudio } from './studio-command.js';
+import { runTaskDecision, type TaskDecisionCommand } from './task-decision-command.js';
 
 export interface CliIo {
   stdout(message: string): void;
@@ -61,6 +62,8 @@ Approvals
   approval <approval-id>            Inspect the exact requested action
   approve <approval-id>             Approve exactly one request
   reject <approval-id>              Reject exactly one request
+  accept-task <task-id>             Accept a task awaiting final acceptance
+  reject-task <task-id>             Reject a task awaiting final acceptance
 
 Daemon
   studio                           Start/connect and print the private Studio URL
@@ -128,6 +131,8 @@ export function cliAutomationContract() {
       'approval',
       'approve',
       'reject',
+      'accept-task',
+      'reject-task',
       'daemon',
       'studio',
       'init',
@@ -205,6 +210,9 @@ export async function runCliAsync(argv: string[], io: CliIo): Promise<number> {
       argv.slice(1),
       io,
     );
+  }
+  if (['accept-task', 'reject-task'].includes(argv[0] ?? '')) {
+    return runTaskDecision(argv[0] as TaskDecisionCommand, argv.slice(1), io);
   }
   if (argv[0] === 'daemon') return runDaemonCommand(argv.slice(1), io);
   if (argv[0] === 'drivers') return runDrivers(argv.slice(1), io);

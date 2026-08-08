@@ -1318,9 +1318,16 @@ export function registerApi(
     app.post(`/api/tasks/:id/${action}`, async (request, reply) => {
       const task = tasks.get((request.params as { id: string }).id);
       if (!task) return reply.code(404).send({ error: 'Task not found' });
+      if (task.state !== 'awaiting_acceptance') {
+        return reply.code(409).send({
+          code: 'TASK_NOT_AWAITING_ACCEPTANCE',
+          error: `Task is ${task.state}, not awaiting acceptance`,
+        });
+      }
       // Awaited so the passport exists before the client refetches the task.
-      await orchestrator.resolveAcceptance(task.id, action === 'accept' ? 'accepted' : 'rejected');
-      return { accepted: true };
+      const decision = action === 'accept' ? 'accepted' : 'rejected';
+      await orchestrator.resolveAcceptance(task.id, decision);
+      return { accepted: true, taskId: task.id, decision };
     });
   }
   app.delete('/api/tasks/:id', async (request, reply) => {

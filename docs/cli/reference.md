@@ -211,6 +211,21 @@ Approve or reject exactly one pending ID. There is no “latest” shortcut and 
 bulk wildcard. MCP intentionally exposes no approval tool, so the process or
 agent that started work does not automatically gain acceptance authority.
 
+### Final task acceptance
+
+An authored workflow may end at a human acceptance node. This is distinct from
+an intermediate approval request and uses the task ID returned by `roflock run`:
+
+```bash
+roflock accept-task <task-id>
+roflock reject-task <task-id>
+```
+
+Both commands fail closed unless the task is exactly `awaiting_acceptance`.
+They support `--json`, `--daemon-url`, and `--data-dir`. Acceptance is awaited
+until the Change Passport has been issued, so a successful command means the
+decision and its resulting evidence are durable.
+
 Listing one or more pending approvals and inspecting a pending approval return
 exit 5 (`Blocked`) even though the command successfully returned data.
 

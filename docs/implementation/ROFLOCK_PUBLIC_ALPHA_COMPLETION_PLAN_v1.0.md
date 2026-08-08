@@ -101,6 +101,7 @@ approvals, shared output semantics, and owned-daemon lifecycle remain below.
 | RF-CLI-005 | complete | Every runtime command has machine-readable success/error output and stable state-aware exit-code semantics.                                                                 |
 | RF-CLI-006 | complete | `daemon start/status/stop` connects or manages an ownership-proven local process with no Cloud dependency or unsafe PID-only kill.                                          |
 | RF-CLI-007 | complete | Evidence, why, and passport now obey the published JSON stream contract; invalid passport integrity maps to run failure, and ignored options/extra IDs are rejected.        |
+| RF-CLI-008 | complete | Final `accept-task` / `reject-task` decisions require one exact task awaiting acceptance; the API rejects premature or repeated terminal decisions.                         |
 
 ---
 
