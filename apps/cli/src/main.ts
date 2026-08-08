@@ -6,6 +6,7 @@ import { runDoctor } from './doctor-command.js';
 import { ExitCode } from './exit-codes.js';
 import { runEvidence, runWhy } from './evidence-command.js';
 import { runCheck, runCompile, runHash, runRender, runValidateIr } from './language-commands.js';
+import { runInit } from './init-command.js';
 import { runPassportCli } from './passport-command.js';
 import { runControl, type RuntimeControl } from './runtime-control-command.js';
 import { runEvents, runStatus } from './runtime-inspection-command.js';
@@ -66,6 +67,7 @@ Daemon
   daemon stop                       Stop only a daemon that proves CLI ownership
 
 Environment
+  init [--dir <path>]                Create a safe, idempotent .roflock scaffold
   doctor                            Diagnose runtime, repository, daemon, and drivers
   drivers [doctor]                  Report detected drivers, auth, and capabilities
 
@@ -150,5 +152,6 @@ export async function runCliAsync(argv: string[], io: CliIo): Promise<number> {
   if (argv[0] === 'daemon') return runDaemonCommand(argv.slice(1), io);
   if (argv[0] === 'drivers') return runDrivers(argv.slice(1), io);
   if (argv[0] === 'doctor') return runDoctor(argv.slice(1), io);
+  if (argv[0] === 'init') return runInit(argv.slice(1), io);
   return runCli(argv, io);
 }

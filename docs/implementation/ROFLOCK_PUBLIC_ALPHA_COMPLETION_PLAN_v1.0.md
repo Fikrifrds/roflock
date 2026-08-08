@@ -67,7 +67,7 @@ The approved source for this stream is
 | RF-DIST-006 | complete | `roflock doctor` verifies package/Node/Git/repository/worktree/daemon plus fresh driver auth and runnability; JSON and exit status are CI-safe.                       |
 | RF-DIST-007 | complete | `roflock drivers [doctor]` reports the daemon's production driver inventory and truthful runtime capabilities.                                                        |
 | RF-DIST-008 | complete | Driver text and JSON keep installed, registered/detected, authenticated, and runnable as four separate states.                                                        |
-| RF-DIST-009 | open     | Implement idempotent, non-destructive `roflock init`.                                                                                                                 |
+| RF-DIST-009 | complete | `roflock init` creates a credential-free four-file scaffold, is byte-idempotent, preflights all conflicts, and never overwrites user content.                         |
 | RF-DIST-010 | open     | Define and test machine-readable output for automation commands.                                                                                                      |
 | RF-DIST-011 | partial  | Exit constants exist; command-level mapping and public documentation are incomplete.                                                                                  |
 | RF-DIST-012 | open     | Add trusted-publishing-ready npm workflow with pack/install gates and no secret-bearing dry run.                                                                      |
