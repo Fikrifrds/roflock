@@ -9,7 +9,7 @@ export const queryClient = new QueryClient();
  * stream in `Shell` invalidates queries as soon as the daemon publishes.
  */
 export function useData<T>(key: string[], path: string, enabled = true) {
-  return useQuery({
+  const query = useQuery({
     queryKey: key,
     queryFn: () => api.request<T>(path),
     enabled,
@@ -21,4 +21,11 @@ export function useData<T>(key: string[], path: string, enabled = true) {
     retry: (failureCount, error) =>
       error instanceof ApiError && error.status < 500 ? false : failureCount < 2,
   });
+
+  // `isLoading` flips true again on every background refetch of a query with
+  // no data (e.g. one that answered 404 "not created yet"). That unmounted and
+  // remounted editors every 2s, dropping focus mid-keystroke and flickering
+  // the page. `isFetched` stays true once the first fetch settles (data or
+  // error), so gate only on the true first load.
+  return { ...query, isLoading: !query.isFetched && query.isLoading };
 }
