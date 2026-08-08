@@ -27,6 +27,12 @@ export interface RoleDecl extends Node {
   name: string;
   accessMode?: 'readonly' | 'write';
   requires: string[];
+  /**
+   * `authority <profile>` — binds this role to an enforced authority profile,
+   * such as a Role Protocol role with artifact gates. Always explicit: a role
+   * must never acquire enforcement by being named a certain way.
+   */
+  authority?: string;
 }
 
 export interface ArtifactDecl extends Node {
@@ -47,6 +53,10 @@ export interface AgentDecl extends Node {
   consumes: string[];
   produces: string[];
   effects: EffectDecl[];
+  /** `reviews` — this agent may return work for changes, not just complete. */
+  reviews: boolean;
+  /** `retry N` — bounded retries of this node's *own* failure. */
+  retry?: number;
 }
 
 export interface CheckDecl extends Node {
@@ -56,6 +66,8 @@ export interface CheckDecl extends Node {
   required: boolean;
   consumes: string[];
   produces: string[];
+  /** `retry N` — bounded retries of this node's *own* failure. */
+  retry?: number;
 }
 
 export interface ActionDecl extends Node {

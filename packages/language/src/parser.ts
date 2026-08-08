@@ -223,11 +223,13 @@ class Parser {
     const start = this.advance().span.start;
     const name = this.identifier('a role name');
     let accessMode: 'readonly' | 'write' | undefined;
+    let authority: string | undefined;
     const requires: string[] = [];
     this.block((keyword) => {
       if (keyword.value === 'write') accessMode = 'write';
       else if (keyword.value === 'readonly') accessMode = 'readonly';
       else if (keyword.value === 'requires') requires.push(this.stringValue('a capability'));
+      else if (keyword.value === 'authority') authority = this.identifier('an authority profile');
       else this.error(`Unknown role property '${keyword.value}'`, keyword.span);
     });
     return {
@@ -236,6 +238,7 @@ class Parser {
       requires,
       span: this.span(start),
       ...(accessMode === undefined ? {} : { accessMode }),
+      ...(authority === undefined ? {} : { authority }),
     };
   }
 
@@ -265,6 +268,8 @@ class Parser {
     const name = this.identifier('an agent name');
     let role: string | undefined;
     let objective: string | undefined;
+    let reviews = false;
+    let retry: number | undefined;
     const consumes: string[] = [];
     const produces: string[] = [];
     const effects: EffectDecl[] = [];
@@ -275,6 +280,12 @@ class Parser {
           break;
         case 'objective':
           objective = this.stringValue('an objective');
+          break;
+        case 'reviews':
+          reviews = true;
+          break;
+        case 'retry':
+          retry = Number(this.expect('number', 'a retry count').value);
           break;
         case 'consumes':
           consumes.push(this.identifier('an artifact name'));
@@ -295,9 +306,11 @@ class Parser {
       consumes,
       produces,
       effects,
+      reviews,
       span: this.span(start),
       ...(role === undefined ? {} : { role }),
       ...(objective === undefined ? {} : { objective }),
+      ...(retry === undefined ? {} : { retry }),
     };
   }
 
@@ -306,6 +319,7 @@ class Parser {
     const name = this.identifier('a check name');
     let run: string | undefined;
     let required = false;
+    let retry: number | undefined;
     const consumes: string[] = [];
     const produces: string[] = [];
     this.block((keyword) => {
@@ -315,6 +329,9 @@ class Parser {
           break;
         case 'required':
           required = true;
+          break;
+        case 'retry':
+          retry = Number(this.expect('number', 'a retry count').value);
           break;
         case 'consumes':
           consumes.push(this.identifier('an artifact name'));
@@ -334,6 +351,7 @@ class Parser {
       produces,
       span: this.span(start),
       ...(run === undefined ? {} : { run }),
+      ...(retry === undefined ? {} : { retry }),
     };
   }
 

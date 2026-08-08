@@ -20,6 +20,17 @@ import { parse } from './parser.js';
 
 export const LANGUAGE_VERSION = '0.1';
 
+/**
+ * Where a node's own retry budget is carried.
+ *
+ * Distinct from a loop group's attempt budget: a loop bounds how many times the
+ * *cycle* re-runs after a verifier rejects, while this bounds how many times a
+ * single node is retried when it fails on its own — a provider error, say. IR
+ * v1 has no field for the latter, and adding one to the frozen NodeBase schema
+ * needs an RFC, so it travels as a namespaced annotation until then.
+ */
+export const RETRY_BUDGET_ANNOTATION = 'roflock.coding/retry-budget';
+
 export interface CompileResult {
   ir?: GraphIR;
   diagnostics: Diagnostic[];
@@ -95,6 +106,7 @@ function lower(
       name: role.name,
       ...(role.accessMode === undefined ? {} : { accessMode: role.accessMode }),
       ...(role.requires.length === 0 ? {} : { requiredCapabilities: role.requires }),
+      ...(role.authority === undefined ? {} : { permissionProfileRef: role.authority }),
     }));
 
   const artifacts: ArtifactType[] = declarations
@@ -131,7 +143,15 @@ function lower(
           name: declaration.name,
           kind: 'agent',
           roleRef: declaration.role ?? '',
-          outcomes: defaultOutcomes('agent'),
+          // `reviews` widens the contract: this agent may also send work back.
+          // Without it an agent cannot report `changes`, so no edge can be
+          // drawn from that outcome and no reviewer loop can exist.
+          outcomes: declaration.reviews
+            ? [...defaultOutcomes('agent'), { id: 'changes' }]
+            : defaultOutcomes('agent'),
+          ...(declaration.retry === undefined
+            ? {}
+            : { annotations: { [RETRY_BUDGET_ANNOTATION]: String(declaration.retry) } }),
           agent: {
             objective: declaration.objective ?? `Run ${declaration.name}`,
             mode: 'tool_loop',
@@ -170,6 +190,9 @@ function lower(
           name: declaration.name,
           kind: 'check',
           outcomes: defaultOutcomes('check'),
+          ...(declaration.retry === undefined
+            ? {}
+            : { annotations: { [RETRY_BUDGET_ANNOTATION]: String(declaration.retry) } }),
           check: {
             driver: 'command',
             operation: declaration.run ?? '',
@@ -293,6 +316,20 @@ function lower(
     }
   });
 
+  // --- Human gates -----------------------------------------------------------
+  //
+  // A human node is only the accept gate when nothing follows it. One in the
+  // middle of a flow — a reviewer signing off a plan before work starts — is a
+  // gate the run passes through, and marking its approval terminal would end
+  // the run at the review.
+  const hasOutgoing = new Set(edges.map((edge) => edge.from.nodeId));
+  for (const node of nodes) {
+    if (node.kind !== 'human' || !hasOutgoing.has(node.id)) continue;
+    node.outcomes = node.outcomes.map((outcome) =>
+      outcome.id === 'human_approved' ? { id: 'human_approved' } : outcome,
+    );
+  }
+
   // --- Entry nodes -----------------------------------------------------------
   const entryNodeIds = deriveEntryNodes(nodes, edges);
   if (nodes.length > 0 && entryNodeIds.length === 0) {
@@ -305,7 +342,7 @@ function lower(
   }
 
   // --- Loop groups -----------------------------------------------------------
-  const loops = deriveLoops(nodes, edges, boundedEdges, diagnostics);
+  const loops = deriveLoops(nodes, edges, boundedEdges, diagnostics, edgeSpans);
 
   // --- Assemble --------------------------------------------------------------
   const workflowDecl = declarations.find(
@@ -406,6 +443,33 @@ function deriveEntryNodes(nodes: GraphNode[], edges: GraphEdge[]): string[] {
     .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0));
 }
 
+/**
+ * How far each node sits along the success path, longest-first.
+ *
+ * Used only to pick which of several rejection gates in one cycle is the final
+ * arbiter. Failure edges are excluded because they run backwards by definition
+ * and would make every node in a loop equidistant.
+ */
+function successDepth(nodes: GraphNode[], edges: GraphEdge[]): Map<string, number> {
+  const depth = new Map<string, number>(nodes.map((node) => [node.id, 0]));
+  const incoming = new Map<string, string[]>();
+  for (const edge of edges) {
+    if (!SUCCESS_EDGE_OUTCOMES.has(edge.from.outcome)) continue;
+    incoming.set(edge.to.nodeId, [...(incoming.get(edge.to.nodeId) ?? []), edge.from.nodeId]);
+  }
+  // Relax repeatedly; bounded by node count because success edges form a DAG.
+  for (let pass = 0; pass < nodes.length; pass += 1) {
+    for (const node of nodes) {
+      for (const source of incoming.get(node.id) ?? []) {
+        depth.set(node.id, Math.max(depth.get(node.id) ?? 0, (depth.get(source) ?? 0) + 1));
+      }
+    }
+  }
+  return depth;
+}
+
+const SUCCESS_EDGE_OUTCOMES = new Set(['completed', 'pass', 'human_approved']);
+
 /** Tarjan. Every node belongs to exactly one component. */
 function stronglyConnectedComponents(nodes: GraphNode[], edges: GraphEdge[]): string[][] {
   const successors = new Map<string, Set<string>>();
@@ -466,66 +530,73 @@ function primaryOutcome(node: GraphNode): string {
 /**
  * Turns `{ max N }` transitions into loop groups.
  *
- * The author annotates the edge that closes a cycle; the budget governs every
- * node in the strongly connected component that edge creates, not just the two
- * it touches. In `Builder -> Tests, Tests.fail -> Builder { max 3 }` the group
- * is {Builder, Tests}, and the verifier is the node the back edge leaves —
- * the one whose verdict decides whether another attempt is warranted.
+ * One group per cycle, not per annotated edge. A workflow that routes a failing
+ * check both back to the writer and further back to the planner has two bounded
+ * edges inside one strongly connected component, and emitting a group for each
+ * would hand the same nodes two competing attempt budgets — which the IR
+ * validator rightly rejects as ambiguous. Grouping by component gives that
+ * cycle a single budget, which is what the author meant.
+ *
+ * The verifier is the node the bounded edges leave: whatever judged the attempt
+ * and decided it was not good enough. A cycle can legitimately have more than
+ * one such gate — a deterministic check rejecting a build, and a reviewer later
+ * asking for changes — so the one furthest along the success path is named as
+ * the loop's verifier. It is the last word on whether an attempt succeeded, and
+ * the budget is shared by every route out of the cycle either way.
  */
 function deriveLoops(
   nodes: GraphNode[],
   edges: GraphEdge[],
   boundedEdges: Map<string, number>,
   diagnostics: Diagnostic[],
+  spans: Record<string, SourceSpan>,
 ): LoopGroup[] {
   if (boundedEdges.size === 0) return [];
 
-  const successors = new Map<string, Set<string>>();
-  for (const node of nodes) successors.set(node.id, new Set());
-  for (const edge of edges) successors.get(edge.from.nodeId)?.add(edge.to.nodeId);
+  const components = stronglyConnectedComponents(nodes, edges);
+  const componentOf = new Map<string, number>();
+  components.forEach((members, index) => {
+    for (const id of members) componentOf.set(id, index);
+  });
 
-  const reaches = (from: string, to: string): boolean => {
-    const seen = new Set<string>();
-    const queue = [from];
-    while (queue.length) {
-      const id = queue.shift()!;
-      if (id === to) return true;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      for (const next of successors.get(id) ?? []) queue.push(next);
-    }
-    return false;
-  };
-
-  const loops: LoopGroup[] = [];
-  let counter = 0;
-
-  for (const [edgeId, maxAttempts] of boundedEdges) {
+  const grouped = new Map<number, string[]>();
+  for (const edgeId of boundedEdges.keys()) {
     const edge = edges.find((candidate) => candidate.id === edgeId)!;
-    const target = edge.to.nodeId;
-    const verifier = edge.from.nodeId;
-
-    // Members of this cycle: everything reachable from the loop target that can
-    // also reach back to the node closing the loop.
-    const members = nodes
-      .filter((node) => reaches(target, node.id) && reaches(node.id, verifier))
-      .map((node) => node.id);
-
-    if (!members.includes(target) || !members.includes(verifier)) {
+    const component = componentOf.get(edge.from.nodeId);
+    const targetComponent = componentOf.get(edge.to.nodeId);
+    if (component === undefined || component !== targetComponent) {
       diagnostics.push(
         err(
           DiagnosticCode.UnboundedCycle,
-          `Transition '${verifier} -> ${target}' declares a retry budget but does not close a cycle`,
+          `Transition '${edge.from.nodeId} -> ${edge.to.nodeId}' declares a retry budget but does not close a cycle`,
+          spans[edgeId],
         ),
       );
       continue;
     }
+    grouped.set(component, [...(grouped.get(component) ?? []), edgeId]);
+  }
+
+  const loops: LoopGroup[] = [];
+  let counter = 0;
+  for (const [component, edgeIds] of [...grouped.entries()].sort((a, b) => a[0] - b[0])) {
+    const members = components[component]!;
+    const verifiers = [
+      ...new Set(
+        edgeIds.map((edgeId) => edges.find((candidate) => candidate.id === edgeId)!.from.nodeId),
+      ),
+    ];
+    const depth = successDepth(nodes, edges);
+    const verifier = verifiers.sort((a, b) => (depth.get(a) ?? 0) - (depth.get(b) ?? 0)).at(-1)!;
+    // Several bounded edges from one verifier describe one decision with
+    // several destinations, so the widest budget governs the cycle.
+    const maxAttempts = Math.max(...edgeIds.map((edgeId) => boundedEdges.get(edgeId)!));
 
     counter += 1;
     loops.push({
       id: `loop${counter}`,
-      nodeIds: members,
-      edgeIds: [edgeId],
+      nodeIds: [...members].sort(),
+      edgeIds: [...edgeIds].sort(),
       policy: {
         objective: `Retry until '${verifier}' succeeds`,
         verifierNodeId: verifier,

@@ -252,12 +252,12 @@ describe('executing compiled .roflock through runGraph', () => {
   });
 
   it('enforces the artifact gate when a role opts into Role Protocol authority', async () => {
-    // `executor` is a Role Protocol role id, so the bridge wires its artifact
-    // gate. Opting in by name keeps enforcement available without inventing
-    // authority for roles that never asked for it.
+    // `authority executor` binds this role to the Role Protocol executor
+    // profile and its artifact gate. Enforcement is always declared, never
+    // inferred from what a role happens to be called.
     const graph = graphOf(`
       workflow Gated { version "1.0.0" }
-      role executor { write }
+      role executor { write authority executor }
       agent Build { role executor objective "execute the approved plan" }
       check Tests { run "npm test" required }
       human Accept

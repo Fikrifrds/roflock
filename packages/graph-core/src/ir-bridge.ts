@@ -66,6 +66,47 @@ const FAILURE_CONDITIONS: Record<string, EdgeCondition> = {
 
 const LEGACY_ROLE_IDS = new Set<string>(ROLE_IDS);
 
+/** Namespaced annotation carrying a node's own retry budget. See the compiler. */
+const RETRY_BUDGET_ANNOTATION = 'roflock.coding/retry-budget';
+
+/**
+ * The Role Protocol role this node answers to, if its role declares one.
+ *
+ * Undefined leaves the node ungated, exactly as legacy v1 and v2 graphs are.
+ * A profile that names no known role is ignored rather than guessed at.
+ */
+function authorityProfile(node: IrNode, ir: GraphIR): RoleId | undefined {
+  const role = ir.roles.find((candidate) => candidate.id === node.roleRef);
+  const profile = role?.permissionProfileRef;
+  return profile !== undefined && LEGACY_ROLE_IDS.has(profile) ? (profile as RoleId) : undefined;
+}
+
+function objectiveOf(node: IrNode): string | undefined {
+  if (node.kind === 'agent') return node.agent.objective;
+  if (node.kind === 'model_call') return node.modelCall.objective;
+  return undefined;
+}
+
+/**
+ * Nodes that share both a role and a dependency set with another node, and so
+ * can be scheduled side by side doing the same job.
+ */
+function parallelSiblings(ir: GraphIR, dependsOn: Map<string, string[]>): Set<string> {
+  const groups = new Map<string, string[]>();
+  for (const node of ir.nodes) {
+    const key = `${node.roleRef ?? ''}::${[...(dependsOn.get(node.id) ?? [])].sort().join('|')}`;
+    groups.set(key, [...(groups.get(key) ?? []), node.id]);
+  }
+  return new Set([...groups.values()].filter((members) => members.length > 1).flat());
+}
+
+function retryBudget(node: IrNode): number | undefined {
+  const raw = node.annotations?.[RETRY_BUDGET_ANNOTATION];
+  if (raw === undefined) return undefined;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined;
+}
+
 function writes(node: IrNode, ir: GraphIR): boolean {
   if (node.effects?.some((effect) => effect.class === 'workspace_write')) return true;
   const role = ir.roles.find((candidate) => candidate.id === node.roleRef);
@@ -197,13 +238,25 @@ export function graphIrToWorkflowGraph(ir: GraphIR): BridgeResult {
     dependsOn.get(edge.to.nodeId)?.push(edge.from.nodeId);
   }
 
+  // The legacy validator insists a cycle contain some retry budget. When a node
+  // in the loop already declares one, that rule is satisfied and nothing else
+  // needs a budget it never asked for — a planner given four attempts because
+  // it happens to sit in a repair loop would quietly quadruple its billable
+  // calls. Only when no member declares one does the loop's own budget stand in.
   const loopByTarget = new Map<string, LoopGroup>();
   for (const loop of ir.loops) {
+    const alreadyBudgeted = loop.nodeIds.some((id) => {
+      const member = ir.nodes.find((candidate) => candidate.id === id);
+      return member !== undefined && (retryBudget(member) ?? 1) > 1;
+    });
+    if (alreadyBudgeted) continue;
     for (const edgeId of loop.edgeIds) {
       const edge = ir.edges.find((candidate) => candidate.id === edgeId);
       if (edge) loopByTarget.set(edge.to.nodeId, loop);
     }
   }
+
+  const siblings = parallelSiblings(ir, dependsOn);
 
   const nodes: GraphNode[] = [];
   for (const node of ir.nodes) {
@@ -220,12 +273,6 @@ export function graphIrToWorkflowGraph(ir: GraphIR): BridgeResult {
     }
 
     const loop = loopByTarget.get(node.id);
-    const objective =
-      node.kind === 'agent'
-        ? node.agent.objective
-        : node.kind === 'model_call'
-          ? node.modelCall.objective
-          : undefined;
 
     nodes.push({
       id: node.id,
@@ -234,17 +281,31 @@ export function graphIrToWorkflowGraph(ir: GraphIR): BridgeResult {
       dependsOn: dependsOn.get(node.id) ?? [],
       ...(node.kind === 'check' && node.check.required === true ? { required: true } : {}),
       ...(writes(node, ir) ? { writer: true } : {}),
-      // Legacy keeps the repair budget on the node a failure routes back to,
-      // which is exactly what an IR loop target is.
-      ...(loop === undefined ? {} : { maxAttempts: loop.policy.maxAttempts }),
-      ...(objective === undefined ? {} : { focus: objective }),
-      // Authority enforcement is opt-in: an IR role whose id happens to name a
-      // Role Protocol role gets that role's artifact gate. Anything else stays
-      // undefined, exactly as legacy v1 and v2 graphs do, rather than being
-      // guessed into an authority it was never granted.
-      ...(node.roleRef !== undefined && LEGACY_ROLE_IDS.has(node.roleRef)
-        ? { authorityRole: node.roleRef as RoleId }
-        : {}),
+      // A node's own retry budget and a loop's attempt budget are different
+      // quantities: the first bounds retrying this node when it fails by
+      // itself, the second bounds re-running the cycle after a verifier
+      // rejects. An explicit budget wins. Falling back to the loop's is only
+      // to satisfy the legacy validator's rule that a cycle must contain some
+      // retry budget — the real ceiling is `maxLoopIterations` below.
+      ...(retryBudget(node) !== undefined
+        ? { maxAttempts: retryBudget(node) }
+        : loop === undefined
+          ? {}
+          : { maxAttempts: loop.policy.maxAttempts }),
+      // `focus` is a swarm assignment, not a job description: the runtime
+      // injects it to tell parallel agents sharing one role how their
+      // assignments differ. A node with no sibling has nothing to be
+      // distinguished from, and giving it one would put a line in its prompt
+      // that the built-in templates never sent.
+      ...(siblings.has(node.id) ? { focus: objectiveOf(node) } : {}),
+      // Authority enforcement is opt-in and explicit: a role must declare the
+      // profile it answers to. Deriving it from the role's *name* would mean a
+      // role innocently called `planner` silently acquired artifact gates its
+      // author never asked for, and would fail runs for a reason nothing in the
+      // source explains.
+      ...(authorityProfile(node, ir) === undefined
+        ? {}
+        : { authorityRole: authorityProfile(node, ir) }),
     });
   }
 
@@ -262,8 +323,15 @@ export function graphIrToWorkflowGraph(ir: GraphIR): BridgeResult {
     }
   }
 
-  for (const edge of ir.edges) {
-    if (SUCCESS_OUTCOMES.has(edge.from.outcome)) continue;
+  // Priority decides which of several eligible failure routes the runtime
+  // takes, and it takes the first match in edge order. A workflow that sends a
+  // failing check back to the writer when the repair is in scope and to the
+  // planner otherwise depends on that ordering, and IR arrives sorted by id.
+  const failureEdges = ir.edges
+    .filter((edge) => !SUCCESS_OUTCOMES.has(edge.from.outcome))
+    .sort((a, b) => a.priority - b.priority);
+
+  for (const edge of failureEdges) {
     const source = irById.get(edge.from.nodeId);
     const outcome = source?.outcomes.find((candidate) => candidate.id === edge.from.outcome);
     if (outcome?.terminal) {
