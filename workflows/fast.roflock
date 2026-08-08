@@ -1,0 +1,54 @@
+# Fast — plan lightly, write, verify, accept.
+#
+# For low-risk localised changes that still deserve a plan but not a reviewer.
+#
+# Semantic equivalent of the built-in `fast@3` template.
+
+workflow fast {
+  version "3.0.0"
+  max_cost 5
+  description "Planner → writer → test → human accept"
+}
+
+role planner {
+  readonly
+  requires "coding.plan"
+}
+
+role writer {
+  write
+  requires "coding.write"
+}
+
+agent planner {
+  role planner
+  objective "Propose the smallest safe change"
+}
+
+agent writer {
+  role writer
+  objective "Implement the proposed change"
+  retry 2
+}
+
+check test {
+  run "npm test"
+  required
+}
+
+human accept {
+  title "Accept the change"
+  decisions approve, reject
+}
+
+flow {
+  planner -> writer
+  writer -> test
+  test.pass -> accept
+
+  # Two routes out of one failure, in priority order: back to the writer when
+  # the repair is in scope, otherwise all the way back to planning. The runtime
+  # takes the first whose guard allows it.
+  test.fail -> writer { max 3 }
+  test.fail -> planner { max 3 }
+}

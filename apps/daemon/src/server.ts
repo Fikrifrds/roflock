@@ -28,6 +28,7 @@ import { LocalSecretStore } from './services/local-secret-store.js';
 import { ReviewAppService } from './services/review-app.js';
 import { readEnv } from '@roleflock/contracts';
 import { DATABASE_FILE_NAME, resolveDataDir } from './data-dir.js';
+import { loadWorkflowTemplates } from './workflow-templates.js';
 export interface ServerOptions {
   dataDir?: string;
   host?: string;
@@ -54,6 +55,15 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
   const host = options.host ?? '127.0.0.1';
   const port = options.port ?? resolvePort();
   const dataDir = resolveDataDir({ override: options.dataDir });
+  // Built-in workflows come from `.roflock` source through the public compiler.
+  // A template that no longer compiles falls back to its hard-coded definition,
+  // so a broken file degrades behaviour rather than removing a workflow.
+  const templates = loadWorkflowTemplates();
+  for (const failure of templates.failures) {
+    process.stderr.write(
+      `warning: workflow template '${failure.id}' did not compile and falls back to the built-in definition:\n  ${failure.reasons.join('\n  ')}\n`,
+    );
+  }
   mkdirSync(dataDir, { recursive: true });
   const session = options.session ?? loadOrCreateSession(dataDir);
   const app = fastify({

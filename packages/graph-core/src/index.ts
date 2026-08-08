@@ -650,3 +650,4 @@ export function validateGraph(graph: WorkflowGraph): string[] {
 export type BugFixRole = WorkflowRole;
 
 export { graphIrToWorkflowGraph, type BridgeResult } from './ir-bridge.js';
+export * from './templates.js';

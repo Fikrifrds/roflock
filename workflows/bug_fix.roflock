@@ -1,0 +1,91 @@
+# Bug Fix — the verified fix path.
+#
+# Parallel planning, human plan review, write, deterministic check, independent
+# verification, human accept. Findings return to planning rather than straight
+# to the writer, so a rejected change is re-thought and not merely re-typed.
+#
+# Semantic equivalent of the built-in `bug_fix@3` template.
+
+workflow bug_fix {
+  version "3.0.0"
+  description "Parallel code + test analysis → reviewer → writer → test → verifier → human accept"
+  max_cost 5
+}
+
+# No `authority` clause yet: the built-in templates these replace leave
+# authorityRole undefined, and R4 must reach parity before tightening anything.
+# Binding these roles to Role Protocol profiles is a follow-up with its own
+# fixture, not something to slip in behind a migration.
+role planner {
+  readonly
+  requires "coding.plan"
+}
+
+role writer {
+  write
+  requires "coding.write"
+}
+
+role verifier {
+  readonly
+  requires "coding.review"
+}
+
+# Two independent planning passes. They see the same task but answer different
+# questions, and neither can see the other's answer, so agreement between them
+# is evidence rather than an echo.
+agent planner {
+  role planner
+  objective "Trace the implementation path, identify the root cause, and propose the smallest safe code change."
+}
+
+agent planner_tests {
+  role planner
+  objective "Independently inspect tests and failure modes. Propose regression coverage and verification risks."
+}
+
+# A gate the run passes through, not the end of it: the plans are approved
+# before any code is written.
+human reviewer {
+  title "Approve the plan"
+  decisions approve, reject
+}
+
+agent writer {
+  role writer
+  objective "Execute the approved plan exactly"
+  retry 2
+}
+
+check test {
+  run "npm test"
+  required
+}
+
+# `reviews` widens this agent's contract so it may return work for changes.
+# Without it no edge could leave a `changes` outcome.
+agent verifier {
+  role verifier
+  objective "Independently assess whether the change satisfies the plan"
+  reviews
+}
+
+human accept {
+  title "Accept the verified change"
+  decisions approve, reject
+}
+
+flow {
+  planner -> reviewer
+  planner_tests -> reviewer
+  reviewer -> writer
+  writer -> test
+  test.pass -> verifier
+  verifier -> accept
+
+  # Every route out of a rejection shares one budget, because the runtime keeps
+  # one re-entry counter for the whole graph. 4 attempts, 3 re-entries.
+  test.fail -> writer { max 4 }
+  test.fail -> planner { max 4 }
+  verifier.changes -> planner { max 4 }
+}

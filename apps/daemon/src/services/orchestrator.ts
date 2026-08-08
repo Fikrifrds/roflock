@@ -54,8 +54,8 @@ import {
 import { runCommand, CommandError, parseCommandArgv } from '@roleflock/command-runner';
 import { readEnv } from '@roleflock/contracts';
 import {
-  getWorkflowGraph,
   graphVersionId,
+  resolveWorkflowGraph,
   validateGraph,
   type GraphMode,
   type WorkflowGraph,
@@ -2585,6 +2585,9 @@ const GRAPH_MODES: readonly GraphMode[] = ['direct', 'fast', 'standard', 'bug_fi
 export function resolveTaskGraph(task: Task): WorkflowGraph {
   const stored = task.workflowGraphVersionId ?? '';
   const [mode] = stored.split('@');
-  if (GRAPH_MODES.includes(mode as GraphMode)) return getWorkflowGraph(stored);
-  return getWorkflowGraph(graphVersionId(task.type === 'bug_fix' ? 'bug_fix' : 'standard'));
+  // `resolveWorkflowGraph` serves the current version from compiled `.roflock`
+  // templates when they are registered, and always defers to the hard-coded
+  // definitions for a pinned historical version.
+  if (GRAPH_MODES.includes(mode as GraphMode)) return resolveWorkflowGraph(stored);
+  return resolveWorkflowGraph(graphVersionId(task.type === 'bug_fix' ? 'bug_fix' : 'standard'));
 }

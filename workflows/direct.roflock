@@ -1,0 +1,42 @@
+# Direct — the smallest sufficient path.
+#
+# No planning, no review: write, verify, accept. Chosen for read-oriented or
+# narrow work where a full planning graph would cost more than it protects.
+#
+# Semantic equivalent of the built-in `direct@3` template.
+
+workflow direct {
+  version "3.0.0"
+  max_cost 5
+  description "Writer → test → human accept"
+}
+
+role writer {
+  write
+  requires "coding.write"
+}
+
+agent writer {
+  role writer
+  objective "Make the requested change"
+  retry 2
+}
+
+check test {
+  run "npm test"
+  required
+}
+
+human accept {
+  title "Accept the change"
+  decisions approve, reject
+}
+
+flow {
+  writer -> test
+  test.pass -> accept
+
+  # A failing check returns to the writer, but only when the repair-envelope
+  # policy says the repair is in scope. Three attempts, so two re-entries.
+  test.fail -> writer { max 3 }
+}
