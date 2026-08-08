@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { afterEach, describe, expect, it } from 'vitest';
+import { loadGraphRun, openMigratedDatabase } from '@roleflock/database';
 import { createServer } from '../src/server.js';
 import { authoriseTaskContract } from './contract-fixture.js';
 
@@ -40,7 +41,7 @@ async function boot() {
     'content-type': 'application/json',
   };
 
-  return { app: instance.app, repoDir, headers };
+  return { app: instance.app, repoDir, headers, dataDir };
 }
 
 async function waitFor(
@@ -62,7 +63,7 @@ async function waitFor(
 
 describe('verified bug fix walking skeleton', () => {
   it('runs parallel planners→reviewer confirmation→writer→test→verifier→accept', async () => {
-    const { app, repoDir, headers } = await boot();
+    const { app, repoDir, headers, dataDir } = await boot();
     const primaryBranch = execFileSync('git', ['branch', '--show-current'], {
       cwd: repoDir,
       encoding: 'utf8',
@@ -257,6 +258,26 @@ describe('verified bug fix walking skeleton', () => {
       }).trim(),
     ).toBe(primaryBranch);
     expect(existsSync(join(repoDir, 'ROLEFLOCK_SIMULATION.md'))).toBe(false);
+
+    // The typed runtime history this run emitted must be legal. The reducer
+    // refuses a contradictory sequence rather than repairing it, so projecting
+    // a real orchestrated run is what proves the instrumentation is coherent —
+    // not merely that appending it did not throw.
+    const db = openMigratedDatabase(join(dataDir, 'roleflock.db'));
+    const runs = db.prepare('SELECT id FROM graph_runs ORDER BY created_at ASC').all() as Array<{
+      id: string;
+    }>;
+    expect(runs.length).toBeGreaterThan(0);
+    for (const run of runs) {
+      const projected = loadGraphRun(db, run.id);
+      expect(projected?.runId).toBe(run.id);
+      // Every node the history claims to have started must also have settled.
+      expect(projected?.nodes.filter((node) => node.state === 'running')).toEqual([]);
+    }
+    const last = loadGraphRun(db, runs.at(-1)!.id)!;
+    expect(last.state).toBe('settled');
+    expect(last.outcome).toBe('completed');
+    db.close();
   }, 30_000);
 
   it('rejects non-local mutation origins', async () => {

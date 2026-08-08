@@ -52,7 +52,7 @@ import {
   type SqliteDb,
 } from '@roleflock/database';
 import { runCommand, CommandError, parseCommandArgv } from '@roleflock/command-runner';
-import { readEnv, stableInvocationKey } from '@roleflock/contracts';
+import { readEnv, stableInvocationKey, type RuntimeEvent } from '@roleflock/contracts';
 import { OUTCOME_UNKNOWN } from '@roleflock/run-control';
 import {
   graphVersionId,
@@ -62,7 +62,7 @@ import {
   type GraphMode,
   type WorkflowGraph,
 } from '@roleflock/graph-core';
-import { NodeFailure, runGraph, type NodeContext } from '@roleflock/graph-runtime';
+import { NodeFailure, classifyFailure, runGraph, type NodeContext } from '@roleflock/graph-runtime';
 import {
   captureDiff,
   prepareTaskWorkspace,
@@ -1111,6 +1111,16 @@ export class Orchestrator {
     // Recorded so a paid turn is never mistaken across a workflow edit: a
     // `.roflock` change produces a new graph under the same version id.
     const graphSemanticHash = graphSemanticHashOf(graph);
+    this.appendRuntimeEvent(graphRunId, {
+      type: 'graph_run.started',
+      runId: graphRunId,
+      taskId: task.id,
+      graphVersionId: graph.version,
+      ...(graphSemanticHash === undefined ? {} : { semanticHash: graphSemanticHash }),
+      resumedNodeIds: [...(resumeCompleted ?? [])],
+      resumedLoopIterations: prepared.resumeLoopIterations ?? 0,
+      at: now(),
+    });
     const openRuns = new Map<string, { nodeRunId: string; invocationId: string }>();
     // The node that triggered a loop has already closed its run by the time the
     // edge is taken, so its id is kept here to attach the attempt record to.
@@ -1213,6 +1223,14 @@ export class Orchestrator {
         .run(nodeRunId, graphRunId, node.id, 'running', now(), now());
       openRuns.set(node.id, { nodeRunId, invocationId });
       lastNodeRunId.set(node.id, nodeRunId);
+      this.appendRuntimeEvent(graphRunId, {
+        type: 'node_run.started',
+        runId: graphRunId,
+        nodeId: node.id,
+        attempt,
+        loopIteration,
+        at: now(),
+      });
 
       const route =
         role === 'planner' || role === 'reviewer' || role === 'writer' || role === 'verifier'
@@ -1838,6 +1856,14 @@ export class Orchestrator {
       this.db
         .prepare('UPDATE node_runs SET state = ?, completed_at = ?, outcome = ? WHERE id = ?')
         .run('completed', now(), 'success', nodeRunId);
+      this.appendRuntimeEvent(graphRunId, {
+        type: 'node_run.settled',
+        runId: graphRunId,
+        nodeId: node.id,
+        attempt,
+        outcome: 'completed',
+        at: now(),
+      });
       this.bus.publish('execution.updated', this.executions.getByTask(task.id));
       openRuns.delete(node.id);
       return {
@@ -1855,6 +1881,20 @@ export class Orchestrator {
           return await executeNode(context);
         } catch (error) {
           this.closeFailedNodeRun(openRuns.get(context.node.id), error, controller.signal.aborted);
+          // Only for a node that actually opened a run. A node rejected at the
+          // artifact gate never started, and recording a settle for it would
+          // make the history claim work that was never done.
+          if (lastNodeRunId.has(context.node.id)) {
+            this.appendRuntimeEvent(graphRunId, {
+              type: 'node_run.settled',
+              runId: graphRunId,
+              nodeId: context.node.id,
+              attempt: context.attempt,
+              outcome: controller.signal.aborted ? 'cancelled' : 'failed',
+              failureClass: classifyFailure(error),
+              at: now(),
+            });
+          }
           throw error;
         }
       },
@@ -1873,12 +1913,14 @@ export class Orchestrator {
               )
               .run(randomUUID(), sourceRun, iteration, 'taken', now());
           }
-          this.appendEvent(task.id, 'graph.loop.reentered', {
-            graphRunId,
+          this.appendRuntimeEvent(graphRunId, {
+            type: 'loop.reentered',
+            runId: graphRunId,
             iteration,
             from,
             to,
             failureClass,
+            at: now(),
           });
         },
         initialArtifacts: (() => {
@@ -1966,10 +2008,23 @@ export class Orchestrator {
           JSON.stringify(blocked?.refusals ?? []),
           graphRunId,
         );
+      this.appendRuntimeEvent(graphRunId, {
+        type: 'graph_run.settled',
+        runId: graphRunId,
+        outcome: 'interrupted',
+        reason: setupRequired ? 'setup_required' : outcomeUnknown ? 'outcome_unknown' : 'blocked',
+        at: now(),
+      });
     } else {
       this.db
         .prepare('UPDATE graph_runs SET state = ?, completed_at = ? WHERE id = ?')
         .run(failed ? 'failed' : 'completed', now(), graphRunId);
+      this.appendRuntimeEvent(graphRunId, {
+        type: 'graph_run.settled',
+        runId: graphRunId,
+        outcome: failed ? 'failed' : 'completed',
+        at: now(),
+      });
     }
 
     if (failed) {
@@ -2617,6 +2672,29 @@ export class Orchestrator {
       forceTerminationAvailable: true,
     });
     this.bus.publish('execution.updated', this.executions.getByTask(task.id));
+  }
+
+  /**
+   * Records a typed runtime event against its graph run.
+   *
+   * Keyed by run rather than task so one task's several runs project
+   * independently — a resumed run must not inherit its predecessor's node
+   * states by accident. These sit alongside the direct SQL writes rather than
+   * replacing them: the history is being instrumented first so it can be
+   * checked against the rows before anything is moved behind it.
+   */
+  private appendRuntimeEvent(runId: string, event: RuntimeEvent): void {
+    const { type, ...payload } = event;
+    this.events.append({
+      id: randomUUID(),
+      aggregateType: 'graph_run',
+      aggregateId: runId,
+      sequence: this.events.getLastSequence(runId) + 1,
+      eventType: type,
+      payload: payload as Record<string, unknown>,
+      metadata: { schemaVersion: 1 },
+      createdAt: now(),
+    });
   }
 
   private appendEvent(taskId: string, eventType: string, payload: Record<string, unknown>): void {

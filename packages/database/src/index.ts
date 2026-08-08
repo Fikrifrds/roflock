@@ -4,6 +4,12 @@ export { EventStore } from './repositories/event-store.js';
 export { SnapshotRepository } from './repositories/snapshot-repository.js';
 export type { StateSnapshot } from './repositories/snapshot-repository.js';
 export { TaskProjector, reduceTask, assertTaskTransition } from './reducers/task-reducer.js';
+export {
+  RuntimeHistoryError,
+  loadGraphRun,
+  projectGraphRun,
+  reduceGraphRun,
+} from './reducers/graph-run-reducer.js';
 export type { TaskProjection } from './reducers/task-reducer.js';
 export { ProjectRepository } from './repositories/project-repository.js';
 export { TaskRepository } from './repositories/task-repository.js';
