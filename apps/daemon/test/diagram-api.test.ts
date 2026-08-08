@@ -3,9 +3,15 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { openMigratedDatabase, WorkflowSnapshotRepository } from '@roleflock/database';
+import {
+  openMigratedDatabase,
+  TaskRepository,
+  WorkflowSnapshotRepository,
+} from '@roleflock/database';
+import { resolveWorkflowGraph } from '@roleflock/graph-core';
 import { createServer } from '../src/server.js';
 import { DATABASE_FILE_NAME } from '../src/data-dir.js';
+import { resolveTaskGraph } from '../src/services/orchestrator.js';
 import { loadWorkflowTemplates } from '../src/workflow-templates.js';
 import { authoriseTaskContract } from './contract-fixture.js';
 
@@ -78,6 +84,17 @@ async function task(app: Awaited<ReturnType<typeof boot>>['app'], repoDir: strin
   return id;
 }
 
+function semanticWorkflow(objective: string, command: string) {
+  return `workflow semantic_pin { version "1.0.0" }
+role implementer { write }
+agent Build { role implementer objective "${objective}" }
+check Tests { run "${command}" required }
+human Accept
+flow { Build -> Tests
+       Tests.pass -> Accept }
+`;
+}
+
 describe('the shared diagram endpoint', () => {
   it('discovers and creates a task from a non-built-in workflow ID', async () => {
     const { app, dataDir, repoDir } = await boot();
@@ -145,6 +162,71 @@ flow { Build -> Tests
       semanticHash: snapshot!.semanticHash,
     });
     expect(snapshot?.graphSnapshotHash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    db.close();
+  });
+
+  it('cannot collapse distinct source semantics or rewrite an earlier task pin', async () => {
+    const { app, dataDir, repoDir } = await boot();
+    const firstDir = await mkdtemp(join(tmpdir(), 'rf-semantic-first-'));
+    const secondDir = await mkdtemp(join(tmpdir(), 'rf-semantic-second-'));
+    cleanup.push(() => rm(firstDir, { recursive: true, force: true }));
+    cleanup.push(() => rm(secondDir, { recursive: true, force: true }));
+    const firstSource = semanticWorkflow('prepare release A', 'npm run test:a');
+    const secondSource = semanticWorkflow('prepare release B', 'npm run test:b');
+    await writeFile(join(firstDir, 'semantic_pin.roflock'), firstSource);
+    await writeFile(join(secondDir, 'semantic_pin.roflock'), secondSource);
+    const project = await app.inject({
+      method: 'POST',
+      url: '/api/projects',
+      headers,
+      payload: { path: repoDir },
+    });
+    const projectId = (project.json() as { id: string }).id;
+    const create = async (title: string) => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/tasks',
+        headers,
+        payload: { projectId, title, brief: title, mode: 'semantic_pin' },
+      });
+      expect(response.statusCode).toBe(201);
+      return (response.json() as { id: string }).id;
+    };
+
+    expect(loadWorkflowTemplates(firstDir).failures).toEqual([]);
+    const firstTaskId = await create('First semantics');
+    expect(loadWorkflowTemplates(secondDir).failures).toEqual([]);
+    const secondTaskId = await create('Second semantics');
+
+    const db = openMigratedDatabase(join(dataDir, DATABASE_FILE_NAME));
+    const snapshots = new WorkflowSnapshotRepository(db);
+    const tasks = new TaskRepository(db);
+    const firstSnapshot = snapshots.get(firstTaskId)!;
+    const secondSnapshot = snapshots.get(secondTaskId)!;
+    const firstGraph = resolveTaskGraph(tasks.get(firstTaskId)!, firstSnapshot);
+    const secondGraph = resolveTaskGraph(tasks.get(secondTaskId)!, secondSnapshot);
+    const currentGraph = resolveWorkflowGraph('semantic_pin');
+
+    // The compatibility version is intentionally the same. Semantic identity,
+    // executable content, and the immutable task pin are what prevent collapse.
+    expect(firstSnapshot.graphVersionId).toBe('semantic_pin@3');
+    expect(secondSnapshot.graphVersionId).toBe('semantic_pin@3');
+    expect(firstSnapshot.source).toBe(firstSource);
+    expect(secondSnapshot.source).toBe(secondSource);
+    expect(firstSnapshot.semanticHash).not.toBe(secondSnapshot.semanticHash);
+    expect(firstSnapshot.graphSnapshotHash).not.toBe(secondSnapshot.graphSnapshotHash);
+    expect(firstGraph.nodes.find((node) => node.id === 'Build')?.objective).toBe(
+      'prepare release A',
+    );
+    expect(firstGraph.nodes.find((node) => node.id === 'Tests')?.operation?.command).toBe(
+      'npm run test:a',
+    );
+    expect(secondGraph.nodes.find((node) => node.id === 'Build')?.objective).toBe(
+      'prepare release B',
+    );
+    expect(currentGraph.semanticHash).toBe(secondGraph.semanticHash);
+    expect(firstGraph.semanticHash).toBe(firstSnapshot.semanticHash);
+    expect(firstGraph.semanticHash).not.toBe(currentGraph.semanticHash);
     db.close();
   });
 

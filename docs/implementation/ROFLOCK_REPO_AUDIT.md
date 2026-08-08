@@ -1669,3 +1669,22 @@ task stop endpoint invokes the selected driver, returns its
 and the full Studio suite 93/93. The full daemon suite passes 191/194 inside the
 sandbox; all seven preview tests, including its three listener-denied cases,
 pass outside it. Package typechecks are clean.
+
+---
+
+## 30. Public-alpha correction — semantic non-collapse proof
+
+RF-EVO-186 closes the last workflow-correctness proof at the task/API boundary.
+An integration fixture registers `semantic_pin.roflock`, creates a task, changes
+both its agent objective and deterministic check command, reloads the registry,
+and creates a second task through the same API. Both tasks deliberately share
+the compatibility label `semantic_pin@3`; that label is therefore proven not to
+be mistaken for semantic identity.
+
+The stored source, canonical semantic hash, executable graph integrity hash,
+agent objective, and check operation differ between the two task snapshots.
+After the registry mutation, runtime resolution of the first task still returns
+its original objective and command while current registry resolution returns the
+second graph. The first task's executable semantic hash remains bound to its
+snapshot rather than the mutable registry. Combined authored-workflow and API
+snapshot tests pass 14/14, with daemon typecheck clean.

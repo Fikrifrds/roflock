@@ -44,7 +44,7 @@ These findings take precedence over milestone completion claims.
 | RF-EVO-183 | complete | Registered `.roflock` templates with arbitrary IDs are discoverable through the API/Studio, create tasks, receive current version identities, and execute from immutable snapshots; built-in historical fallback remains closed and versioned.                     |
 | RF-EVO-184 | complete | Production role turns execute through `AgentDriver.start`; adapters remain only for compatibility metadata/writer capability checks. Exact path/command ceilings, lifecycle PIDs, heartbeat liveness, usage, and the stable invocation key survive the seam.       |
 | RF-EVO-185 | complete | Migration 036 persists driver/session/resume and interruption evidence. Known later attempts resume through the selected driver; ambiguous turns remain blocked. Task-specific stop status and control responses use the weakest active selected-driver guarantee. |
-| RF-EVO-186 | open     | Add end-to-end proof that two semantically different sources cannot collapse to the same executable behavior or mutable pin.                                                                                                                                       |
+| RF-EVO-186 | complete | API-created tasks from two revisions of one workflow keep distinct source, executable graph, semantic hash, and integrity hash despite sharing the compatibility version; the earlier task remains pinned after registry mutation.                                 |
 
 The implementation order is 181 → 182 → 183 → 184 → 185 → 186. Each ticket
 must preserve the single `runGraph` runtime and pass its targeted tests before a
