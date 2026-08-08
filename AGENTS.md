@@ -5,28 +5,49 @@ Root agent guidance. Sections 1–17 are the Roflock AI Coding Master Instructio
 
 ## Current phase
 
-**R0 through R4 are complete; R5 is partial.** The baseline audit lives at
+**R0 through R4 are complete; R5 is partial.** The audit at
 [`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md)
-and records the verification baseline, package classification, persisted
-compatibility surface, the risk register, and the R1 outcome. Read it before
-touching code — it supersedes the planning docs wherever they disagree with the
-checkout.
+is the authority on what this repository contains. Read it before touching code:
+it supersedes the planning documents wherever they disagree with the checkout,
+and each phase appends its outcome rather than rewriting the baseline.
+
+| Phase | State   | Where                                                  |
+| ----- | ------- | ------------------------------------------------------ |
+| R0    | done    | Audit §1–11 — baseline, classification, risks          |
+| R1    | done    | §12 — rebrand, and what was deliberately _not_ renamed |
+| R2    | done    | §13 — Graph IR and the `.roflock` language             |
+| R3    | done    | §14 — the runtime bridge                               |
+| R4    | done    | §15 — built-in workflows as source                     |
+| R5    | partial | §16 — durable runtime: safety done, modelling remains  |
+
+`.roflock` compiles to canonical Graph IR, bridges to a `WorkflowGraph`, and
+executes on the existing `runGraph`. **There is no second runtime, and there
+must never be one.** All five built-in workflows are compiled from
+`workflows/*.roflock` with exact parity against the templates they replaced; the
+hard-coded TypeScript graphs remain as history and still serve every pinned
+historical version.
 
 R1 renamed nothing by search-and-replace. Audit §12 lists what was deliberately
-_not_ renamed and why; check it before assuming an identifier is fair game.
+_not_ renamed and why — published GitHub status-check codes, wire headers, the
+database filename, exported media types — so check it before assuming an
+identifier is fair game.
 
 CLI distribution and harness interoperability are governed by
 [`docs/implementation/ROFLOCK_CLI_DISTRIBUTION_AND_HARNESS_INTEGRATION_v1.0.md`](docs/implementation/ROFLOCK_CLI_DISTRIBUTION_AND_HARNESS_INTEGRATION_v1.0.md).
 
-`.roflock` now compiles to canonical Graph IR and round-trips through the CLI
-(`roflock check|compile|hash|validate-ir`). Audit §13 records the decisions,
-the gaps carried forward, and the two new risks.
+### Next
 
-Next phase: **R3 — Graph IR runtime bridge**. The single most important
-architectural milestone: compiled IR must execute through the _existing_
-`runGraph`, not a second runtime. Read audit §6.3 first — the per-node
-`maxAttempts` versus per-SCC `LoopGroup` mismatch is the sharpest edge, and the
-compiler now only emits the latter.
+**Finish R5.** Its safety properties are done: a repair budget survives a
+restart, a billable turn has a stable identity, and an unobserved turn stops the
+run instead of being repeated. What remains is modelling — turning the
+orchestrator's raw SQL writes into typed `GraphRun`/`NodeRun` contracts with
+reducers (RF-EVO-070/071/072/074/075/078), and a forced-restart end-to-end
+through the real daemon rather than only the storage contract.
+
+Audit §16 also records what R5 does **not** give you: there is still no way for
+a human to resolve an unknown-outcome invocation. The run says why it stopped,
+but marking a turn "already completed" or "never billed" needs UI and API from
+R10. Until then the only move is starting the task over — safe, but blunt.
 
 ---
 

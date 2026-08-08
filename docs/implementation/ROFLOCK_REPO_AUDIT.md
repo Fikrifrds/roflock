@@ -935,14 +935,31 @@ than being flattened to `interrupted`. ADR-010 is honoured.
 | RF-EVO-085 (full)  | An end-to-end forced-restart test through the real daemon, not just the storage contract           |
 
 The honest summary: R5's _safety_ properties — no duplicated billable work, no
-refreshed repair budget — are done and tested. R5's _modelling_ work, turning
-raw SQL writes into typed contracts with reducers, is not, and is the larger
-half by volume.
+refreshed repair budget, no guess about an unobserved turn — are done and
+tested. R5's _modelling_ work, turning raw SQL writes into typed contracts with
+reducers, is not, and is the larger half by volume.
+
+### RF-EVO-086, and where the guarantee stops
+
+An unresolved billable turn now stops the run instead of being repeated. The
+boundary is worth stating precisely:
+
+- the **record** cannot be duplicated — the database refuses it;
+- the **provider** is no longer re-invoked on a resume, because the node fails
+  with `outcome_unknown` before any invocation is made;
+- what does **not** exist yet is a way for a human to _resolve_ the invocation.
+  The run stops and says why, but marking a turn "it did complete, continue" or
+  "it never billed, retry" needs UI and API that R10 supplies. Until then the
+  operator's only move is starting the task over — safe, but blunt.
+
+The rule is deliberately narrow. A deterministic check re-runs freely because
+nothing was billed. A turn with a definite outcome is the graph's retry budget's
+business, not this gate's.
 
 ### New risks
 
-| #   | Risk                                                                                                                            | Severity | Mitigation                                                                                                                                        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 20  | `loop_attempts` rows attach to the node run that _triggered_ the loop; if that run's row is missing the attempt is not recorded | Medium   | The orchestrator keeps `lastNodeRunId`, but a node that never opened a run would be silently uncounted                                            |
-| 21  | An invocation found under an existing key is reported as an event but does not yet stop the node                                | **High** | The record cannot be duplicated, but the provider can still be re-invoked — completing RF-EVO-086 requires the node to pause for a human decision |
-| 22  | Semantic hash reaches the key only for compiled templates; built-ins pass `undefined`                                           | Low      | Intentional and distinguished from any hash; built-ins have no source to change                                                                   |
+| #   | Risk                                                                                                                            | Severity | Mitigation                                                                                                       |
+| --- | ------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------- |
+| 20  | `loop_attempts` rows attach to the node run that _triggered_ the loop; if that run's row is missing the attempt is not recorded | Medium   | The orchestrator keeps `lastNodeRunId`, but a node that never opened a run would be silently uncounted           |
+| 21  | ~~An invocation found under an existing key is reported but does not stop the node~~                                            | Closed   | RF-EVO-086: `outcome_unknown` routes nowhere and the run stops as `interrupted` for a human to resolve (ADR-010) |
+| 22  | Semantic hash reaches the key only for compiled templates; built-ins pass `undefined`                                           | Low      | Intentional and distinguished from any hash; built-ins have no source to change                                  |
