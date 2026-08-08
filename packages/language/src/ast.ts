@@ -33,6 +33,14 @@ export interface RoleDecl extends Node {
    * must never acquire enforcement by being named a certain way.
    */
   authority?: string;
+  /**
+   * `dispatch <slot>` — which coding-runtime slot this role fills.
+   *
+   * Optional. Without it the runtime adapter infers a slot from the role's
+   * access mode and position, which is right often enough to be the default and
+   * wrong often enough to be worth overriding.
+   */
+  dispatch?: string;
 }
 
 export interface ArtifactDecl extends Node {

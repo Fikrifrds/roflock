@@ -224,12 +224,14 @@ class Parser {
     const name = this.identifier('a role name');
     let accessMode: 'readonly' | 'write' | undefined;
     let authority: string | undefined;
+    let dispatch: string | undefined;
     const requires: string[] = [];
     this.block((keyword) => {
       if (keyword.value === 'write') accessMode = 'write';
       else if (keyword.value === 'readonly') accessMode = 'readonly';
       else if (keyword.value === 'requires') requires.push(this.stringValue('a capability'));
       else if (keyword.value === 'authority') authority = this.identifier('an authority profile');
+      else if (keyword.value === 'dispatch') dispatch = this.identifier('a dispatch slot');
       else this.error(`Unknown role property '${keyword.value}'`, keyword.span);
     });
     return {
@@ -239,6 +241,7 @@ class Parser {
       span: this.span(start),
       ...(accessMode === undefined ? {} : { accessMode }),
       ...(authority === undefined ? {} : { authority }),
+      ...(dispatch === undefined ? {} : { dispatch }),
     };
   }
 

@@ -455,6 +455,25 @@ export const WELL_KNOWN_OUTCOMES = {
   humanRejected: 'human_rejected',
 } as const;
 
+/**
+ * The coding pack's extension namespace.
+ *
+ * Graph IR core is domain-neutral: a role is a stable responsibility, and
+ * nothing in it knows what a "verifier" is. Coding-specific conventions —
+ * which legacy dispatch slot a role fills — belong in a namespaced extension,
+ * where a host that does not understand them must refuse the document rather
+ * than quietly execute less than it says.
+ */
+export const CODING_EXTENSION = 'roflock.coding/v1';
+
+/** Legacy dispatch slots the coding runtime switches on. */
+export type CodingDispatch = 'planner' | 'reviewer' | 'writer' | 'test' | 'verifier' | 'accept';
+
+export interface CodingExtension {
+  /** Role id → the dispatch slot it fills. Declared, never inferred. */
+  dispatch?: Record<string, CodingDispatch>;
+}
+
 /** Effects that may never run without an approval path reaching them. */
 export const DEFAULT_PROTECTED_EFFECTS: readonly EffectClass[] = [
   'git_push',

@@ -1,4 +1,5 @@
 import {
+  CODING_EXTENSION,
   DiagnosticCode,
   createGraphIR,
   defaultOutcomes,
@@ -30,6 +31,15 @@ export const LANGUAGE_VERSION = '0.1';
  * needs an RFC, so it travels as a namespaced annotation until then.
  */
 export const RETRY_BUDGET_ANNOTATION = 'roflock.coding/retry-budget';
+
+const CODING_DISPATCH_SLOTS = new Set([
+  'planner',
+  'reviewer',
+  'writer',
+  'test',
+  'verifier',
+  'accept',
+]);
 
 export interface CompileResult {
   ir?: GraphIR;
@@ -345,6 +355,25 @@ function lower(
   const loops = deriveLoops(nodes, edges, boundedEdges, diagnostics, edgeSpans);
 
   // --- Assemble --------------------------------------------------------------
+  // Coding-pack conventions travel in a namespaced extension rather than in
+  // core IR, which knows nothing about verifiers. A role that declares no
+  // dispatch slot is left out entirely, so the adapter falls back to inference.
+  const declaredDispatch: Record<string, string> = {};
+  for (const declaration of declarations) {
+    if (declaration.kind !== 'role' || declaration.dispatch === undefined) continue;
+    if (!CODING_DISPATCH_SLOTS.has(declaration.dispatch)) {
+      diagnostics.push(
+        err(
+          DiagnosticCode.UnknownRole,
+          `Unknown dispatch slot '${declaration.dispatch}'. Expected one of: ${[...CODING_DISPATCH_SLOTS].join(', ')}`,
+          declaration.span,
+        ),
+      );
+      continue;
+    }
+    declaredDispatch[declaration.name] = declaration.dispatch;
+  }
+
   const workflowDecl = declarations.find(
     (d): d is Extract<Declaration, { kind: 'workflow' }> => d.kind === 'workflow',
   );
@@ -386,6 +415,9 @@ function lower(
             budget: { actualCostLimit: workflowDecl.maxCost, onExceeded: 'pause' as const },
           }),
     },
+    ...(Object.keys(declaredDispatch).length === 0
+      ? {}
+      : { extensions: { [CODING_EXTENSION]: { dispatch: declaredDispatch } } }),
     debug: { sourceMap: { nodes: nodeSpans, edges: edgeSpans } },
   });
 
@@ -395,9 +427,9 @@ function lower(
   // validator runs, so a user sees "line 12" rather than "node Builder".
   diagnostics.push(
     ...validateGraphIR(ir, {
-      ...(options.supportedExtensions === undefined
-        ? {}
-        : { supportedExtensions: options.supportedExtensions }),
+      // The compiler understands its own coding extension; a host that does not
+      // will reject the document, which is the intended behaviour.
+      supportedExtensions: [CODING_EXTENSION, ...(options.supportedExtensions ?? [])],
     }),
   );
   if (!isExecutable(diagnostics)) return { diagnostics };

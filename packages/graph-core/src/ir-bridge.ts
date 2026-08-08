@@ -1,4 +1,5 @@
 import {
+  CODING_EXTENSION,
   DiagnosticCode,
   type Diagnostic,
   type GraphIR,
@@ -126,6 +127,12 @@ function dispatchRole(
   ir: GraphIR,
   downstreamOfCheck: Set<string>,
 ): WorkflowRole | undefined {
+  // A declared slot always wins. Inference below is a convenience for workflows
+  // that do not care, not a judgement the author cannot override — and a role
+  // named anything at all can fill any slot, which is what makes roles generic.
+  const declared = declaredDispatch(ir)[node.roleRef ?? ''];
+  if (declared !== undefined) return declared;
+
   switch (node.kind) {
     case 'check':
       return 'test';
@@ -144,6 +151,13 @@ function dispatchRole(
     default:
       return undefined;
   }
+}
+
+/** Role → dispatch slot, as declared in the coding extension. */
+function declaredDispatch(ir: GraphIR): Record<string, WorkflowRole> {
+  const extension = ir.extensions?.[CODING_EXTENSION] as
+    { dispatch?: Record<string, WorkflowRole> } | undefined;
+  return extension?.dispatch ?? {};
 }
 
 const KINDS: Partial<Record<IrNode['kind'], NodeKind>> = {
