@@ -200,6 +200,7 @@ issue.
 - [MCP RFC](docs/rfc/RFC-002-ROFLOCK-MCP-V1.md)
 - [Control-surface API](docs/integrations/control-surface-api.md)
 - [Public-alpha completion authority](docs/implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md)
+- [Launch hardening report](docs/implementation/ROFLOCK_LAUNCH_HARDENING_REPORT_2026-08-09.md)
 
 ## Develop
 

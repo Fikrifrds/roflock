@@ -6,33 +6,34 @@ plans and RoleFlock-era documents remain available as design history.
 
 ## Start here
 
-| Guide                                                                                  | Use it for                                           |
-| -------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| [Quick starts](getting-started/quickstarts.md)                                         | Compile, simulate, run live, MCP, source development |
-| [Architecture](architecture.md)                                                        | One-runtime pipeline, trust boundaries, package map  |
-| [Language reference](language/reference.md)                                            | Exact `.roflock` 0.1 syntax and semantics            |
-| [Local workflow packages](workflows/local-packages.md)                                 | Versioned, integrity-locked local reusable workflows |
-| [VS Code and LSP](editor/vscode.md)                                                    | Editor diagnostics, extension, and local-only trust  |
-| [CLI reference](cli/reference.md)                                                      | Install, commands, JSON, exits, troubleshooting      |
-| [Runtime operator guide](runtime/operator-guide.md)                                    | Data, recovery, approvals, backup, upgrades          |
-| [Playground and Studio](ui/playground-and-studio.md)                                   | Browser surfaces, use, deployment, security bounds   |
-| [Driver authoring](drivers/authoring-and-conformance.md)                               | AgentDriver contract, conformance, harness status    |
-| [Public-alpha completion](implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md) | Exact readiness authority and release gates          |
-| [Public-alpha release audit](implementation/ROFLOCK_PUBLIC_ALPHA_RELEASE_AUDIT.md)     | Commit review, gate evidence, residual risk          |
-| [Executed release checklist](release/public-alpha-checklist.md)                        | Local evidence and remaining operator actions        |
-| [Control-surface API](integrations/control-surface-api.md)                             | Authenticated local client integration               |
-| [Harness invocation](integrations/harness-invocation.md)                               | Codex, Claude Code, OpenCode, Pi/shell entry points  |
-| [Authentication](integrations/authentication.md)                                       | Harness-owned login and BYOK boundaries              |
-| [CLI exit codes](cli/exit-codes.md)                                                    | CI-safe process and JSON error behavior              |
-| [Threat model](security/threat-model.md)                                               | Local daemon, repository, provider, evidence risks   |
-| [Supply chain](security/supply-chain.md)                                               | SBOM, CI security, container, Dev Container          |
-| [Playground boundary](security/playground-local-runtime.md)                            | Why the public site cannot run local agents          |
-| [Crash recovery](crash-recovery.md)                                                    | Operator recovery and safe continuation              |
-| [Contributing](../CONTRIBUTING.md)                                                     | Setup, invariants, tests, compatibility, PR evidence |
-| [Governance](../GOVERNANCE.md)                                                         | Roles, decisions, releases, maintainership           |
-| [Support](../SUPPORT.md)                                                               | Issue routing, diagnostics, safe reports             |
-| [Security reporting](../SECURITY.md)                                                   | Private vulnerability scope and process              |
-| [Release process](release/process.md)                                                  | Version, gates, npm OIDC, Playground deployment      |
+| Guide                                                                                   | Use it for                                           |
+| --------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [Quick starts](getting-started/quickstarts.md)                                          | Compile, simulate, run live, MCP, source development |
+| [Architecture](architecture.md)                                                         | One-runtime pipeline, trust boundaries, package map  |
+| [Language reference](language/reference.md)                                             | Exact `.roflock` 0.1 syntax and semantics            |
+| [Local workflow packages](workflows/local-packages.md)                                  | Versioned, integrity-locked local reusable workflows |
+| [VS Code and LSP](editor/vscode.md)                                                     | Editor diagnostics, extension, and local-only trust  |
+| [CLI reference](cli/reference.md)                                                       | Install, commands, JSON, exits, troubleshooting      |
+| [Runtime operator guide](runtime/operator-guide.md)                                     | Data, recovery, approvals, backup, upgrades          |
+| [Playground and Studio](ui/playground-and-studio.md)                                    | Browser surfaces, use, deployment, security bounds   |
+| [Driver authoring](drivers/authoring-and-conformance.md)                                | AgentDriver contract, conformance, harness status    |
+| [Public-alpha completion](implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md)  | Exact readiness authority and release gates          |
+| [Public-alpha release audit](implementation/ROFLOCK_PUBLIC_ALPHA_RELEASE_AUDIT.md)      | Commit review, gate evidence, residual risk          |
+| [Launch hardening report](implementation/ROFLOCK_LAUNCH_HARDENING_REPORT_2026-08-09.md) | Post-audit DX, security, quality, and release bounds |
+| [Executed release checklist](release/public-alpha-checklist.md)                         | Local evidence and remaining operator actions        |
+| [Control-surface API](integrations/control-surface-api.md)                              | Authenticated local client integration               |
+| [Harness invocation](integrations/harness-invocation.md)                                | Codex, Claude Code, OpenCode, Pi/shell entry points  |
+| [Authentication](integrations/authentication.md)                                        | Harness-owned login and BYOK boundaries              |
+| [CLI exit codes](cli/exit-codes.md)                                                     | CI-safe process and JSON error behavior              |
+| [Threat model](security/threat-model.md)                                                | Local daemon, repository, provider, evidence risks   |
+| [Supply chain](security/supply-chain.md)                                                | SBOM, CI security, container, Dev Container          |
+| [Playground boundary](security/playground-local-runtime.md)                             | Why the public site cannot run local agents          |
+| [Crash recovery](crash-recovery.md)                                                     | Operator recovery and safe continuation              |
+| [Contributing](../CONTRIBUTING.md)                                                      | Setup, invariants, tests, compatibility, PR evidence |
+| [Governance](../GOVERNANCE.md)                                                          | Roles, decisions, releases, maintainership           |
+| [Support](../SUPPORT.md)                                                                | Issue routing, diagnostics, safe reports             |
+| [Security reporting](../SECURITY.md)                                                    | Private vulnerability scope and process              |
+| [Release process](release/process.md)                                                   | Version, gates, npm OIDC, Playground deployment      |
 
 ## Public contracts
 
