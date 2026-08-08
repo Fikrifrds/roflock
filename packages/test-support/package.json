@@ -18,7 +18,8 @@
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {
-    "@roleflock/contracts": "workspace:*"
+    "@roleflock/contracts": "workspace:*",
+    "@roleflock/provider-core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.3",

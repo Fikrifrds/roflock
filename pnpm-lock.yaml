@@ -620,6 +620,9 @@ importers:
       '@roleflock/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@roleflock/provider-core':
+        specifier: workspace:*
+        version: link:../provider-core
     devDependencies:
       typescript:
         specifier: ^5.8.3

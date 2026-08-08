@@ -328,3 +328,5 @@ export class FakeProvider implements ProviderAdapter {
     if (!this.events.some((e) => e.type === 'invocation.completed' || e.type === 'invocation.failed')) yield { type: 'invocation.completed', output: '' };
   }
 }
+
+export * from './driver.js';
