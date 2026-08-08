@@ -1,0 +1,35 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Roflock",
+  "scopeName": "source.roflock",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#keywords" },
+    { "include": "#number" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [{ "name": "comment.line.number-sign.roflock", "match": "#.*$" }]
+    },
+    "string": {
+      "name": "string.quoted.double.roflock",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [{ "name": "constant.character.escape.roflock", "match": "\\\\[\\\\\"nrt]" }]
+    },
+    "keywords": {
+      "name": "keyword.control.roflock",
+      "match": "\\b(workflow|version|description|max_cost|role|agent|check|action|human|flow|requires|write|readonly|objective|retry|run|required|title|decisions|effect|reviews|pass|fail|max)\\b"
+    },
+    "number": {
+      "name": "constant.numeric.roflock",
+      "match": "\\b\\d+(?:\\.\\d+)?\\b"
+    },
+    "operators": {
+      "name": "keyword.operator.roflock",
+      "match": "->|[{}]"
+    }
+  }
+}

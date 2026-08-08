@@ -108,6 +108,7 @@ try {
     'README.md',
     'package.json',
     'dist/LICENSE',
+    'dist/bin/roflock-lsp.js',
     'dist/bin/roflock-mcp.js',
     'dist/bin/roflock.js',
     'dist/bin/roleflock.js',

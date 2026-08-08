@@ -11,6 +11,7 @@ plans and RoleFlock-era documents remain available as design history.
 | [Quick starts](getting-started/quickstarts.md)                                         | Compile, simulate, run live, MCP, source development |
 | [Architecture](architecture.md)                                                        | One-runtime pipeline, trust boundaries, package map  |
 | [Language reference](language/reference.md)                                            | Exact `.roflock` 0.1 syntax and semantics            |
+| [VS Code and LSP](editor/vscode.md)                                                    | Editor diagnostics, extension, and local-only trust  |
 | [CLI reference](cli/reference.md)                                                      | Install, commands, JSON, exits, troubleshooting      |
 | [Runtime operator guide](runtime/operator-guide.md)                                    | Data, recovery, approvals, backup, upgrades          |
 | [Playground and Studio](ui/playground-and-studio.md)                                   | Browser surfaces, use, deployment, security bounds   |

@@ -1,0 +1,73 @@
+{
+  "name": "roflock-vscode",
+  "displayName": "Roflock",
+  "description": "Language support and compiler diagnostics for Roflock workflows.",
+  "version": "0.1.0",
+  "publisher": "roflock",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/Fikrifrds/roflock",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:roflock",
+    "onCommand:roflock.openPlayground"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "roflock",
+        "aliases": [
+          "Roflock",
+          "roflock"
+        ],
+        "extensions": [
+          ".roflock"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "roflock",
+        "scopeName": "source.roflock",
+        "path": "./syntaxes/roflock.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "roflock",
+        "path": "./snippets/roflock.code-snippets"
+      }
+    ],
+    "commands": [
+      {
+        "command": "roflock.openPlayground",
+        "title": "Roflock: Open Language Playground"
+      }
+    ],
+    "configuration": {
+      "title": "Roflock",
+      "properties": {
+        "roflock.languageServer.command": {
+          "type": "string",
+          "default": "roflock-lsp",
+          "description": "Command used to start the local Roflock language server."
+        },
+        "roflock.languageServer.args": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Arguments passed to the local Roflock language server."
+        }
+      }
+    }
+  }
+}

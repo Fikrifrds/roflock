@@ -31,9 +31,10 @@ npm pack
 npm install --global ./roflock-0.1.0.tgz
 ```
 
-The package installs three binaries:
+The package installs four binaries:
 
 - `roflock` — supported CLI;
+- `roflock-lsp` — local Language Server Protocol executable;
 - `roflock-mcp` — stdio MCP server; and
 - `roleflock` — deprecated compatibility alias.
 
