@@ -1476,12 +1476,29 @@ export function registerApi(
         .get((request.params as { id: string }).id) as { task_id?: string } | undefined;
       return row?.task_id ? orchestrator.control(row.task_id, action) : { accepted: true as const };
     });
-  app.get('/api/approvals', async () => approvals.listPending());
+  app.get('/api/approvals', async (request) => {
+    const query = request.query as { runId?: string; taskId?: string };
+    return approvals
+      .listPending()
+      .filter((approval) => query.runId === undefined || approval.graphRunId === query.runId)
+      .filter((approval) => query.taskId === undefined || approval.taskId === query.taskId);
+  });
+  app.get('/api/approvals/:id', async (request, reply) => {
+    const approval = approvals.get((request.params as { id: string }).id);
+    return approval ?? reply.code(404).send({ error: 'Approval not found' });
+  });
   for (const decision of ['approve', 'reject'] as const) {
-    app.post(`/api/approvals/:id/${decision}`, async (request) => {
+    app.post(`/api/approvals/:id/${decision}`, async (request, reply) => {
       const id = (request.params as { id: string }).id;
+      const approval = approvals.get(id);
+      if (!approval) return reply.code(404).send({ error: 'Approval not found' });
+      if (approval.status !== 'pending') {
+        return reply.code(409).send({
+          error: `Approval ${id} is already ${approval.status}`,
+        });
+      }
       orchestrator.resolveConfirmation(id, decision === 'approve' ? 'approved' : 'rejected');
-      return { accepted: true };
+      return { accepted: true, approval: approvals.get(id) };
     });
   }
   app.post('/api/approval-groups/:id/approve-all-once', async (request, reply) => {

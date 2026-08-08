@@ -1764,3 +1764,25 @@ cancellation, truthful unconfirmed output, conflict exit mapping, missing IDs,
 and rejection of historical-run control. Focused CLI control tests pass 5/5;
 the runtime API, restart recovery, cancellation, and production driver lifecycle
 set passes 9/9, with daemon and CLI typechecks clean.
+
+---
+
+## 34. Public-alpha runtime CLI — explicit approvals
+
+RF-CLI-004 adds four deliberately separate commands: `approvals` lists pending
+requests (optionally filtered by run or task), `approval <id>` shows the exact
+structured action and human rationale, and `approve <id>` / `reject <id>` decide
+exactly one named request. Listing or inspecting pending work exits with the
+documented blocked code, making approval waits visible to scripts without
+turning observation into consent. JSON output preserves the complete request,
+including paths, command preview, destination, risk, state hash, and fingerprint.
+
+The daemon now exposes single-request inspection and rejects unknown IDs. It
+also rejects a second decision for an already settled request instead of
+returning a misleading success after a no-op update. The pre-existing grouped
+approval endpoint remains available to Studio, but the CLI intentionally does
+not call or alias it. Tests prove run filtering, full action inspection,
+single-ID approve and reject paths, blocked exit behavior, missing-ID rejection,
+and decision immutability. Focused CLI approval tests pass 5/5; the walking
+skeleton, approval reuse, and restart-recovery set passes 9/9, with daemon and
+CLI typechecks clean.

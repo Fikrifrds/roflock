@@ -102,6 +102,7 @@ describe('verified bug fix walking skeleton', () => {
       payload: {},
     });
     expect(started.statusCode).toBe(202);
+    const graphRunId = (started.json() as { graphRunId: string }).graphRunId;
 
     let approvals: Array<{ id: string }>;
     try {
@@ -127,6 +128,27 @@ describe('verified bug fix walking skeleton', () => {
         { cause: reason },
       );
     }
+
+    const filteredApprovals = await app.inject({
+      method: 'GET',
+      url: `/api/approvals?runId=${graphRunId}`,
+      headers,
+    });
+    expect(filteredApprovals.statusCode).toBe(200);
+    expect((filteredApprovals.json() as Array<{ id: string }>).map(({ id }) => id)).toContain(
+      approvals[0]!.id,
+    );
+    const inspectedApproval = await app.inject({
+      method: 'GET',
+      url: `/api/approvals/${approvals[0]!.id}`,
+      headers,
+    });
+    expect(inspectedApproval.statusCode).toBe(200);
+    expect(inspectedApproval.json()).toMatchObject({
+      id: approvals[0]!.id,
+      graphRunId,
+      status: 'pending',
+    });
 
     const planningGraph = (
       await app.inject({
@@ -175,6 +197,29 @@ describe('verified bug fix walking skeleton', () => {
       payload: {},
     });
     expect(approved.statusCode).toBe(200);
+    expect(approved.json()).toMatchObject({
+      accepted: true,
+      approval: { id: approvals[0]!.id, status: 'approved' },
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/api/approvals/${approvals[0]!.id}/reject`,
+          headers,
+          payload: {},
+        })
+      ).statusCode,
+    ).toBe(409);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/approvals/missing',
+          headers,
+        })
+      ).statusCode,
+    ).toBe(404);
 
     await waitFor(
       app,

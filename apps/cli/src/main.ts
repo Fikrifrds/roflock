@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { runApprovalCommand } from './approval-command.js';
 import { ExitCode } from './exit-codes.js';
 import { runEvidence, runWhy } from './evidence-command.js';
 import { runCheck, runCompile, runHash, runRender, runValidateIr } from './language-commands.js';
@@ -45,6 +46,12 @@ Runtime
   pause <run-id>                    Pause the current execution
   resume <run-id>                   Resume a paused execution
   cancel <run-id>                   Cancel scheduling and interrupt selected drivers
+
+Approvals
+  approvals [--run <run-id>]        List pending approval requests
+  approval <approval-id>            Inspect the exact requested action
+  approve <approval-id>             Approve exactly one request
+  reject <approval-id>              Reject exactly one request
 
 Evidence
   evidence <task-id>                Explain a run from what was recorded
@@ -115,6 +122,13 @@ export async function runCliAsync(argv: string[], io: CliIo): Promise<number> {
   if (argv[0] === 'events') return runEvents(argv.slice(1), io);
   if (['pause', 'resume', 'cancel'].includes(argv[0] ?? '')) {
     return runControl(argv[0] as RuntimeControl, argv.slice(1), io);
+  }
+  if (['approvals', 'approval', 'approve', 'reject'].includes(argv[0] ?? '')) {
+    return runApprovalCommand(
+      argv[0] as 'approvals' | 'approval' | 'approve' | 'reject',
+      argv.slice(1),
+      io,
+    );
   }
   return runCli(argv, io);
 }
