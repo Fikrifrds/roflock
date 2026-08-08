@@ -107,6 +107,7 @@ describe('runtime CLI API', () => {
       taskId: body.taskId,
       graphVersionId: 'cli_smoke@3',
     });
+    expect(status.json()).toHaveProperty('taskState');
     expect(status.json()).toHaveProperty('nodeCounts');
 
     const eventResponse = await app.inject({

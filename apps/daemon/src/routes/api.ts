@@ -1434,11 +1434,13 @@ export function registerApi(
          WHERE graph_run_id = ? GROUP BY state ORDER BY state`,
       )
       .all(id) as Array<{ state: string; count: number }>;
+    const task = tasks.get(String(row.task_id));
     return {
       id: String(row.id),
       taskId: String(row.task_id),
       graphVersionId: String(row.graph_version_id),
       state: String(row.state),
+      taskState: task?.state,
       startedAt: row.started_at ? String(row.started_at) : undefined,
       completedAt: row.completed_at ? String(row.completed_at) : undefined,
       createdAt: String(row.created_at),

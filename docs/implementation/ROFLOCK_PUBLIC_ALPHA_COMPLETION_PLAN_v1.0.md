@@ -102,6 +102,7 @@ approvals, shared output semantics, and owned-daemon lifecycle remain below.
 | RF-CLI-006 | complete | `daemon start/status/stop` connects or manages an ownership-proven local process with no Cloud dependency or unsafe PID-only kill.                                          |
 | RF-CLI-007 | complete | Evidence, why, and passport now obey the published JSON stream contract; invalid passport integrity maps to run failure, and ignored options/extra IDs are rejected.        |
 | RF-CLI-008 | complete | Final `accept-task` / `reject-task` decisions require one exact task awaiting acceptance; the API rejects premature or repeated terminal decisions.                         |
+| RF-CLI-009 | complete | Run status exposes graph and task state separately, so human waits return blocked instead of looking like an ordinary running process.                                    |
 
 ---
 

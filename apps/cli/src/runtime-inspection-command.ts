@@ -8,6 +8,7 @@ export interface RunProjection {
   taskId: string;
   graphVersionId: string;
   state: string;
+  taskState?: string;
   startedAt?: string;
   completedAt?: string;
   createdAt: string;
@@ -109,6 +110,9 @@ export async function runStatus(
     else {
       io.stdout(`${projection.id}  ${projection.state}`);
       io.stdout(`Task: ${projection.taskId}`);
+      if (projection.taskState && projection.taskState !== projection.state) {
+        io.stdout(`Task state: ${projection.taskState}`);
+      }
       io.stdout(`Workflow: ${projection.graphVersionId}`);
       const counts = Object.entries(projection.nodeCounts)
         .map(([state, count]) => `${state}=${count}`)
@@ -120,7 +124,7 @@ export async function runStatus(
         );
       }
     }
-    return exitCodeForRun(projection.state, projection.blockedReason);
+    return exitCodeForRun(projection.taskState ?? projection.state, projection.blockedReason);
   } catch (error) {
     return emitRuntimeError(error, io, options.json);
   }

@@ -161,8 +161,10 @@ roflock status <run-id>
 roflock status <run-id> --json
 ```
 
-Shows the durable run state, task/workflow identity, node counts, and block
-reason. Its exit code reflects the run state; a successful HTTP request is not
+Shows the durable graph state, operator-facing `taskState`, task/workflow
+identity, node counts, and block reason. A human node can show graph `running`
+while the task is `awaiting_acceptance`; that status correctly exits 5 rather
+than looking like ordinary in-flight work. A successful HTTP request is not
 automatically exit 0.
 
 ### `events`

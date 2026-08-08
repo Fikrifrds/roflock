@@ -96,6 +96,30 @@ describe('runtime inspection commands', () => {
     expect(result.stdout[0]).toContain('"nodeId":"Build"');
   });
 
+  it('reports a human wait from task state while the graph node is still running', async () => {
+    const directory = sessionDir();
+    const projection = {
+      id: 'run_waiting',
+      taskId: 'task_waiting',
+      graphVersionId: 'release@3',
+      state: 'running',
+      taskState: 'awaiting_acceptance',
+      createdAt: '2026-08-09T00:00:00.000Z',
+      nodeCounts: { completed: 2, running: 1 },
+    };
+    const fetchMock = (async () =>
+      new Response(JSON.stringify(projection), { status: 200 })) as typeof fetch;
+    const result = output();
+
+    expect(
+      await runStatus(['run_waiting'], result.io, {
+        clientOptions: { dataDir: directory, fetch: fetchMock },
+      }),
+    ).toBe(ExitCode.Blocked);
+    expect(result.stdout.join('\n')).toContain('run_waiting  running');
+    expect(result.stdout.join('\n')).toContain('Task state: awaiting_acceptance');
+  });
+
   it('rejects invalid cursors and reports missing runs', async () => {
     const invalid = output();
     expect(await runEvents(['run_1', '--after', '-1'], invalid.io)).toBe(ExitCode.Usage);
