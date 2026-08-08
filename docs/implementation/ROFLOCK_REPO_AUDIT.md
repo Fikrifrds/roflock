@@ -865,11 +865,11 @@ the daemon with no workflow.
 
 ### New risks
 
-| #   | Risk                                                                                                                 | Severity | Mitigation                                                                                     |
-| --- | -------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
-| 17  | The template registry is module-level mutable state, so test order can affect which graphs resolve                   | Medium   | Tests clear it in `afterEach`; a per-daemon instance would remove the hazard entirely          |
-| 18  | `workflows/` is located by walking up from the daemon module, which will not survive being packaged for npm          | Medium   | RF-DIST-001 must decide how templates ship inside the published artifact                       |
-| 19  | The shipped templates declare no `authority`, so Role Protocol artifact gates are still unused by built-in workflows | Low      | Matches the built-ins exactly today; tightening is a deliberate follow-up with its own fixture |
+| #   | Risk                                                                                                                 | Severity | Mitigation                                                                                                                        |
+| --- | -------------------------------------------------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 17  | The template registry is module-level mutable state, so test order can affect which graphs resolve                   | Medium   | Tests clear it in `afterEach`; a per-daemon instance would remove the hazard entirely                                             |
+| 18  | ~~`workflows/` is located by walking up from the daemon module and will not survive npm packaging~~                  | Closed   | RF-DIST-001: the build bundles templates into `dist/workflows`; a packaged daemon finds them, dev still reads the repository copy |
+| 19  | The shipped templates declare no `authority`, so Role Protocol artifact gates are still unused by built-in workflows | Low      | Matches the built-ins exactly today; tightening is a deliberate follow-up with its own fixture                                    |
 
 ---
 
@@ -1208,3 +1208,28 @@ One constraint it must honour, from the PRD and the distribution plan: the
 public Playground gets no shell, filesystem, credential or agent-process access.
 Compilation and diagnostics run in the browser; real execution stays in the
 local runtime.
+
+---
+
+## 22. R10 progress — Studio (not started)
+
+Studio is the remaining phase. What it needs from below is now in place:
+
+- a browser-safe compiler and hash (§21);
+- a shared layout model already proven against the real workflows (§21), so the
+  Code, Diagram and Run views draw the same graph the CLI does;
+- a runtime history that projects deterministically (§16), so the Run view reads
+  a projection rather than inventing its own state;
+- an evidence chain that names its gaps (§20), so the Evidence view cannot
+  present an incomplete run as a complete one.
+
+The existing operational UI in `apps/web` is untouched and must stay working
+while Studio is built around it, per the migration plan's Stream I.
+
+### Closed since it was recorded
+
+Risk 18 is closed by RF-DIST-001. Its failure mode was the reason to fix it
+before publish rather than at it: a packaged daemon would have found no
+templates, fallen back to the hard-coded graphs, and said nothing — everything
+appearing to work while the compiled workflows R4 made the source of truth went
+silently unused.
