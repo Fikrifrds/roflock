@@ -1323,18 +1323,29 @@ layout that shifted between renders would be useless for spotting what changed.
 Mermaid so one diagram works in a terminal, a README, a pull request and the
 docs without any of them needing a renderer Roflock ships.
 
-### Not done
+### The Playground (RF-EVO-152..159)
 
-The Playground application itself — shell, editor, live diagnostics, canvas,
-examples, simulation, share links (RF-EVO-152/153/154/156/157/158/159). That is
-a web application, not a change to the spine, and it now has everything it needs
-from the packages below it: a browser-safe compiler, a browser-safe hash, and a
-shared layout model already proven against real workflows.
+`apps/playground` — a workflow editor that compiles in the browser using the same
+compiler, validator and layout model the runtime and CLI use. That is the claim
+worth defending: a diagram or diagnostic shown there is the one Roflock would act
+on, not an approximation from a second implementation.
 
-One constraint it must honour, from the PRD and the distribution plan: the
-public Playground gets no shell, filesystem, credential or agent-process access.
-Compilation and diagnostics run in the browser; real execution stays in the
-local runtime.
+It reaches nothing — no daemon, no filesystem, no shell, no credentials. The PRD
+forbids a public origin reaching local execution, and an app with no server to
+call guarantees that rather than policing it. One 75 kB gzipped static bundle.
+
+Three decisions:
+
+- **No partial graphs.** Source that does not compile draws nothing. Rendering
+  from stale IR beside a list of errors would suggest the errors are cosmetic, and
+  half a workflow means something different from the whole one.
+- **Diagnostics before the picture**, with the same codes the CLI prints, so
+  someone who learns RF121 in the browser reads the same code in CI.
+- **Share links carry the source.** There is no server to store a snippet on, and
+  the workflow travels in the URL fragment — which browsers never send anywhere.
+  Sharing a workflow for review should not mean uploading it.
+
+R9 is complete.
 
 ---
 
