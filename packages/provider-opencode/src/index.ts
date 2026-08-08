@@ -154,9 +154,7 @@ export class OpenCodeAdapter implements ProviderAdapter {
       return;
     }
 
-    yield { type: 'invocation.started', invocationId: request.invocationId };
-
-    const child = spawn(health.binary!, openCodeRunArgs(request), {
+    const child = spawn(health.binary!, openCodeRunArgs(request, request.sessionId), {
       cwd: request.permissionEnvelope?.worktree ?? request.cwd,
       signal: request.signal,
     });
@@ -179,6 +177,10 @@ export class OpenCodeAdapter implements ProviderAdapter {
 
     let reportedFailure: string | undefined;
     let buffer = '';
+    // `invocation.started` is held back until the first event reveals the
+    // session id, so a resumable turn can actually say it is resumable. The
+    // wait is bounded: if no event ever arrives, it is emitted below.
+    let announced = false;
 
     for await (const chunk of child.stdout) {
       buffer += String(chunk);
@@ -187,14 +189,27 @@ export class OpenCodeAdapter implements ProviderAdapter {
       // until a newline proves it complete.
       buffer = lines.pop() ?? '';
       for (const line of lines.filter((value) => value.trim())) {
-        yield { type: 'heartbeat', at: new Date().toISOString() };
         const event = parseEvent(line);
+        if (!announced) {
+          announced = true;
+          const sessionId = typeof event?.sessionID === 'string' ? event.sessionID : undefined;
+          yield {
+            type: 'invocation.started',
+            invocationId: request.invocationId,
+            ...(sessionId === undefined ? {} : { sessionId }),
+          };
+        }
+        yield { type: 'heartbeat', at: new Date().toISOString() };
         if (event === undefined) continue;
         for (const mapped of mapEvent(event)) {
           if (mapped.kind === 'failure') reportedFailure = mapped.message;
           else yield mapped.event;
         }
       }
+    }
+
+    if (!announced) {
+      yield { type: 'invocation.started', invocationId: request.invocationId };
     }
 
     const code: number = await new Promise((resolve) =>
@@ -311,6 +326,10 @@ function mapEvent(event: OpenCodeEvent): Mapped[] {
 export function openCodeDriver(options: OpenCodeOptions = {}): AgentDriver {
   return providerDriver(new OpenCodeAdapter(options.binary), {
     capabilities: {
+      // Earned now that the session id reaches the runtime. `resume` follows
+      // from `--session`, which the wrapper wires to `resume()`.
+      sessions: true,
+      resume: true,
       usageReporting: true,
       toolEvents: true,
       permissionControls: false,

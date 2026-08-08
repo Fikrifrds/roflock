@@ -1,4 +1,5 @@
 import type { InvocationEvent } from '@roleflock/contracts';
+import type { AgentEvent } from '@roleflock/provider-core';
 import {
   providerDriver,
   type InvocationRequest,
@@ -91,13 +92,29 @@ describe('an adapter presented as a driver', () => {
     expect(await runDriverConformance(forced, options)).toEqual([]);
   });
 
-  it('fails conformance if it claims resume it does not implement', async () => {
+  it('fails conformance if it claims resume with nothing to resume', async () => {
     const failures = await runDriverConformance(
       providerDriver(wellBehavedAdapter(), { capabilities: { resume: true } }),
       options,
     );
 
-    expect(failures.map((failure) => failure.check)).toContain('resume/claimed-not-implemented');
+    // This adapter reports no session id, so a caller has no handle to resume
+    // with. Claiming the capability while never producing one leaves the promise
+    // unusable — a more precise failure than "not implemented".
+    expect(failures.map((failure) => failure.check)).toContain('resume/no-session-to-resume');
+  });
+
+  it('refuses rather than pretends when asked to resume without claiming it', async () => {
+    const driver = providerDriver(wellBehavedAdapter());
+    const events: AgentEvent[] = [];
+    for await (const event of driver.resume!('some-session', options.request())) {
+      events.push(event);
+    }
+
+    // Silently starting fresh would let a caller believe prior context was
+    // carried. Conformance passes precisely because it refuses.
+    expect(events.at(-1)).toMatchObject({ type: 'settled', outcome: 'refused' });
+    expect(await runDriverConformance(driver, options)).toEqual([]);
   });
 
   it("passes even when the adapter would ignore its envelope, because conformance's probe never reaches it", async () => {

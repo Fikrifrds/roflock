@@ -238,7 +238,19 @@ export const EventEnvelopeSchema = z.object({
 export type EventEnvelope = z.infer<typeof EventEnvelopeSchema>;
 
 export const InvocationEventSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('invocation.started'), invocationId: z.string() }),
+  z.object({
+    type: z.literal('invocation.started'),
+    invocationId: z.string(),
+    /**
+     * The harness's own identifier for this conversation, when it has one.
+     *
+     * Absent for a CLI that starts fresh each turn. Present for one that can be
+     * resumed — and without somewhere to put it, a harness that genuinely
+     * supports sessions could not tell the runtime so, which is exactly the
+     * overclaim conformance caught on the OpenCode driver.
+     */
+    sessionId: z.string().optional(),
+  }),
   z.object({ type: z.literal('model.output.delta'), text: z.string() }),
   z.object({ type: z.literal('model.reasoning.delta'), text: z.string() }),
   z.object({

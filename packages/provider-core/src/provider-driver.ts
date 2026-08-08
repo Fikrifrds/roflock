@@ -131,6 +131,7 @@ export class ProviderBackedDriver implements AgentDriver {
         ...(request.model === undefined ? {} : { model: request.model }),
         ...(request.effort === undefined ? {} : { effort: request.effort }),
         ...(this.options.onSpawn === undefined ? {} : { onSpawn: this.options.onSpawn }),
+        ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }),
       })) {
         const mapped = toAgentEvent(event);
         if (mapped === undefined) continue;
@@ -176,6 +177,28 @@ export class ProviderBackedDriver implements AgentDriver {
     }
   }
 
+  /**
+   * Continues an earlier conversation.
+   *
+   * Only meaningful for an adapter whose CLI supports it, which is why this is
+   * gated on the declared capability rather than always offered: conformance
+   * treats an unimplemented `resume` as an overclaim, and an implemented one
+   * that silently starts a fresh turn would be worse — the caller would believe
+   * prior context was carried when it was not.
+   */
+  async *resume(sessionId: string, request: AgentRunRequest): AsyncIterable<AgentEvent> {
+    if (!(await this.capabilities()).resume) {
+      yield { type: 'started' };
+      yield {
+        type: 'settled',
+        outcome: 'refused',
+        detail: `${this.id} cannot resume a session`,
+      };
+      return;
+    }
+    yield* this.start({ ...request, sessionId });
+  }
+
   async interrupt(invocationKey: string): Promise<InterruptResult> {
     const controller = this.running.get(invocationKey);
     controller?.abort();
@@ -195,7 +218,9 @@ export class ProviderBackedDriver implements AgentDriver {
 function toAgentEvent(event: InvocationEvent): AgentEvent | undefined {
   switch (event.type) {
     case 'invocation.started':
-      return { type: 'started' };
+      return event.sessionId === undefined
+        ? { type: 'started' }
+        : { type: 'started', sessionId: event.sessionId };
     case 'model.output.delta':
       return { type: 'output', text: event.text };
     case 'model.reasoning.delta':

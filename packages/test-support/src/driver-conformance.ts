@@ -77,9 +77,46 @@ export async function runDriverConformance(
   }
   if (capabilities.resume && driver.resume === undefined) {
     fail('resume/claimed-not-implemented', 'claims resume but implements no resume()');
+  } else if (capabilities.resume && driver.resume !== undefined) {
+    const started = events.find((event) => event.type === 'started');
+    const sessionId = started?.type === 'started' ? started.sessionId : undefined;
+    if (sessionId === undefined) {
+      // Resume needs something to resume. A driver that claims it but never
+      // hands back an id has given the caller no way to use it.
+      fail('resume/no-session-to-resume', 'claims resume but never reported a session id');
+    } else {
+      const resumed = await collect(driver.resume(sessionId, options.request()));
+      const settledResume = resumed.filter((event) => event.type === 'settled');
+      if (settledResume.length !== 1) {
+        fail(
+          'resume/settles-once',
+          `resume emitted ${settledResume.length} settled events, expected exactly 1`,
+        );
+      }
+      if (settledResume[0]?.type === 'settled' && settledResume[0].outcome === 'refused') {
+        fail('resume/claimed-then-refused', 'claims resume but refused when asked to');
+      }
+    }
   }
   if (!capabilities.resume && driver.resume !== undefined) {
-    fail('resume/implemented-not-claimed', 'implements resume() but does not claim it');
+    // Having the method is not a claim; behaving as though resume worked is.
+    // A driver that offers the entry point must refuse it rather than quietly
+    // starting a fresh turn, because the caller would believe prior context was
+    // carried when it was not.
+    const attempted = await collect(
+      driver.resume('session-that-does-not-exist', options.request()),
+    );
+    const settledAttempt = attempted.filter((event) => event.type === 'settled');
+    if (
+      settledAttempt[0]?.type === 'settled' &&
+      settledAttempt[0].outcome !== 'refused' &&
+      settledAttempt[0].outcome !== 'failed'
+    ) {
+      fail(
+        'resume/unclaimed-but-succeeded',
+        'does not claim resume but reported success when asked to resume, so a caller cannot tell whether context was carried',
+      );
+    }
   }
 
   // --- Permissions are a ceiling, not a suggestion --------------------------

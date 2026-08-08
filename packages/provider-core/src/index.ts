@@ -134,6 +134,14 @@ export interface InvocationRequest {
    * crash, instead of leaving a CLI running against a worktree nobody owns.
    */
   onSpawn?: (pid: number) => void;
+  /**
+   * Continue this harness conversation instead of starting a new one.
+   *
+   * Only honoured by an adapter whose CLI supports it; the rest ignore it. A
+   * harness that cannot resume must not silently start fresh under a session id,
+   * because the caller would believe prior context was carried.
+   */
+  sessionId?: string;
 }
 
 export interface PermissionEnvelope {
