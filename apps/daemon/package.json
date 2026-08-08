@@ -26,6 +26,7 @@
     "@roleflock/graph-core": "workspace:*",
     "@roleflock/graph-ir": "workspace:*",
     "@roleflock/graph-runtime": "workspace:*",
+    "@roleflock/graph-ui": "workspace:*",
     "@roleflock/language": "workspace:*",
     "@roleflock/observability": "workspace:*",
     "@roleflock/provider-claude": "workspace:*",

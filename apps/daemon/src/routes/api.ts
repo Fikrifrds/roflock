@@ -3,6 +3,8 @@ import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { ActiveExecution, Task } from '@roleflock/contracts';
+import { registeredWorkflowIr } from '@roleflock/graph-core';
+import { layoutGraph } from '@roleflock/graph-ui';
 import {
   AuditRepository,
   ApprovalGrantRepository,
@@ -1478,6 +1480,55 @@ export function registerApi(
       });
     }
   });
+  /**
+   * The shared layout for a task's workflow, with live node state overlaid.
+   *
+   * Serves the same model `roflock render` and the Playground draw from, so
+   * Studio's diagram cannot drift from what the CLI shows. Only available for a
+   * compiled template: a hard-coded built-in has no IR to lay out, and inventing
+   * one would reintroduce the second implementation this replaces.
+   */
+  app.get('/api/tasks/:taskId/diagram', async (request, reply) => {
+    const taskId = (request.params as { taskId: string }).taskId;
+    const task = tasks.get(taskId);
+    if (!task) return reply.code(404).send({ error: 'Task not found' });
+
+    const graph = resolveTaskGraph(task);
+    const ir = registeredWorkflowIr(graph.version);
+    if (ir === undefined) {
+      return reply.code(409).send({
+        error: 'No compiled workflow for this task',
+        detail:
+          'This task runs a hard-coded template, which has no Graph IR to lay out. Diagrams are available for workflows compiled from .roflock source.',
+        graphVersionId: graph.version,
+      });
+    }
+
+    const run = db
+      .prepare('SELECT id FROM graph_runs WHERE task_id = ? ORDER BY created_at DESC LIMIT 1')
+      .get(taskId) as { id: string } | undefined;
+    const nodeStates =
+      run === undefined
+        ? []
+        : (db
+            .prepare('SELECT node_key, state, outcome FROM node_runs WHERE graph_run_id = ?')
+            .all(run.id) as Array<{ node_key: string; state: string; outcome: string | null }>);
+
+    const state: Record<string, { state: 'pending' | 'running' | 'settled'; outcome?: string }> =
+      {};
+    for (const row of nodeStates) {
+      state[row.node_key] = {
+        state: row.state === 'running' ? 'running' : 'settled',
+        ...(row.outcome === null ? {} : { outcome: row.outcome }),
+      };
+    }
+
+    return {
+      graphVersionId: graph.version,
+      layout: layoutGraph(ir, { state }),
+    };
+  });
+
   app.get('/api/evidence/tasks/:taskId', async (request) =>
     evidence.getBundle((request.params as { taskId: string }).taskId),
   );

@@ -1,3 +1,4 @@
+import type { GraphIR } from '@roleflock/graph-ir';
 import { graphIrToWorkflowGraph } from './ir-bridge.js';
 import {
   GRAPH_SCHEMA_VERSION,
@@ -23,16 +24,46 @@ import {
  * registration degrades to today's behaviour rather than to no workflow at all.
  */
 
-const registry = new Map<string, WorkflowGraph>();
+/**
+ * A registered template, keeping the IR it was bridged from.
+ *
+ * The bridge is one-way: it lowers IR into a `WorkflowGraph` and the IR is not
+ * recoverable from the result. Discarding it meant nothing downstream could use
+ * the shared layout model for a running task — a Studio diagram would have had to
+ * compute its own positions from the runtime graph, which is exactly the
+ * divergence `graph-ui` exists to prevent. So both are kept.
+ */
+export interface RegisteredTemplate {
+  graph: WorkflowGraph;
+  /** Present for a compiled template; absent for a hard-coded built-in. */
+  ir?: GraphIR;
+}
+
+const registry = new Map<string, RegisteredTemplate>();
 
 /** Replaces the registered templates. Passing nothing clears them. */
-export function registerWorkflowTemplates(graphs: readonly WorkflowGraph[] = []): void {
+export function registerWorkflowTemplates(
+  templates: ReadonlyArray<WorkflowGraph | RegisteredTemplate> = [],
+): void {
   registry.clear();
-  for (const graph of graphs) registry.set(graph.id, graph);
+  for (const entry of templates) {
+    const template = 'graph' in entry ? entry : { graph: entry };
+    registry.set(template.graph.id, template);
+  }
 }
 
 export function registeredWorkflowTemplates(): readonly WorkflowGraph[] {
-  return [...registry.values()];
+  return [...registry.values()].map((template) => template.graph);
+}
+
+/**
+ * The Graph IR a template was compiled from, when there is one.
+ *
+ * This is what lets a diagram anywhere — Studio, the Playground, `roflock
+ * render` — draw from one model rather than three.
+ */
+export function registeredWorkflowIr(mode: string): GraphIR | undefined {
+  return registry.get(parseGraphVersionId(mode).mode)?.ir;
 }
 
 /**
@@ -49,7 +80,7 @@ export function resolveWorkflowGraph(modeOrVersion: string): WorkflowGraph {
     return getWorkflowGraph(modeOrVersion);
   }
 
-  const compiled = registry.get(mode);
+  const compiled = registry.get(mode)?.graph;
   if (compiled !== undefined) {
     // Keep the legacy version id so persisted runs, event payloads and the
     // historical resolver all continue to agree on what this graph is called.
@@ -67,15 +98,16 @@ export function resolveWorkflowGraph(modeOrVersion: string): WorkflowGraph {
  * problem worth reporting, not a reason to start the daemon with a silently
  * shorter list of workflows.
  */
-export function buildWorkflowTemplates(
-  sources: ReadonlyArray<{ id: string; ir: Parameters<typeof graphIrToWorkflowGraph>[0] }>,
-): { templates: WorkflowGraph[]; failures: Array<{ id: string; reasons: string[] }> } {
-  const templates: WorkflowGraph[] = [];
+export function buildWorkflowTemplates(sources: ReadonlyArray<{ id: string; ir: GraphIR }>): {
+  templates: RegisteredTemplate[];
+  failures: Array<{ id: string; reasons: string[] }>;
+} {
+  const templates: RegisteredTemplate[] = [];
   const failures: Array<{ id: string; reasons: string[] }> = [];
 
   for (const source of sources) {
     const bridged = graphIrToWorkflowGraph(source.ir);
-    if (bridged.graph) templates.push(bridged.graph);
+    if (bridged.graph) templates.push({ graph: bridged.graph, ir: source.ir });
     else failures.push({ id: source.id, reasons: bridged.diagnostics.map((d) => d.message) });
   }
 

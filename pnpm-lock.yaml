@@ -111,6 +111,9 @@ importers:
       '@roleflock/graph-runtime':
         specifier: workspace:*
         version: link:../../packages/graph-runtime
+      '@roleflock/graph-ui':
+        specifier: workspace:*
+        version: link:../../packages/graph-ui
       '@roleflock/language':
         specifier: workspace:*
         version: link:../../packages/language

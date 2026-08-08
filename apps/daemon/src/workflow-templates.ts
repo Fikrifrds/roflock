@@ -76,7 +76,7 @@ export function loadWorkflowTemplates(directory?: string): TemplateLoadResult {
   registerWorkflowTemplates(built.templates);
 
   return {
-    loaded: built.templates.map((template) => template.id).sort(),
+    loaded: built.templates.map((template) => template.graph.id).sort(),
     failures: [...failures, ...built.failures],
   };
 }
