@@ -8,6 +8,7 @@ plans and RoleFlock-era documents remain available as design history.
 
 | Guide                                                                                  | Use it for                                           |
 | -------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [Quick starts](getting-started/quickstarts.md)                                         | Compile, simulate, run live, MCP, source development |
 | [Architecture](architecture.md)                                                        | One-runtime pipeline, trust boundaries, package map  |
 | [Language reference](language/reference.md)                                            | Exact `.roflock` 0.1 syntax and semantics            |
 | [CLI reference](cli/reference.md)                                                      | Install, commands, JSON, exits, troubleshooting      |
@@ -27,9 +28,6 @@ plans and RoleFlock-era documents remain available as design history.
 | [Support](../SUPPORT.md)                                                               | Issue routing, diagnostics, safe reports             |
 | [Security reporting](../SECURITY.md)                                                   | Private vulnerability scope and process              |
 | [Release process](release/process.md)                                                  | Version, gates, npm OIDC, Playground deployment      |
-
-Executable quick-start guides are tracked as RF-DOCS-008 in the completion plan
-and linked here when they land.
 
 ## Public contracts
 

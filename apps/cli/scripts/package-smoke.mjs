@@ -16,19 +16,23 @@ let daemonDataDir;
 let daemonBaseUrl;
 
 function run(command, args, options = {}) {
+  return runAllow(command, args, [0], options).stdout;
+}
+
+function runAllow(command, args, allowedStatuses, options = {}) {
   const result = spawnSync(command, args, {
     encoding: 'utf8',
     ...options,
     env: { ...process.env, CI: 'true', ...(options.env ?? {}) },
   });
-  if (result.status !== 0) {
+  if (!allowedStatuses.includes(result.status)) {
     throw new Error(
       [`${command} ${args.join(' ')} failed (${result.status})`, result.stdout, result.stderr]
         .filter(Boolean)
         .join('\n'),
     );
   }
-  return result.stdout;
+  return result;
 }
 
 function packMetadata(output) {
@@ -52,6 +56,36 @@ async function availablePort() {
   await new Promise((resolveClosed) => server.close(resolveClosed));
   if (!port) throw new Error('unable to reserve a package-smoke port');
   return port;
+}
+
+async function waitForRun(entry, graphRunId, expectedStates, options) {
+  const deadline = Date.now() + 30_000;
+  let latest;
+  while (Date.now() < deadline) {
+    const result = runAllow(
+      process.execPath,
+      [
+        entry,
+        'status',
+        graphRunId,
+        '--json',
+        '--daemon-url',
+        options.baseUrl,
+        '--data-dir',
+        options.dataDir,
+      ],
+      [0, 4, 5, 6, 7],
+      { cwd: options.cwd },
+    );
+    latest = JSON.parse(result.stdout);
+    if (expectedStates.includes(latest.state) || expectedStates.includes(latest.taskState)) {
+      return latest;
+    }
+    await new Promise((resolveReady) => setTimeout(resolveReady, 100));
+  }
+  throw new Error(
+    `run ${graphRunId} did not reach ${expectedStates.join('/')} within 30s: ${JSON.stringify(latest)}`,
+  );
 }
 
 try {
@@ -123,6 +157,16 @@ try {
   );
   if (initialized.created?.length !== 4)
     throw new Error('installed init did not create four files');
+  writeFileSync(join(fixtureDirectory, 'README.md'), '# Packed-artifact quickstart fixture\n');
+  writeFileSync(
+    join(fixtureDirectory, 'package.json'),
+    JSON.stringify({ private: true, scripts: { test: 'node -e "process.exit(0)"' } }, null, 2),
+  );
+  run('git', ['init'], { cwd: fixtureDirectory });
+  run('git', ['config', 'user.email', 'quickstart@roflock.local'], { cwd: fixtureDirectory });
+  run('git', ['config', 'user.name', 'Roflock Quickstart'], { cwd: fixtureDirectory });
+  run('git', ['add', '.'], { cwd: fixtureDirectory });
+  run('git', ['commit', '-m', 'Initialize packed quickstart'], { cwd: fixtureDirectory });
   run(process.execPath, [join(packageRoot, 'scripts', 'mcp-smoke.mjs'), mcpEntry], {
     cwd: scratch,
   });
@@ -134,7 +178,7 @@ try {
     run(
       process.execPath,
       [entry, 'studio', '--json', '--daemon-url', daemonBaseUrl, '--data-dir', daemonDataDir],
-      { cwd: scratch },
+      { cwd: scratch, env: { ROFLOCK_FORCE_FAKE: '1' } },
     ),
   );
   if (!studio.url?.startsWith(`${daemonBaseUrl}/?rft=`)) {
@@ -148,6 +192,86 @@ try {
   if (studioHtml.includes('fonts.googleapis.com') || studioHtml.includes('fonts.gstatic.com')) {
     throw new Error('bundled Studio makes a remote font request');
   }
+
+  const started = JSON.parse(
+    run(
+      process.execPath,
+      [
+        entry,
+        'run',
+        join(fixtureDirectory, '.roflock', 'workflows', 'bugfix.roflock'),
+        '--repo',
+        fixtureDirectory,
+        '--brief',
+        'Prove the packed artifact executes its generated workflow',
+        '--json',
+        '--daemon-url',
+        daemonBaseUrl,
+        '--data-dir',
+        daemonDataDir,
+      ],
+      { cwd: fixtureDirectory },
+    ),
+  );
+  if (!started.graphRunId || !started.taskId || !started.semanticHash) {
+    throw new Error('installed runtime did not return stable run/task/hash identities');
+  }
+  const awaitingAcceptance = await waitForRun(
+    entry,
+    started.graphRunId,
+    ['awaiting_acceptance', 'failed'],
+    { cwd: fixtureDirectory, baseUrl: daemonBaseUrl, dataDir: daemonDataDir },
+  );
+  if (awaitingAcceptance.taskState !== 'awaiting_acceptance') {
+    throw new Error(
+      `packed quickstart run failed before acceptance: ${JSON.stringify(awaitingAcceptance)}`,
+    );
+  }
+  const events = JSON.parse(
+    run(
+      process.execPath,
+      [
+        entry,
+        'events',
+        started.graphRunId,
+        '--after',
+        '0',
+        '--json',
+        '--daemon-url',
+        daemonBaseUrl,
+        '--data-dir',
+        daemonDataDir,
+      ],
+      { cwd: fixtureDirectory },
+    ),
+  );
+  if (!Array.isArray(events) || events.length === 0 || events[0]?.sequence !== 1) {
+    throw new Error('installed runtime did not return ordered durable events');
+  }
+  const decision = JSON.parse(
+    run(
+      process.execPath,
+      [
+        entry,
+        'accept-task',
+        started.taskId,
+        '--json',
+        '--daemon-url',
+        daemonBaseUrl,
+        '--data-dir',
+        daemonDataDir,
+      ],
+      { cwd: fixtureDirectory },
+    ),
+  );
+  if (decision.decision !== 'accepted') {
+    throw new Error('installed runtime did not persist final task acceptance');
+  }
+  await waitForRun(entry, started.graphRunId, ['completed'], {
+    cwd: fixtureDirectory,
+    baseUrl: daemonBaseUrl,
+    dataDir: daemonDataDir,
+  });
   run(
     process.execPath,
     [entry, 'daemon', 'stop', '--daemon-url', daemonBaseUrl, '--data-dir', daemonDataDir],
@@ -174,6 +298,9 @@ try {
         'init',
         'mcp-stdio',
         'studio-http',
+        'authored-run',
+        'status-events',
+        'terminal-decision',
       ],
     })}\n`,
   );

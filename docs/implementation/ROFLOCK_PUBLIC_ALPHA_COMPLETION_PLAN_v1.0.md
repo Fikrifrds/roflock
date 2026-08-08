@@ -102,7 +102,7 @@ approvals, shared output semantics, and owned-daemon lifecycle remain below.
 | RF-CLI-006 | complete | `daemon start/status/stop` connects or manages an ownership-proven local process with no Cloud dependency or unsafe PID-only kill.                                          |
 | RF-CLI-007 | complete | Evidence, why, and passport now obey the published JSON stream contract; invalid passport integrity maps to run failure, and ignored options/extra IDs are rejected.        |
 | RF-CLI-008 | complete | Final `accept-task` / `reject-task` decisions require one exact task awaiting acceptance; the API rejects premature or repeated terminal decisions.                         |
-| RF-CLI-009 | complete | Run status exposes graph and task state separately, so human waits return blocked instead of looking like an ordinary running process.                                    |
+| RF-CLI-009 | complete | Run status exposes graph and task state separately, so human waits return blocked instead of looking like an ordinary running process.                                      |
 
 ---
 
@@ -132,17 +132,17 @@ become a second runtime or an approval bypass.
 
 ## 6. Product and documentation stream
 
-| Ticket      | State    | Required outcome                                                                                                                                                              |
-| ----------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RF-EVO-180  | complete | Visible Roflock launch UI and isolated responsive Playground; commit `5d8b69a`.                                                                                               |
-| RF-DOCS-001 | complete | The user-first docs index and architecture guide define surfaces, immutable identity, single runtime, trust, and compatibility.                                               |
-| RF-DOCS-002 | complete | The implemented-language reference covers exact 0.1 syntax, nodes, outcomes, loops, effects, authority, diagnostics, and immutable version/hash semantics.                    |
-| RF-DOCS-003 | complete | The shipped CLI reference covers artifact/source install, every command and option, JSON streams, IDs, exits, env compatibility, MCP, and troubleshooting.                    |
-| RF-DOCS-004 | complete | The local operator guide covers lifecycle, data/security, configuration, worktrees, recovery, approvals, evidence, consistent backup/restore, upgrades, reset, and incidents. |
-| RF-DOCS-005 | complete | Playground and Studio guides, including deployment and local handoff boundaries.                                                                                              |
-| RF-DOCS-006 | complete | Driver authoring/conformance guide and Codex, Claude, OpenCode, Pi status.                                                                                                    |
-| RF-DOCS-007 | complete | Open-source contributor, governance, security-reporting, support, and release guides.                                                                                         |
-| RF-DOCS-008 | open     | End-to-end quick starts validated against a packed artifact and clean checkout.                                                                                               |
+| Ticket      | State    | Required outcome                                                                                                                                                               |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| RF-EVO-180  | complete | Visible Roflock launch UI and isolated responsive Playground; commit `5d8b69a`.                                                                                                |
+| RF-DOCS-001 | complete | The user-first docs index and architecture guide define surfaces, immutable identity, single runtime, trust, and compatibility.                                                |
+| RF-DOCS-002 | complete | The implemented-language reference covers exact 0.1 syntax, nodes, outcomes, loops, effects, authority, diagnostics, and immutable version/hash semantics.                     |
+| RF-DOCS-003 | complete | The shipped CLI reference covers artifact/source install, every command and option, JSON streams, IDs, exits, env compatibility, MCP, and troubleshooting.                     |
+| RF-DOCS-004 | complete | The local operator guide covers lifecycle, data/security, configuration, worktrees, recovery, approvals, evidence, consistent backup/restore, upgrades, reset, and incidents.  |
+| RF-DOCS-005 | complete | Playground and Studio guides, including deployment and local handoff boundaries.                                                                                               |
+| RF-DOCS-006 | complete | Driver authoring/conformance guide and Codex, Claude, OpenCode, Pi status.                                                                                                     |
+| RF-DOCS-007 | complete | Open-source contributor, governance, security-reporting, support, and release guides.                                                                                          |
+| RF-DOCS-008 | complete | Compiler-only, simulation, live-driver, MCP, and source quick starts are documented; packed smoke executes init → run → events → acceptance → completion outside the monorepo. |
 
 Documentation examples are executable fixtures where practical. A command that
 has not passed package/E2E verification must not be presented as shipped.
