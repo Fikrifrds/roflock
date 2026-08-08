@@ -1645,8 +1645,9 @@ export function registerApi(
     });
     return { accepted: true };
   });
-  app.get('/api/providers', async () => {
-    const listed = await providers.list();
+  app.get('/api/providers', async (request) => {
+    const query = request.query as { fresh?: string };
+    const listed = await providers.list({ fresh: query.fresh === '1' || query.fresh === 'true' });
     return listed.map((provider) => {
       const summary = usage.summarizeByProvider(provider.id);
       return {

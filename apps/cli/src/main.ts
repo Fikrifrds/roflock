@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { runApprovalCommand } from './approval-command.js';
 import { runDaemonCommand } from './daemon-command.js';
+import { runDrivers } from './drivers-command.js';
 import { ExitCode } from './exit-codes.js';
 import { runEvidence, runWhy } from './evidence-command.js';
 import { runCheck, runCompile, runHash, runRender, runValidateIr } from './language-commands.js';
@@ -62,6 +63,9 @@ Daemon
   daemon start                      Connect to an existing daemon or start an owned one
   daemon status                     Report stopped, external, owned, or unverified
   daemon stop                       Stop only a daemon that proves CLI ownership
+
+Environment
+  drivers [doctor]                  Report detected drivers, auth, and capabilities
 
 Evidence
   evidence <task-id>                Explain a run from what was recorded
@@ -142,5 +146,6 @@ export async function runCliAsync(argv: string[], io: CliIo): Promise<number> {
     );
   }
   if (argv[0] === 'daemon') return runDaemonCommand(argv.slice(1), io);
+  if (argv[0] === 'drivers') return runDrivers(argv.slice(1), io);
   return runCli(argv, io);
 }

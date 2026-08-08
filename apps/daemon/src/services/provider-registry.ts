@@ -4,6 +4,7 @@ import {
   normalizeProviderModel,
   providerDriver,
   type AgentDriver,
+  type DriverCapabilities,
   type ProviderAdapter,
   type ProviderCapabilities,
   type ProviderHealth,
@@ -28,6 +29,7 @@ export interface RegisteredProvider {
   status: ProviderHealth['status'];
   health: ProviderHealth;
   capabilities: ProviderCapabilities;
+  driverCapabilities?: DriverCapabilities;
   connectionType: 'fake' | 'cli' | 'openai-compatible';
   account?: ProviderAccount;
   localUsage?: {
@@ -234,9 +236,10 @@ export class ProviderRegistry {
     const adapters = this.adapters.list();
     return Promise.all(
       adapters.map(async (adapter) => {
-        const [health, capabilities, account] = await Promise.all([
+        const [health, capabilities, driverCapabilities, account] = await Promise.all([
           this.healthCheck(adapter.id, { fresh }),
           this.capabilities(adapter.id, { fresh }),
+          this.getDriver(adapter.id).capabilities(),
           this.account(adapter.id, { fresh }),
         ]);
         return {
@@ -245,6 +248,7 @@ export class ProviderRegistry {
           status: health.status,
           health,
           capabilities,
+          driverCapabilities,
           connectionType: connectionTypes[adapter.id] ?? 'cli',
           account,
         };
