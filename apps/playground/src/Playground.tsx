@@ -1,8 +1,7 @@
 import { isExecutable, type Diagnostic, type GraphIR } from '@roleflock/graph-ir';
-import { layoutGraph } from '@roleflock/graph-ui';
+import { layoutGraph, toSvg } from '@roleflock/graph-ui';
 import { compile } from '@roleflock/language';
 import { useMemo, useState } from 'react';
-import { GraphDiagram } from './GraphDiagram.js';
 import { DEFAULT_EXAMPLE, EXAMPLES } from './examples.js';
 import { encodeShareLink } from './share.js';
 
@@ -140,7 +139,15 @@ export function Playground({ initialSource = DEFAULT_EXAMPLE.source }: Playgroun
                       )
                       .join(', ')}
               </p>
-              <GraphDiagram layout={layout} />
+              {/* Drawn by graph-ui, the same renderer Studio and `roflock
+                  render` use — a second implementation here would be the
+                  divergence that package exists to prevent. The markup comes
+                  from our own renderer over compiled IR, and every label it
+                  embeds is escaped. */}
+              <div
+                aria-label="Workflow diagram"
+                dangerouslySetInnerHTML={{ __html: toSvg(layout) }}
+              />
               <p style={{ fontSize: 11, color: '#64748b' }}>
                 Solid lines are the path a successful run takes. Dashed lines are typed failure
                 routes. A bold border marks the one node that may write.

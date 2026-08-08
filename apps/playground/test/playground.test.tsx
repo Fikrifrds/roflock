@@ -18,21 +18,21 @@ describe('compiling in the browser', () => {
     render(<Playground initialSource={VALID} />);
 
     expect(screen.getByText('Compiles')).toBeInTheDocument();
-    const diagram = screen.getByRole('img', { name: /Workflow Linear/ });
-    expect(diagram).toBeInTheDocument();
-    expect(within(diagram).getByText('Builder')).toBeInTheDocument();
-    expect(within(diagram).getByText('Tests')).toBeInTheDocument();
-    expect(within(diagram).getByText('Accept')).toBeInTheDocument();
+    const diagram = screen.getByLabelText('Workflow diagram');
+    expect(diagram.querySelector('svg')).not.toBeNull();
+    for (const id of ['Builder', 'Tests', 'Accept']) {
+      expect(diagram.textContent).toContain(id);
+    }
   });
 
   it('marks the writer and the required check in the picture', () => {
     render(<Playground initialSource={VALID} />);
-    const diagram = screen.getByRole('img', { name: /Workflow Linear/ });
+    const diagram = screen.getByLabelText('Workflow diagram');
 
     // These change what a reader should conclude about the workflow's safety, so
     // they belong in the diagram rather than only in the source.
-    expect(within(diagram).getByText('writer')).toBeInTheDocument();
-    expect(within(diagram).getByText('required')).toBeInTheDocument();
+    expect(diagram.textContent).toContain('writer');
+    expect(diagram.textContent).toContain('required');
   });
 
   it('reports the loop budget rather than leaving it in the text', () => {
@@ -61,7 +61,7 @@ describe('compiling in the browser', () => {
 
     // Half a workflow means something different from the whole one, so a partial
     // graph would be worse than none.
-    expect(screen.queryByRole('img', { name: /Workflow/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Workflow diagram')).not.toBeInTheDocument();
     expect(screen.getByText(/never draws a partial graph/)).toBeInTheDocument();
   });
 
@@ -100,10 +100,10 @@ describe('examples', () => {
     render(<Playground initialSource={VALID} />);
 
     await userEvent.click(screen.getByRole('button', { name: 'Two independent reviewers' }));
-    const diagram = screen.getByRole('img', { name: /Workflow Parallel/ });
+    const diagram = screen.getByLabelText('Workflow diagram');
 
-    expect(within(diagram).getByText('ReviewCorrectness')).toBeInTheDocument();
-    expect(within(diagram).getByText('ReviewScope')).toBeInTheDocument();
+    expect(diagram.textContent).toContain('ReviewCorrectness');
+    expect(diagram.textContent).toContain('ReviewScope');
   });
 });
 
