@@ -6,9 +6,11 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const dataDir = process.env.ROLEFLOCK_DATA_DIR ?? join(homedir(), '.roleflock');
+// Standalone script: no workspace import, so the fallback is inlined.
+const dataDir =
+  process.env.ROFLOCK_DATA_DIR ?? process.env.ROLEFLOCK_DATA_DIR ?? join(homedir(), '.roleflock');
 const sessionFile = join(dataDir, 'session.json');
-const port = Number(process.env.ROLEFLOCK_PORT ?? 4178);
+const port = Number(process.env.ROFLOCK_PORT ?? process.env.ROLEFLOCK_PORT ?? 4178);
 
 let session;
 try {

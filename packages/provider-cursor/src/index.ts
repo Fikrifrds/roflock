@@ -18,6 +18,7 @@ import {
   type ProviderModel,
   type PermissionEnvelope,
 } from '@roleflock/provider-core';
+import { readEnv } from '@roleflock/contracts';
 
 const execFileAsync = promisify(execFile);
 
@@ -417,8 +418,7 @@ export class CursorWriterAdapter implements ProviderAdapter {
       return;
     }
 
-    const forceFs =
-      process.env.ROLEFLOCK_CURSOR_AGENT === '0' || process.env.ROLEFLOCK_FORCE_FAKE === '1';
+    const forceFs = readEnv('CURSOR_AGENT') === '0' || readEnv('FORCE_FAKE') === '1';
     const discovery = forceFs
       ? { status: 'missing' as const }
       : await discoverCursor(this.binaryHint);

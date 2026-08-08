@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { FastifyRequest } from 'fastify';
+import { readEnv } from '@roleflock/contracts';
 
 export interface Session {
   token: string;
@@ -62,10 +63,10 @@ export function readSessionFile(dataDir: string): Session | undefined {
 
 /**
  * Reuse the stored session so the launch URL stays stable across restarts.
- * Set `ROLEFLOCK_ROTATE_TOKEN=1` to invalidate the old token.
+ * Set `ROFLOCK_ROTATE_TOKEN=1` to invalidate the old token.
  */
 export function loadOrCreateSession(dataDir: string): Session {
-  if (process.env.ROLEFLOCK_ROTATE_TOKEN !== '1') {
+  if (readEnv('ROTATE_TOKEN') !== '1') {
     const stored = readSessionFile(dataDir);
     if (stored) return stored;
   }

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { CommandError, runCommand } from '@roleflock/command-runner';
-import { sha256Canonical } from '@roleflock/contracts';
+import { sha256Canonical, withLegacyAlias } from '@roleflock/contracts';
 import type { VerificationCheck, VerificationSpecification } from './index.js';
 import type { CleanVerifierWorktree } from './verifier-worktree.js';
 
@@ -154,7 +154,9 @@ function assertRunnableInput(input: DeterministicVerifierInput): void {
 async function buildRestrictedEnvironment(
   input: DeterministicVerifierInput,
 ): Promise<NodeJS.ProcessEnv> {
-  const env: NodeJS.ProcessEnv = { CI: 'true', ROLEFLOCK_VERIFICATION: '1' };
+  // A user's existing verification command may branch on the legacy marker, so
+  // the child sees both spellings until the legacy half is removed.
+  const env: NodeJS.ProcessEnv = withLegacyAlias({ CI: 'true' }, 'VERIFICATION', '1');
   const infrastructure = input.infrastructureEnvironment ?? process.env;
   for (const name of infrastructureVariables) {
     if (infrastructure[name] !== undefined) env[name] = infrastructure[name];

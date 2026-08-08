@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readEnv, resetEnvDeprecationNotices } from '@roleflock/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer, resolvePort } from '../src/server.js';
 
@@ -20,8 +21,28 @@ async function server() {
 describe('daemon boundary', () => {
   it('validates an environment-provided daemon port', () => {
     expect(resolvePort('4312')).toBe(4312);
-    expect(() => resolvePort('not-a-port')).toThrow(/ROLEFLOCK_PORT/);
+    // The message names the variable an operator should now set, not the
+    // legacy spelling they may have arrived with.
+    expect(() => resolvePort('not-a-port')).toThrow(/ROFLOCK_PORT/);
     expect(() => resolvePort('70000')).toThrow(/1 to 65535/);
+  });
+
+  it('reads the daemon port from either the current or the legacy variable', () => {
+    resetEnvDeprecationNotices();
+    const warnings: string[] = [];
+
+    expect(readEnv('PORT', { env: { ROFLOCK_PORT: '4312' }, warn: (m) => warnings.push(m) })).toBe(
+      '4312',
+    );
+    expect(warnings).toEqual([]);
+
+    // An existing install still exports the legacy name; it keeps working and
+    // is told once what to change.
+    expect(
+      readEnv('PORT', { env: { ROLEFLOCK_PORT: '4312' }, warn: (m) => warnings.push(m) }),
+    ).toBe('4312');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('ROLEFLOCK_PORT is deprecated');
   });
 
   it('reports the configured runtime address consistently', async () => {

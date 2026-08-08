@@ -58,6 +58,7 @@ import {
   isRoutedRole,
 } from '../services/role-defaults.js';
 import { customProviderId, ProviderRegistry } from '../services/provider-registry.js';
+import { readEnv } from '@roleflock/contracts';
 import { DocumentService, isDocumentAuthority, isDocumentKind } from '../services/documents.js';
 import { LocalSecretStore } from '../services/local-secret-store.js';
 import { checkForUpdates, getLocalVersion } from '../services/version-check.js';
@@ -207,7 +208,7 @@ export function registerApi(
       port: runtime.port,
       csrf: session.csrf,
       version: getLocalVersion(),
-      forcedProvider: process.env.ROLEFLOCK_FORCE_FAKE === '1' ? 'fake' : null,
+      forcedProvider: readEnv('FORCE_FAKE') === '1' ? 'fake' : null,
     };
   });
   app.get('/api/events/stream', async (request, reply) => {

@@ -80,7 +80,7 @@ describe('provider timeout classification', () => {
     const error = new ProviderIdleTimeoutError(90_000);
     expect(classifyFailure(error)).toBe('timeout');
     expect(error.message).toContain('timed out');
-    expect(error.message).toContain('ROLEFLOCK_PROVIDER_IDLE_TIMEOUT_MS');
+    expect(error.message).toContain('ROFLOCK_PROVIDER_IDLE_TIMEOUT_MS');
   });
 
   it('still classifies an operator stop as cancelled', () => {

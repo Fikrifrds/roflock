@@ -27,6 +27,7 @@ import { ProviderRegistry } from './services/provider-registry.js';
 import { DocumentService } from './services/documents.js';
 import { LocalSecretStore } from './services/local-secret-store.js';
 import { ReviewAppService } from './services/review-app.js';
+import { readEnv } from '@roleflock/contracts';
 
 export interface ServerOptions {
   dataDir?: string;
@@ -44,11 +45,11 @@ export interface ServerHandle {
 
 const DEFAULT_PORT = 4178;
 
-export function resolvePort(value = process.env.ROLEFLOCK_PORT): number {
+export function resolvePort(value = readEnv('PORT')): number {
   if (value === undefined || value.trim() === '') return DEFAULT_PORT;
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error(`Invalid ROLEFLOCK_PORT: ${value}. Expected an integer from 1 to 65535.`);
+    throw new Error(`Invalid ROFLOCK_PORT: ${value}. Expected an integer from 1 to 65535.`);
   }
   return port;
 }
@@ -56,8 +57,7 @@ export function resolvePort(value = process.env.ROLEFLOCK_PORT): number {
 export async function createServer(options: ServerOptions = {}): Promise<ServerHandle> {
   const host = options.host ?? '127.0.0.1';
   const port = options.port ?? resolvePort();
-  const dataDir =
-    options.dataDir ?? process.env.ROLEFLOCK_DATA_DIR ?? join(homedir(), '.roleflock');
+  const dataDir = options.dataDir ?? readEnv('DATA_DIR') ?? join(homedir(), '.roleflock');
   mkdirSync(dataDir, { recursive: true });
   const session = options.session ?? loadOrCreateSession(dataDir);
   const app = fastify({

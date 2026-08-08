@@ -1,4 +1,4 @@
-import { sha256Canonical } from '@roleflock/contracts';
+import { exportedEnvNames, sha256Canonical } from '@roleflock/contracts';
 import {
   ChangeContractRepository,
   ExecutionPlanRepository,
@@ -99,12 +99,18 @@ export function buildTaskHandoff(
     hashAlgorithm: 'sha256',
     hash: sha256Canonical(unsigned),
   };
+  // Emitted under both spellings: a handoff command a user already wrote reads
+  // the legacy names, and this string is pasted into their shell verbatim.
   const environment = [
-    `ROLEFLOCK_TASK_ID=${shellQuote(task.id)}`,
-    `ROLEFLOCK_CONTRACT_HASH=${shellQuote(contract.hash)}`,
-    `ROLEFLOCK_PLAN_HASH=${shellQuote(plan.hash)}`,
-    `ROLEFLOCK_HANDOFF_HASH=${shellQuote(manifest.hash)}`,
-  ].join(' ');
+    ['TASK_ID', task.id],
+    ['CONTRACT_HASH', contract.hash],
+    ['PLAN_HASH', plan.hash],
+    ['HANDOFF_HASH', manifest.hash],
+  ]
+    .flatMap(([name, value]) =>
+      exportedEnvNames(name!).map((variable) => `${variable}=${shellQuote(value!)}`),
+    )
+    .join(' ');
   const prompt = shellQuote(
     [
       `RoleFlock handoff ${manifest.hash}.`,

@@ -17,6 +17,7 @@ import {
   type AuthActionResult,
   type ProviderAccount,
 } from './cli-account.js';
+import { readEnv } from '@roleflock/contracts';
 
 export interface RegisteredProvider {
   id: string;
@@ -78,7 +79,7 @@ const connectionTypes: Record<string, RegisteredProvider['connectionType']> = {
  * into a scripted one.
  */
 function fakeProviderEnabled(): boolean {
-  return process.env.ROLEFLOCK_FORCE_FAKE === '1' || process.env.ROLEFLOCK_INCLUDE_FAKE === '1';
+  return readEnv('FORCE_FAKE') === '1' || readEnv('INCLUDE_FAKE') === '1';
 }
 
 function mergeAccountIntoHealth(
@@ -114,7 +115,7 @@ const DISCOVERY_CACHE_TTL_MS = 15_000;
  * The daemon's provider inventory. CLI-backed providers are listed even when
  * missing so callers can show their real installation state. Fake stays
  * registered for offline fallback but is hidden from the Providers UI unless
- * ROLEFLOCK_INCLUDE_FAKE=1.
+ * ROFLOCK_INCLUDE_FAKE=1.
  */
 export class ProviderRegistry {
   private readonly adapters = new AdapterRegistry();

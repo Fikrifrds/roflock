@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readEnv } from '@roleflock/contracts';
 
 const PACKAGE_JSON = join(dirname(fileURLToPath(import.meta.url)), '../../package.json');
 
@@ -33,7 +34,7 @@ export function getLocalVersion(): VersionInfo {
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
   const local = getLocalVersion();
   const checkedAt = new Date().toISOString();
-  const updateUrl = process.env.ROLEFLOCK_UPDATE_URL;
+  const updateUrl = readEnv('UPDATE_URL');
 
   if (!updateUrl) {
     return {

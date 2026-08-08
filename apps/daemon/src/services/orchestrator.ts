@@ -52,6 +52,7 @@ import {
   type SqliteDb,
 } from '@roleflock/database';
 import { runCommand, CommandError, parseCommandArgv } from '@roleflock/command-runner';
+import { readEnv } from '@roleflock/contracts';
 import {
   getWorkflowGraph,
   graphVersionId,
@@ -109,17 +110,15 @@ const DEFAULT_VERIFICATION_TIMEOUT_MS = 300_000;
 
 export function providerIdleTimeoutMs(): number {
   const raw = Number(
-    process.env.ROLEFLOCK_PROVIDER_IDLE_TIMEOUT_MS ??
-      process.env.ROLEFLOCK_PROVIDER_TIMEOUT_MS ??
+    readEnv('PROVIDER_IDLE_TIMEOUT_MS') ??
+      readEnv('PROVIDER_TIMEOUT_MS') ??
       DEFAULT_PROVIDER_IDLE_TIMEOUT_MS,
   );
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_PROVIDER_IDLE_TIMEOUT_MS;
 }
 
 export function verificationTimeoutMs(): number {
-  const raw = Number(
-    process.env.ROLEFLOCK_VERIFICATION_TIMEOUT_MS ?? DEFAULT_VERIFICATION_TIMEOUT_MS,
-  );
+  const raw = Number(readEnv('VERIFICATION_TIMEOUT_MS') ?? DEFAULT_VERIFICATION_TIMEOUT_MS);
   return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_VERIFICATION_TIMEOUT_MS;
 }
 
@@ -195,7 +194,7 @@ export class ProviderIdleTimeoutError extends NodeFailure {
     options?: { cause?: unknown },
   ) {
     super(
-      `Provider timed out: no output for ${idleMs}ms (set ROLEFLOCK_PROVIDER_IDLE_TIMEOUT_MS to adjust)`,
+      `Provider timed out: no output for ${idleMs}ms (set ROFLOCK_PROVIDER_IDLE_TIMEOUT_MS to adjust)`,
       'timeout',
       options,
     );
@@ -349,7 +348,7 @@ export class Orchestrator {
     this.providers = providers;
     this.documents = documents;
     this.signingSecrets = signingSecrets;
-    this.forceFake = process.env.ROLEFLOCK_FORCE_FAKE === '1';
+    this.forceFake = readEnv('FORCE_FAKE') === '1';
     // A registry with only the fake provider still gives the router a real
     // preference list to walk, so routing behaves identically in tests.
     this.router = new RoleRouter(db, providers ?? new ProviderRegistry());
@@ -898,7 +897,7 @@ export class Orchestrator {
         severity: 'warning',
         summary: 'Simulation mode — no real provider or repository fix was verified',
         details:
-          'ROLEFLOCK_FORCE_FAKE=1 uses scripted model output, creates a demonstration artefact, and runs only a simulation check. Do not treat this run as production evidence.',
+          'ROFLOCK_FORCE_FAKE=1 uses scripted model output, creates a demonstration artefact, and runs only a simulation check. Do not treat this run as production evidence.',
         createdAt: now(),
       });
     }
@@ -1514,7 +1513,7 @@ export class Orchestrator {
           let writerRoute = route;
           const cursorReady =
             route?.adapter instanceof CursorWriterAdapter &&
-            process.env.ROLEFLOCK_CURSOR_AGENT !== '0' &&
+            readEnv('CURSOR_AGENT') !== '0' &&
             (await route.adapter.hasAgentCli());
           const directWriter =
             !this.forceFake &&
