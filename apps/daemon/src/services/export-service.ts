@@ -1,6 +1,11 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildEvidenceBundle, verifyEvidenceBundle, type EvidenceBundle } from '@roleflock/evidence';
+import { DATABASE_FILE_NAME, DATABASE_FILE_NAMES } from '../data-dir.js';
+import {
+  buildEvidenceBundle,
+  verifyEvidenceBundle,
+  type EvidenceBundle,
+} from '@roleflock/evidence';
 import {
   AuditRepository,
   ConfirmationRepository,
@@ -106,7 +111,7 @@ export function buildDiagnosticsExport(db: SqliteDb, dataDir: string): Diagnosti
     version: '0.1.0',
     host: '127.0.0.1',
     dataDirPresent: existsSync(dataDir),
-    databasePresent: existsSync(join(dataDir, 'roleflock.db')),
+    databasePresent: existsSync(join(dataDir, DATABASE_FILE_NAME)),
     documentCount: countEntries(documentsDir),
     worktreeCount: countEntries(worktreesDir),
     taskCount: Number(
@@ -125,12 +130,7 @@ export function backupLocalData(dataDir: string): { backupDir: string; files: st
   const backupDir = join(dataDir, 'backups', stamp);
   mkdirSync(backupDir, { recursive: true });
   const files: string[] = [];
-  const dbPath = join(dataDir, 'roleflock.db');
-  if (existsSync(dbPath)) {
-    copyFileSync(dbPath, join(backupDir, 'roleflock.db'));
-    files.push('roleflock.db');
-  }
-  for (const name of ['roleflock.db-wal', 'roleflock.db-shm']) {
+  for (const name of DATABASE_FILE_NAMES) {
     const path = join(dataDir, name);
     if (existsSync(path)) {
       copyFileSync(path, join(backupDir, name));
@@ -143,9 +143,7 @@ export function backupLocalData(dataDir: string): { backupDir: string; files: st
 export function deleteLocalData(dataDir: string): { deleted: string[] } {
   const deleted: string[] = [];
   for (const name of [
-    'roleflock.db',
-    'roleflock.db-wal',
-    'roleflock.db-shm',
+    ...DATABASE_FILE_NAMES,
     'provider-secrets.key',
     'provider-secrets.json',
     'documents',

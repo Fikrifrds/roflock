@@ -1,6 +1,5 @@
 import { existsSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastify, { type FastifyInstance } from 'fastify';
@@ -28,7 +27,7 @@ import { DocumentService } from './services/documents.js';
 import { LocalSecretStore } from './services/local-secret-store.js';
 import { ReviewAppService } from './services/review-app.js';
 import { readEnv } from '@roleflock/contracts';
-
+import { DATABASE_FILE_NAME, resolveDataDir } from './data-dir.js';
 export interface ServerOptions {
   dataDir?: string;
   host?: string;
@@ -42,9 +41,7 @@ export interface ServerHandle {
   port: number;
   dataDir: string;
 }
-
 const DEFAULT_PORT = 4178;
-
 export function resolvePort(value = readEnv('PORT')): number {
   if (value === undefined || value.trim() === '') return DEFAULT_PORT;
   const port = Number(value);
@@ -53,11 +50,10 @@ export function resolvePort(value = readEnv('PORT')): number {
   }
   return port;
 }
-
 export async function createServer(options: ServerOptions = {}): Promise<ServerHandle> {
   const host = options.host ?? '127.0.0.1';
   const port = options.port ?? resolvePort();
-  const dataDir = options.dataDir ?? readEnv('DATA_DIR') ?? join(homedir(), '.roleflock');
+  const dataDir = resolveDataDir({ override: options.dataDir });
   mkdirSync(dataDir, { recursive: true });
   const session = options.session ?? loadOrCreateSession(dataDir);
   const app = fastify({
@@ -81,7 +77,7 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
       }
     }
   });
-  const db = openMigratedDatabase(join(dataDir, 'roleflock.db'));
+  const db = openMigratedDatabase(join(dataDir, DATABASE_FILE_NAME));
   seedPricingDefaults(db);
   reconcileOrphanedProcesses(db);
   reconcileInterruptedGraphRuns(db);
@@ -156,7 +152,6 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
   });
   return { app, session, host, port, dataDir };
 }
-
 /**
  * Nothing is executing a graph the moment the process dies, so any run still
  * marked `running` at startup is a leftover. Marking it `interrupted` — rather
@@ -178,7 +173,6 @@ function reconcileInterruptedGraphRuns(db: ReturnType<typeof openMigratedDatabas
     "UPDATE invocations SET status = 'interrupted', outcome = COALESCE(outcome, 'interrupted'), completed_at = ? WHERE status = 'running'",
   ).run(at);
 }
-
 /**
  * Writer leases represent live process ownership and therefore cannot survive
  * a daemon process boundary. The worktree and task concurrency slot do survive:
@@ -197,7 +191,6 @@ function reconcileWriterLeases(db: ReturnType<typeof openMigratedDatabase>): voi
   db.prepare(`UPDATE worktrees SET writer_lease_id = NULL WHERE writer_lease_id IS NOT NULL`).run();
   for (const worktree of worktrees) WriterLease.clear(worktree.path);
 }
-
 function reconcileOrphanedProcesses(db: ReturnType<typeof openMigratedDatabase>): void {
   const handles = new ProcessHandleRepository(db);
   for (const handle of handles.listRunning()) {

@@ -1,14 +1,25 @@
 #!/usr/bin/env node
 // Prints the RoleFlock launch URL from the local session file.
-// The token lives in ~/.roleflock/session.json (mode 0600) so that only this OS
+// The token lives in <data dir>/session.json (mode 0600) so that only this OS
 // user can obtain it — loopback alone is shared with every other local account.
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-// Standalone script: no workspace import, so the fallback is inlined.
-const dataDir =
-  process.env.ROFLOCK_DATA_DIR ?? process.env.ROLEFLOCK_DATA_DIR ?? join(homedir(), '.roleflock');
+// Standalone script: no workspace import, so this mirrors resolveDataDir() in
+// apps/daemon/src/data-dir.ts. Keep the two in step — if this picked the new
+// directory while the daemon was still running from the legacy one, the script
+// would report on a database nobody is using.
+function resolveDataDir() {
+  const explicit = process.env.ROFLOCK_DATA_DIR ?? process.env.ROLEFLOCK_DATA_DIR;
+  if (explicit !== undefined && explicit !== '') return explicit;
+  const current = join(homedir(), '.roflock');
+  if (existsSync(current)) return current;
+  const legacy = join(homedir(), '.roleflock');
+  return existsSync(legacy) ? legacy : current;
+}
+
+const dataDir = resolveDataDir();
 const sessionFile = join(dataDir, 'session.json');
 const port = Number(process.env.ROFLOCK_PORT ?? process.env.ROLEFLOCK_PORT ?? 4178);
 
