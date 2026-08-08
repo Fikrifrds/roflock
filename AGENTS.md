@@ -5,7 +5,7 @@ Root agent guidance. Sections 1–17 are the Roflock AI Coding Master Instructio
 
 ## Current phase
 
-**R0, R1 and R2 are complete.** The baseline audit lives at
+**R0 through R3 are complete.** The baseline audit lives at
 [`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md)
 and records the verification baseline, package classification, persisted
 compatibility surface, the risk register, and the R1 outcome. Read it before

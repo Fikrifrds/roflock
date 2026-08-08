@@ -693,3 +693,90 @@ v0.2 cannot break a workflow someone already wrote.
 | --- | ------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------- |
 | 13  | The `maxAttempts`-per-node vs `LoopGroup`-per-SCC mismatch (risk #1) is now concrete — the compiler only emits the latter | **High** | R3 must map both; do not collapse them. `deriveLoops` is the single place the compiler's view is formed |
 | 14  | Source spans live in `debug`, excluded from the hash, so a stored IR document cannot always point back at source          | Low      | `uri` and `sourceHash` are recorded in `workflow.source`; the file itself is the source of truth        |
+
+---
+
+## 14. R3 outcome — Graph IR runtime bridge
+
+R3 is complete, and it is the milestone the whole migration was sequenced
+around. A `.roflock` workflow compiles to Graph IR, bridges to a
+`WorkflowGraph`, and executes on the existing `runGraph` — the same scheduler,
+writer serialisation, typed failure routing and artifact gating that has been
+running in production. **There is no second runtime.**
+
+`packages/graph-core/src/ir-bridge.ts`, ~250 lines, plus 19 integration tests in
+`graph-runtime` that use the real compiler and the real `runGraph` with a fake
+deterministic executor.
+
+| Ticket     | Outcome                                                                |
+| ---------- | ---------------------------------------------------------------------- |
+| RF-EVO-030 | `graphIrToWorkflowGraph(ir): BridgeResult` — one explicit boundary     |
+| RF-EVO-031 | Success outcomes become `dependsOn`; the runtime schedules unchanged   |
+| RF-EVO-032 | agent, model_call, check, action, human mapped; others refused         |
+| RF-EVO-033 | IR outcomes → typed `EdgeCondition`, terminals never routed out of     |
+| RF-EVO-034 | `workspace_write` or a writing role → `writer: true`                   |
+| RF-EVO-035 | `check.required` → `required: true`, enforced by the legacy validator  |
+| RF-EVO-036 | `LoopGroup.maxAttempts` → node budget **and** `maxLoopIterations - 1`  |
+| RF-EVO-037 | Human nodes become `human_approval`; accept versus reviewer by outcome |
+| RF-EVO-038 | Role Protocol authority is opt-in by role id                           |
+| RF-EVO-039 | Fake-executor integration suite                                        |
+| RF-EVO-040 | Fail → retry → pass end to end, plus exhaustion                        |
+
+Verification after R3: build, lint, typecheck pass; **556 tests pass**
+(432 baseline → 459 → 537 → 556). Prettier's flagged set still unchanged.
+
+### The maxAttempts / LoopGroup resolution
+
+Risk #1 from R0, made concrete in R2, resolves as:
+
+```text
+IR:      LoopGroup.maxAttempts = 3          (three attempts)
+legacy:  loopTarget.maxAttempts = 3         (the node's own retry budget)
+         graph.maxLoopIterations = 2        (re-entries: attempts - 1)
+```
+
+The off-by-one is the whole point. `runGraph` counts _re-entries_, so a ceiling
+of 3 would have produced four attempts and one extra billable provider call per
+loop. Legacy deliberately keeps two bounds where IR has one; the bridge sets
+both from the single IR budget rather than dropping either. The existing
+built-in graphs use the same convention — `bugFixGraph` puts the repair budget
+on the writer, which is its loop target — so this is the legacy encoding, not a
+new one.
+
+### Decisions taken
+
+**Derived, never guessed.** Every legacy field comes from a fact the IR already
+carries. Where the legacy model cannot represent something — an `event` node, a
+route out of a terminal outcome — the bridge emits a diagnostic and no graph.
+Silently dropping a node the author wrote would be the worst available
+behaviour.
+
+**Authority is opt-in.** An IR role whose id is a Role Protocol role gets that
+role's artifact gate; anything else leaves `authorityRole` undefined, exactly as
+legacy v1 and v2 graphs do. This preserves enforcement for workflows that ask
+for it without inventing authority for those that did not.
+
+**Topological node order.** IR normalises nodes by id for hashing, but
+`runGraph` sorts a run's results by node order, so an alphabetical graph would
+report `Accept` before `Builder` in the run view. Found by a test asserting
+result order, not by reading the code.
+
+**`WorkflowGraph.id` widened to `string`.** It is display and event-payload
+only — never dispatch — so a bridged graph can carry its own workflow id
+alongside the built-in `GraphMode` templates.
+
+### Known gaps carried into R4
+
+| Gap                                                                                                 | Consequence                                                                                 |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| The daemon orchestrator still calls `getWorkflowGraph`; nothing runs bridged IR in the real product | R4 must switch new-task graph resolution to compiled templates (RF-EVO-061)                 |
+| `action`, `context`, `evidence`, `join` and `route` are mapped but untested end to end              | v0.1 syntax cannot express them, so no fixture exercises the mapping                        |
+| `blocked` folds into `on_fail`                                                                      | A widening, not a loss — `on_fail` is already the runtime's catch-all — but recorded        |
+| Bridged graphs are versioned `<workflowId>@3`, so they get v3 validation rules                      | Correct and strictest, but `getWorkflowGraph` cannot resolve them; they are passed directly |
+
+### New risks
+
+| #   | Risk                                                                                                                                      | Severity | Mitigation                                                                                                         |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| 15  | `dispatchRole` infers `verifier` versus `planner` from being downstream of a check; a workflow with an unusual shape could be mislabelled | Medium   | Only affects provider routing and phase display, never authority; R6's generic roles remove the inference entirely |
+| 16  | Two graph validators now exist — `validateGraphIR` and legacy `validateGraph` — and could drift                                           | Medium   | The bridge runs the legacy one and reports its errors as diagnostics, so drift surfaces as a bridge failure        |
