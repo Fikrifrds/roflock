@@ -780,3 +780,93 @@ alongside the built-in `GraphMode` templates.
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
 | 15  | `dispatchRole` infers `verifier` versus `planner` from being downstream of a check; a workflow with an unusual shape could be mislabelled | Medium   | Only affects provider routing and phase display, never authority; R6's generic roles remove the inference entirely |
 | 16  | Two graph validators now exist — `validateGraphIR` and legacy `validateGraph` — and could drift                                           | Medium   | The bridge runs the legacy one and reports its errors as diagnostics, so drift surfaces as a bridge failure        |
+
+---
+
+## 15. R4 outcome — built-in workflows as source
+
+R4 is complete. Direct, Fast, Bug Fix, Standard and Critical live in
+`workflows/*.roflock` and compile through the same public compiler any user
+workflow does. The hard-coded TypeScript definitions remain as **history**, not
+as the source of truth.
+
+Verification after R4: build, lint, typecheck pass; **589 tests pass**
+(432 → 459 → 537 → 556 → 589). Prettier's flagged set still unchanged.
+
+### Parity is exact
+
+Each compiled workflow produces the same _governing shape_ as the template it
+replaces — node ids, dispatch roles, kinds, dependencies, writer flags, required
+checks, retry budgets, authority, focus presence, guarded failure routes,
+concurrency and loop ceilings. Behavioural tests additionally run both graphs
+against the same fake executor and compare invocation counts on the happy path
+and at loop exhaustion.
+
+Only `label` and `description` are excluded from the comparison, as display copy.
+
+### Two divergences the tests caught
+
+Both were fixed rather than documented away, and both were found by a test
+rather than by reading the diff.
+
+1. **Accidental authority.** R3's opt-in-by-name meant a role called `planner`
+   silently acquired Role Protocol artifact gates. The compiled workflows
+   started failing at the gate with `Required input is missing: change_contract`
+   — nothing in the source explained why. Authority is now declared explicitly
+   with `authority <profile>`, and `authorityRole` joined the parity comparison
+   so the same class of divergence cannot hide again.
+2. **Accidental swarm assignments.** Every agent was receiving a `focus`, which
+   the runtime injects into the prompt as "Your independent swarm assignment".
+   The field exists to tell _parallel_ agents sharing a role how their work
+   differs, so the bridge now emits it only for nodes with a sibling — matching
+   the built-ins, which give one only to the two parallel planners.
+
+### Language additions, each forced by a real workflow
+
+| Syntax                | Why it had to exist                                                  |
+| --------------------- | -------------------------------------------------------------------- |
+| `reviews` on an agent | Adds the `changes` outcome; without it no reviewer loop can be drawn |
+| `retry N`             | A node's own budget, distinct from a loop's attempt budget           |
+| `authority <profile>` | Explicit enforcement binding, replacing R3's name-based inference    |
+| mid-flow `human`      | Terminal-ness derived from having outgoing edges, not assumed        |
+
+`retry N` travels as a namespaced annotation (`roflock.coding/retry-budget`)
+because IR v1's `NodeBase` has no field for it and **changing the frozen schema
+needs an RFC**. That is a deliberate deferral, recorded here so it is not
+mistaken for an oversight.
+
+### Loop grouping, and the gap from §13
+
+R2 recorded that `deriveLoops` emitted one group per annotated edge and would
+produce overlapping groups for two bounded edges in one component. R4 forced the
+fix: the assurance workflows route a failing check both back to the writer and
+further back to the planner, and additionally route verifier findings to the
+planner. Loops now group by strongly connected component, with one shared
+budget — which is also exactly what the runtime does, since it keeps a single
+re-entry counter for the whole graph.
+
+Where several nodes gate one cycle, the one furthest along the success path is
+named as the loop's verifier. It is the last word on whether an attempt
+succeeded, and every route out shares the budget regardless.
+
+### Resolver behaviour
+
+```text
+resolveWorkflowGraph('bug_fix@3')  → compiled source, relabelled bug_fix@3
+resolveWorkflowGraph('bug_fix@1')  → hard-coded definition, always
+resolveWorkflowGraph('bug_fix@99') → refused, never substituted
+```
+
+`graph-core` receives compiled graphs rather than reading the filesystem, so it
+stays importable by the browser-facing UI. The daemon loads and registers them
+at boot; a template that no longer compiles is reported to stderr and falls back
+to its built-in definition, degrading to today's behaviour rather than leaving
+the daemon with no workflow.
+
+### New risks
+
+| #   | Risk                                                                                                                 | Severity | Mitigation                                                                                     |
+| --- | -------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------- |
+| 17  | The template registry is module-level mutable state, so test order can affect which graphs resolve                   | Medium   | Tests clear it in `afterEach`; a per-daemon instance would remove the hazard entirely          |
+| 18  | `workflows/` is located by walking up from the daemon module, which will not survive being packaged for npm          | Medium   | RF-DIST-001 must decide how templates ship inside the published artifact                       |
+| 19  | The shipped templates declare no `authority`, so Role Protocol artifact gates are still unused by built-in workflows | Low      | Matches the built-ins exactly today; tightening is a deliberate follow-up with its own fixture |
