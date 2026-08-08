@@ -11,7 +11,7 @@
     "node": ">=24"
   },
   "scripts": {
-    "build": "pnpm -r --filter=./packages/* build && pnpm -r --filter=./apps/* build",
+    "build": "pnpm -r --filter=./packages/* build && pnpm --filter @roleflock/playground build && pnpm --filter @roleflock/daemon build && pnpm --dir apps/cli build",
     "dev": "pnpm --filter @roleflock/daemon dev",
     "dev:web": "pnpm --filter @roleflock/web dev",
     "dev:playground": "pnpm --filter @roleflock/playground dev",

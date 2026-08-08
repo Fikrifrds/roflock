@@ -1,4 +1,5 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
@@ -6,6 +7,13 @@ import { build } from 'esbuild';
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const repositoryRoot = resolve(packageRoot, '../..');
 const outdir = join(packageRoot, 'dist');
+
+// The published daemon is also the local Studio server. Build the browser app
+// here so CLI builds and npm prepack never depend on an earlier workspace build.
+execFileSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['--dir', 'apps/web', 'build'], {
+  cwd: repositoryRoot,
+  stdio: 'inherit',
+});
 
 const internalPackages = new Map();
 const packagesDirectory = join(repositoryRoot, 'packages');
@@ -68,5 +76,9 @@ for (const filename of readdirSync(workflowSource)) {
     cpSync(join(workflowSource, filename), join(workflowTarget, filename));
   }
 }
+
+cpSync(join(repositoryRoot, 'apps', 'web', 'dist'), join(outdir, 'daemon', 'web'), {
+  recursive: true,
+});
 
 cpSync(join(repositoryRoot, 'LICENSE'), join(outdir, 'LICENSE'));

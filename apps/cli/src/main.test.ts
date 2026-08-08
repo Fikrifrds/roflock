@@ -49,6 +49,7 @@ describe('roflock CLI', () => {
         'doctor',
         'drivers',
         'approvals',
+        'studio',
         'evidence',
         'why',
         'passport',

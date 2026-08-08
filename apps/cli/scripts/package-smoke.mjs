@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:net';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const scratch = mkdtempSync(join(tmpdir(), 'roflock-package-smoke-'));
@@ -10,6 +11,9 @@ const packDirectory = join(scratch, 'pack');
 const installDirectory = join(scratch, 'install');
 const fixtureDirectory = join(scratch, 'fixture');
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+let installedEntry;
+let daemonDataDir;
+let daemonBaseUrl;
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -37,6 +41,19 @@ function packMetadata(output) {
   return parsed[0];
 }
 
+async function availablePort() {
+  const server = createServer();
+  await new Promise((resolveReady, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolveReady);
+  });
+  const address = server.address();
+  const port = typeof address === 'object' && address ? address.port : undefined;
+  await new Promise((resolveClosed) => server.close(resolveClosed));
+  if (!port) throw new Error('unable to reserve a package-smoke port');
+  return port;
+}
+
 try {
   mkdirSync(packDirectory, { recursive: true });
   const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'));
@@ -61,6 +78,7 @@ try {
     'dist/bin/roflock.js',
     'dist/bin/roleflock.js',
     'dist/daemon/index.js',
+    'dist/daemon/web/index.html',
     'dist/daemon/workflows/direct.roflock',
     'dist/daemon/workflows/standard.roflock',
   ];
@@ -74,6 +92,7 @@ try {
   });
   const installedRoot = join(installDirectory, 'node_modules', 'roflock');
   const entry = join(installedRoot, 'dist', 'bin', 'roflock.js');
+  installedEntry = entry;
   const mcpEntry = join(installedRoot, 'dist', 'bin', 'roflock-mcp.js');
   const shim = join(
     installDirectory,
@@ -108,6 +127,34 @@ try {
     cwd: scratch,
   });
 
+  const port = await availablePort();
+  daemonDataDir = join(scratch, 'daemon-data');
+  daemonBaseUrl = `http://127.0.0.1:${port}`;
+  const studio = JSON.parse(
+    run(
+      process.execPath,
+      [entry, 'studio', '--json', '--daemon-url', daemonBaseUrl, '--data-dir', daemonDataDir],
+      { cwd: scratch },
+    ),
+  );
+  if (!studio.url?.startsWith(`${daemonBaseUrl}/?rft=`)) {
+    throw new Error('installed CLI did not return a Studio handoff URL');
+  }
+  const studioResponse = await fetch(daemonBaseUrl);
+  const studioHtml = await studioResponse.text();
+  if (!studioResponse.ok || !studioHtml.includes('<title>Roflock')) {
+    throw new Error('installed daemon did not serve the bundled Studio');
+  }
+  if (studioHtml.includes('fonts.googleapis.com') || studioHtml.includes('fonts.gstatic.com')) {
+    throw new Error('bundled Studio makes a remote font request');
+  }
+  run(
+    process.execPath,
+    [entry, 'daemon', 'stop', '--daemon-url', daemonBaseUrl, '--data-dir', daemonDataDir],
+    { cwd: scratch },
+  );
+  daemonBaseUrl = undefined;
+
   process.stdout.write(
     `${JSON.stringify({
       package: `${manifest.name}@${version}`,
@@ -126,9 +173,25 @@ try {
         'check',
         'init',
         'mcp-stdio',
+        'studio-http',
       ],
     })}\n`,
   );
 } finally {
+  if (daemonBaseUrl && installedEntry && daemonDataDir) {
+    spawnSync(
+      process.execPath,
+      [
+        installedEntry,
+        'daemon',
+        'stop',
+        '--daemon-url',
+        daemonBaseUrl,
+        '--data-dir',
+        daemonDataDir,
+      ],
+      { cwd: scratch, encoding: 'utf8' },
+    );
+  }
   rmSync(scratch, { recursive: true, force: true });
 }

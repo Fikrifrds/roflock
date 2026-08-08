@@ -34,10 +34,10 @@ function Unauthorized() {
           This browser has no Roflock session token. The daemon prints a one-time link when it
           starts; open that link and the token is stored for next time.
         </p>
-        <pre className="code-block">pnpm url</pre>
+        <pre className="code-block">roflock studio</pre>
         <p className="hint">
-          Run that in the project directory to print the link again. The token lives in{' '}
-          <code>~/.roleflock/session.json</code> and is readable only by your OS user.
+          Run that to start or reconnect to the local daemon and print the private Studio link. The
+          token lives in your Roflock data directory and is readable only by your OS user.
         </p>
       </section>
     </main>

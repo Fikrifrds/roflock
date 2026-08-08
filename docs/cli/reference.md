@@ -118,6 +118,7 @@ repository:
 ```bash
 roflock daemon start
 roflock doctor
+roflock studio
 
 roflock run workflow.roflock \
   --repo /absolute/path/to/repository \
@@ -214,6 +215,15 @@ Listing one or more pending approvals and inspecting a pending approval return
 exit 5 (`Blocked`) even though the command successfully returned data.
 
 ## Daemon lifecycle
+
+```bash
+roflock studio [--json]
+```
+
+Starts or connects to the daemon and prints the private authenticated Studio
+URL. The URL contains the one-time session handoff token; do not paste it into
+logs, issues, or shared terminals. `--json` is intended for a trusted local
+launcher and returns `url`, `baseUrl`, `dataDir`, and daemon ownership.
 
 ```bash
 roflock daemon start [--json]
@@ -384,7 +394,7 @@ automation should use `ROFLOCK_*`.
 Run:
 
 ```bash
-roflock daemon start
+roflock studio
 roflock daemon status
 ```
 

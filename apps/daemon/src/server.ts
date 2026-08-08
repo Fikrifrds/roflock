@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import cookie from '@fastify/cookie';
 import fastify, { type FastifyInstance } from 'fastify';
@@ -40,6 +41,8 @@ export interface ServerOptions {
   ownerToken?: string;
   /** Test/plugin seam for supplying additional local harness drivers. */
   providers?: ProviderRegistry;
+  /** Static Studio bundle. Package builds resolve this beside the daemon bundle. */
+  webDist?: string;
 }
 export interface ServerHandle {
   app: FastifyInstance;
@@ -154,8 +157,15 @@ export async function createServer(options: ServerOptions = {}): Promise<ServerH
         : { ownerId: createHash('sha256').update(ownerToken).digest('hex') }),
     },
   );
-  const webDist = join(process.cwd(), 'apps', 'web', 'dist');
-  if (existsSync(webDist)) {
+  const webDist =
+    options.webDist ??
+    [
+      // The bundled server may live in `dist/daemon` or a shared `dist/chunks`
+      // module. Both resolve through the package's stable `dist/daemon/web`.
+      fileURLToPath(new URL('../daemon/web', import.meta.url)),
+      join(process.cwd(), 'apps', 'web', 'dist'),
+    ].find((candidate) => existsSync(join(candidate, 'index.html')));
+  if (webDist !== undefined) {
     await app.register(statik, { root: webDist, wildcard: false });
     // The UI is a single-page app, so every client route has to resolve to its
     // shell. Without this a bookmarked or refreshed task URL returned the API's

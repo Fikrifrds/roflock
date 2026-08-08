@@ -11,6 +11,7 @@ import { runPassportCli } from './passport-command.js';
 import { runControl, type RuntimeControl } from './runtime-control-command.js';
 import { runEvents, runStatus } from './runtime-inspection-command.js';
 import { runWorkflow } from './runtime-command.js';
+import { runStudio } from './studio-command.js';
 
 export interface CliIo {
   stdout(message: string): void;
@@ -62,6 +63,7 @@ Approvals
   reject <approval-id>              Reject exactly one request
 
 Daemon
+  studio                           Start/connect and print the private Studio URL
   daemon start                      Connect to an existing daemon or start an owned one
   daemon status                     Report stopped, external, owned, or unverified
   daemon stop                       Stop only a daemon that proves CLI ownership
@@ -127,6 +129,7 @@ export function cliAutomationContract() {
       'approve',
       'reject',
       'daemon',
+      'studio',
       'init',
       'doctor',
       'drivers',
@@ -189,6 +192,7 @@ export function runCli(argv: string[], io: CliIo): number {
 
 /** Async entry point for commands that communicate with the local daemon. */
 export async function runCliAsync(argv: string[], io: CliIo): Promise<number> {
+  if (argv[0] === 'studio') return runStudio(argv.slice(1), io);
   if (argv[0] === 'run') return runWorkflow(argv.slice(1), io);
   if (argv[0] === 'status') return runStatus(argv.slice(1), io);
   if (argv[0] === 'events') return runEvents(argv.slice(1), io);
