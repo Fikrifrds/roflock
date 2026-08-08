@@ -122,17 +122,17 @@ become a second runtime or an approval bypass.
 
 ## 6. Product and documentation stream
 
-| Ticket      | State    | Required outcome                                                                                    |
-| ----------- | -------- | --------------------------------------------------------------------------------------------------- |
-| RF-EVO-180  | complete | Visible Roflock launch UI and isolated responsive Playground; commit `5d8b69a`.                     |
-| RF-DOCS-001 | open     | Documentation index and architecture overview with the one-runtime pipeline.                        |
-| RF-DOCS-002 | open     | Language reference for syntax, node kinds, outcomes, loops, authority, diagnostics, and versioning. |
-| RF-DOCS-003 | open     | CLI reference including install, commands, JSON, exit codes, and troubleshooting.                   |
-| RF-DOCS-004 | open     | Local runtime/operator guide: configuration, data, recovery, approvals, evidence, and upgrades.     |
-| RF-DOCS-005 | open     | Playground and Studio guides, including deployment and local handoff boundaries.                    |
-| RF-DOCS-006 | open     | Driver authoring/conformance guide and Codex, Claude, OpenCode, Pi status.                          |
-| RF-DOCS-007 | open     | Open-source contributor, governance, security-reporting, support, and release guides.               |
-| RF-DOCS-008 | open     | End-to-end quick starts validated against a packed artifact and clean checkout.                     |
+| Ticket      | State    | Required outcome                                                                                                                |
+| ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| RF-EVO-180  | complete | Visible Roflock launch UI and isolated responsive Playground; commit `5d8b69a`.                                                 |
+| RF-DOCS-001 | complete | The user-first docs index and architecture guide define surfaces, immutable identity, single runtime, trust, and compatibility. |
+| RF-DOCS-002 | open     | Language reference for syntax, node kinds, outcomes, loops, authority, diagnostics, and versioning.                             |
+| RF-DOCS-003 | open     | CLI reference including install, commands, JSON, exit codes, and troubleshooting.                                               |
+| RF-DOCS-004 | open     | Local runtime/operator guide: configuration, data, recovery, approvals, evidence, and upgrades.                                 |
+| RF-DOCS-005 | open     | Playground and Studio guides, including deployment and local handoff boundaries.                                                |
+| RF-DOCS-006 | open     | Driver authoring/conformance guide and Codex, Claude, OpenCode, Pi status.                                                      |
+| RF-DOCS-007 | open     | Open-source contributor, governance, security-reporting, support, and release guides.                                           |
+| RF-DOCS-008 | open     | End-to-end quick starts validated against a packed artifact and clean checkout.                                                 |
 
 Documentation examples are executable fixtures where practical. A command that
 has not passed package/E2E verification must not be presented as shipped.

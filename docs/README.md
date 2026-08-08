@@ -1,44 +1,53 @@
-# Roflock documentation index
+# Roflock documentation
 
-Roflock is evolving from the RoleFlock delivery-assurance implementation into an
-open-source workflow language, compiler, and governed graph runtime. Both
-generations of documentation live here on purpose: the RoleFlock-era documents
-record decisions the current runtime still depends on, so they are retained as
-history rather than deleted.
+Roflock is an Apache-2.0 executable workflow language and governed local runtime
+for AI coding teams. Start with the user-facing guides below; implementation
+plans and RoleFlock-era documents remain available as design history.
 
-## Read order for implementation work
+## Start here
 
-1. [`../AGENTS.md`](../AGENTS.md) — master instruction and evolution guardrails
-2. [`prd/ROFLOCK_OPEN_SOURCE_PRD_v1.0.md`](prd/ROFLOCK_OPEN_SOURCE_PRD_v1.0.md) — target product
-3. [`implementation/ROFLOCK_EVOLUTION_IMPLEMENTATION_PLAN_v1.0.md`](implementation/ROFLOCK_EVOLUTION_IMPLEMENTATION_PLAN_v1.0.md) — phase sequence R0–R10
-4. [`implementation/ROFLOCK_REPO_AUDIT.md`](implementation/ROFLOCK_REPO_AUDIT.md) — **what the checkout actually contains**
-5. [`implementation/ROFLOCK_EXISTING_REPO_MAPPING_v1.0.md`](implementation/ROFLOCK_EXISTING_REPO_MAPPING_v1.0.md) — planned classification
-6. [`implementation/ROFLOCK_MIGRATION_BACKLOG_v1.0.md`](implementation/ROFLOCK_MIGRATION_BACKLOG_v1.0.md) — atomic tickets
-7. [`adr/`](adr/) — accepted architecture decisions
-8. [`rfc/`](rfc/) — proposed contracts awaiting acceptance
+| Guide                                                                                  | Use it for                                          |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| [Architecture](architecture.md)                                                        | One-runtime pipeline, trust boundaries, package map |
+| [Public-alpha completion](implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md) | Exact readiness authority and release gates         |
+| [Control-surface API](integrations/control-surface-api.md)                             | Authenticated local client integration              |
+| [Harness invocation](integrations/harness-invocation.md)                               | Codex, Claude Code, OpenCode, Pi/shell entry points |
+| [Authentication](integrations/authentication.md)                                       | Harness-owned login and BYOK boundaries             |
+| [CLI exit codes](cli/exit-codes.md)                                                    | CI-safe process and JSON error behavior             |
+| [Threat model](security/threat-model.md)                                               | Local daemon, repository, provider, evidence risks  |
+| [Playground boundary](security/playground-local-runtime.md)                            | Why the public site cannot run local agents         |
+| [Crash recovery](crash-recovery.md)                                                    | Operator recovery and safe continuation             |
 
-The audit outranks the planning documents. Where a plan describes the repository
-differently from the code, the audit records the discrepancy and the code wins.
+Language, complete CLI, runtime/operator, Studio/Playground, driver-authoring,
+contributor/governance/release, and executable quick-start guides are tracked as
+RF-DOCS-002 through RF-DOCS-008 in the completion plan and linked here as they
+land.
 
-## Authoritative
+## Public contracts
 
-| Path                       | Contents                                                        |
-| -------------------------- | --------------------------------------------------------------- |
-| `prd/`                     | Roflock open-source PRD and AI build backlog                    |
-| `implementation/`          | Migration plan, repo audit, mapping, backlog, foundation report |
-| `rfc/`                     | RFC-001 Graph IR v1 (proposed — implementation baseline for R2) |
-| `adr/ADR-001..019`         | Accepted decisions; all still binding                           |
-| `security/threat-model.md` | Security invariants; survive the rebrand unchanged              |
-| `test-plans/`              | Manual checklists, readiness and exit gates                     |
-| `benchmarks/`              | Verified-fix benchmark baseline                                 |
-| `public/`                  | User-facing copy; needs Roflock rebrand in R1                   |
-| `crash-recovery.md`        | Operator recovery procedure                                     |
+- [RFC-001: Graph IR v1](rfc/RFC-001-ROFLOCK-GRAPH-IR-V1.md)
+- [RFC-002: Roflock MCP v1](rfc/RFC-002-ROFLOCK-MCP-V1.md)
+- `roflock help --json` — installed CLI automation and exit-code contract
+- authenticated `GET /api/control/v1` — local control-surface discovery
 
-## Historical (retained, not current direction)
+## Implementation authority
 
-`product/roleflock_*` — RoleFlock-era PRD baseline, implementation and delivery
-assurance plans, phase-0 backlog and checklist, positioning, release readiness
-and GTM, and the beyond-coding thesis. These explain _why_ the current runtime
-looks the way it does. Several remain the only written record of behaviour the
-migration is required to preserve, so they are cited by the audit rather than
-superseded by it.
+Read in this order before changing architecture:
+
+1. root [`AGENTS.md`](../AGENTS.md);
+2. [open-source PRD](prd/ROFLOCK_OPEN_SOURCE_PRD_v1.0.md);
+3. [evolution plan](implementation/ROFLOCK_EVOLUTION_IMPLEMENTATION_PLAN_v1.0.md);
+4. [repository audit](implementation/ROFLOCK_REPO_AUDIT.md);
+5. [public-alpha completion plan](implementation/ROFLOCK_PUBLIC_ALPHA_COMPLETION_PLAN_v1.0.md);
+6. accepted [RFCs](rfc/) and relevant [ADRs](adr/).
+
+The repository audit and completion plan outrank older planning claims when they
+disagree with the checkout. No phase is complete from narrative alone; tests,
+commits, compatibility impact, and unresolved risk are required.
+
+## Historical material
+
+`docs/product/roleflock_*` and the `roflock-ai-coding-handoff-v1.0/` source
+handoff are retained intentionally. They explain the proven runtime/governance
+foundation and migration intent, but are not current installation or product
+documentation.
