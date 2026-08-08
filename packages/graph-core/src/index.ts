@@ -8,7 +8,8 @@ export type GraphMode = 'direct' | 'fast' | 'standard' | 'bug_fix' | 'critical';
  * Node ids stay distinct from roles so a graph may run the same role twice —
  * for example a second writer pass after a failed verification.
  */
-export type WorkflowRole = 'planner' | 'reviewer' | 'writer' | 'test' | 'verifier' | 'accept';
+export type WorkflowRole =
+  'planner' | 'reviewer' | 'writer' | 'test' | 'action' | 'verifier' | 'accept';
 
 export type NodeKind =
   | 'agent'
@@ -50,6 +51,19 @@ export interface GraphNode {
   maxAttempts?: number;
   /** Distinct read-only assignment for parallel agents sharing the same role/model. */
   focus?: string;
+  /** The authored job description supplied to this exact agent node. */
+  objective?: string;
+  /** Exact deterministic operation authored for a check or action node. */
+  operation?: {
+    driver: 'command' | 'test';
+    command: string;
+  };
+  /** Human approval copy and the decisions the runtime is allowed to accept. */
+  human?: {
+    requestType: 'approval';
+    title: string;
+    allowedDecisions: ['approve', 'reject'];
+  };
   /**
    * Enforceable authority identity for delivery-assurance graphs. Omitted only
    * by legacy graph versions whose historical prompts predate Role Protocol.

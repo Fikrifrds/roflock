@@ -1548,3 +1548,35 @@ targeted daemon snapshot/template/diagram tests pass 18/18. The full daemon suit
 passes 183 non-listener tests in the sandbox, and the seven preview-listener
 tests pass outside it; the three sandbox failures are the known local-listener
 restriction rather than product failures.
+
+---
+
+## 26. Public-alpha correction — authored semantics reach execution
+
+RF-EVO-182 closes the semantic-loss cases left by the original Graph IR bridge.
+`WorkflowGraph` nodes now carry the authored agent objective, exact deterministic
+check/action command, and human approval title/decision contract. The
+orchestrator includes objectives in the specific node prompt, selects an authored
+check unless the task has an explicit override, executes command actions through
+the argv-based command runner without a shell, and emits the authored human gate
+metadata before waiting for a decision.
+
+The bridge now fails closed for semantics the runtime cannot yet represent:
+model-call output schemas, agent context/structured-output policies, node
+timeouts, non-command action drivers, action args/effects without an enforceable
+approval mapping, non-command/test checks, check args, and human gates other than
+plain approve/reject. These inputs previously risked compiling into a graph that
+quietly did something else.
+
+The compiled built-in plan-review node is now treated as the human node written
+in source; it no longer invokes an extra model reviewer before asking for plan
+approval. Legacy hard-coded graph versions have no authored human metadata and
+retain their historical reviewer path. Daemon shutdown also ignores late
+background completions after SQLite closes, preserving the existing restart
+contract without unhandled database errors.
+
+Verification: graph-core 11/11, graph-runtime 87/87, and daemon 186/189 pass in
+the sandbox. The remaining three are the preview listener restriction and the
+same review-app package passes 7/7 outside the sandbox. Tests cover semantic
+source differences, action lowering, custom-human rejection, authored-command
+selection, approval rejection, and forced-restart recovery.

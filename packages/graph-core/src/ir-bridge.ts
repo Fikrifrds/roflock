@@ -136,6 +136,8 @@ function dispatchRole(
   switch (node.kind) {
     case 'check':
       return 'test';
+    case 'action':
+      return 'action';
     case 'human':
       // A human node that can end the run in an accepted state is the accept
       // gate; one in the middle of a flow is a reviewer.
@@ -274,13 +276,105 @@ export function graphIrToWorkflowGraph(ir: GraphIR): BridgeResult {
 
   const nodes: GraphNode[] = [];
   for (const node of ir.nodes) {
+    if (node.timeout !== undefined) {
+      diagnostics.push(
+        error(
+          DiagnosticCode.UnknownNode,
+          `Node '${node.id}' declares a timeout, which the current runtime cannot enforce faithfully.`,
+        ),
+      );
+      continue;
+    }
+    if (node.kind === 'model_call') {
+      diagnostics.push(
+        error(
+          DiagnosticCode.UnknownNode,
+          `Node '${node.id}' is a model_call with a structured output contract, which the current runtime cannot enforce faithfully.`,
+        ),
+      );
+      continue;
+    }
+    if (
+      node.kind === 'agent' &&
+      (node.agent.contextPolicyRef !== undefined || node.agent.structuredOutputSchema !== undefined)
+    ) {
+      diagnostics.push(
+        error(
+          DiagnosticCode.UnknownNode,
+          `Agent '${node.id}' uses a context or structured-output contract that the current runtime cannot enforce faithfully.`,
+        ),
+      );
+      continue;
+    }
+    if (node.kind === 'check' && node.check.driver !== 'command' && node.check.driver !== 'test') {
+      diagnostics.push(
+        error(
+          DiagnosticCode.UnknownNode,
+          `Check '${node.id}' uses unsupported '${node.check.driver}' driver; supported deterministic drivers: command, test.`,
+        ),
+      );
+      continue;
+    }
+    if (node.kind === 'check' && node.check.args !== undefined) {
+      diagnostics.push(
+        error(
+          DiagnosticCode.UnknownNode,
+          `Check '${node.id}' declares driver args that the current runtime cannot interpret faithfully.`,
+        ),
+      );
+      continue;
+    }
+    if (node.kind === 'action') {
+      if (node.action.driver !== 'command') {
+        diagnostics.push(
+          error(
+            DiagnosticCode.UnknownNode,
+            `Action '${node.id}' uses unsupported '${node.action.driver}' driver; the current runtime supports command actions only.`,
+          ),
+        );
+        continue;
+      }
+      if (node.action.args !== undefined || (node.effects?.length ?? 0) > 0) {
+        diagnostics.push(
+          error(
+            DiagnosticCode.UnknownNode,
+            `Action '${node.id}' declares args or effects whose approval semantics the current runtime cannot enforce faithfully.`,
+          ),
+        );
+        continue;
+      }
+      if (node.action.operation.trim() === '') {
+        diagnostics.push(
+          error(DiagnosticCode.UnknownNode, `Action '${node.id}' declares no command to run.`),
+        );
+        continue;
+      }
+    }
+    if (node.kind === 'human') {
+      const decisions = [...node.human.allowedDecisions].sort();
+      const approvalOnly =
+        node.human.requestType === 'approval' &&
+        decisions.length === 2 &&
+        decisions[0] === 'approve' &&
+        decisions[1] === 'reject' &&
+        node.human.requiredArtifactTypes === undefined;
+      if (!approvalOnly) {
+        diagnostics.push(
+          error(
+            DiagnosticCode.UnknownNode,
+            `Human node '${node.id}' is not a plain approve/reject gate; clarification, custom decisions, and required-artifact prompts are not yet executable.`,
+          ),
+        );
+        continue;
+      }
+    }
     const kind = KINDS[node.kind];
     const role = dispatchRole(node, ir, downstreamOfCheck);
     if (kind === undefined || role === undefined) {
       diagnostics.push(
         error(
           DiagnosticCode.UnknownNode,
-          `Node '${node.id}' has kind '${node.kind}', which the current runtime cannot execute. Supported kinds: agent, model_call, check, action, human.`,
+          `Node '${node.id}' has kind '${node.kind}', which the current runtime cannot execute. Supported kinds: agent, check, command action, approve/reject human.`,
         ),
       );
       continue;
@@ -314,6 +408,27 @@ export function graphIrToWorkflowGraph(ir: GraphIR): BridgeResult {
       // distinguished from, and giving it one would put a line in its prompt
       // that the built-in templates never sent.
       ...(siblings.has(node.id) ? { focus: objectiveOf(node) } : {}),
+      ...(node.kind === 'agent' ? { objective: node.agent.objective } : {}),
+      ...(node.kind === 'check'
+        ? {
+            operation: {
+              driver: node.check.driver as 'command' | 'test',
+              command: node.check.operation,
+            },
+          }
+        : {}),
+      ...(node.kind === 'action'
+        ? { operation: { driver: 'command' as const, command: node.action.operation } }
+        : {}),
+      ...(node.kind === 'human'
+        ? {
+            human: {
+              requestType: 'approval' as const,
+              title: node.human.title,
+              allowedDecisions: ['approve', 'reject'] as ['approve', 'reject'],
+            },
+          }
+        : {}),
       // Authority enforcement is opt-in and explicit: a role must declare the
       // profile it answers to. Deriving it from the role's *name* would mean a
       // role innocently called `planner` silently acquired artifact gates its

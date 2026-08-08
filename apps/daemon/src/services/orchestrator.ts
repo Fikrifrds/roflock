@@ -236,6 +236,17 @@ interface VerificationSpec {
   label: string;
 }
 
+/** Selects an explicit task override, then the command authored in `.roflock`. */
+export function configuredVerificationSpec(
+  taskCommand?: string,
+  authoredCommand?: string,
+): VerificationSpec | undefined {
+  const selected = taskCommand?.trim() || authoredCommand?.trim();
+  if (!selected) return undefined;
+  const [command, ...args] = parseCommandArgv(selected);
+  return { command, args, label: selected };
+}
+
 export interface ProviderRefusal {
   providerId: string;
   providerDisplayName: string;
@@ -402,6 +413,10 @@ export class Orchestrator {
       const prepared = await this.prepareRun(task, repositoryPath, baseBranch);
       void this.executeGraph(task, prepared, controller)
         .catch((error: unknown) => {
+          // Closing the daemon is crash/restart semantics: active rows stay as
+          // they are and the next boot projects them to `interrupted`. A late
+          // waiter must neither rewrite that history nor use a closed handle.
+          if (!this.db.open) return;
           const message = error instanceof Error ? error.message : 'Task execution failed';
           if (controller.signal.aborted) {
             // Stopped by the operator. Settle on a terminal state rather than
@@ -416,7 +431,10 @@ export class Orchestrator {
         })
         .finally(() => {
           this.active.delete(task.id);
-          this.concurrency.release(task.id, now());
+          // A process shutdown deliberately leaves active graph rows for boot
+          // reconciliation. A late promise must not touch SQLite after the
+          // server has closed it.
+          if (this.db.open) this.concurrency.release(task.id, now());
         });
       return { graphRunId: prepared.graphRunId };
     } catch (error) {
@@ -1258,18 +1276,21 @@ export class Orchestrator {
       });
 
       const route =
-        role === 'planner' || role === 'reviewer' || role === 'writer' || role === 'verifier'
+        node.kind !== 'human_approval' &&
+        (role === 'planner' || role === 'reviewer' || role === 'writer' || role === 'verifier')
           ? await this.resolveRoute(role, task.id)
           : undefined;
 
       const phase =
         role === 'test'
           ? 'running_tests'
-          : role === 'writer'
-            ? 'writing'
-            : role === 'accept' || role === 'reviewer'
-              ? 'awaiting_confirmation'
-              : 'reasoning';
+          : role === 'action'
+            ? 'running_tool'
+            : role === 'writer'
+              ? 'writing'
+              : role === 'accept' || role === 'reviewer'
+                ? 'awaiting_confirmation'
+                : 'reasoning';
       this.updateExecution(task, graphRunId, nodeRunId, role, phase, route);
       this.appendEvent(task.id, `node.${role}.started`, {
         graphRunId,
@@ -1415,6 +1436,7 @@ export class Orchestrator {
           role === 'verifier'
             ? [
                 `VERIFIER for RoleFlock task "${task.title}" (read-only). Do not modify files.`,
+                node.objective ? `Authored objective: ${node.objective}` : '',
                 "Judge whether the writer's change actually satisfies the brief.",
                 'End your reply with exactly one line:',
                 '  VERDICT: PASS',
@@ -1426,6 +1448,7 @@ export class Orchestrator {
             : [
                 `PLANNER for RoleFlock task "${task.title}" (read-only).`,
                 'Do not modify files.',
+                node.objective ? `Authored objective: ${node.objective}` : '',
                 node.focus ? `Your independent swarm assignment: ${node.focus}` : '',
                 node.authorityRole === 'planner' && contract !== undefined
                   ? plannerStructuredOutputPrompt(contract)
@@ -1532,6 +1555,48 @@ export class Orchestrator {
           details: output || task.brief,
           createdAt: now(),
         });
+      } else if (node.kind === 'human_approval' && role !== 'accept' && node.human !== undefined) {
+        const confirmation = createConfirmationRequest({
+          taskId: task.id,
+          graphRunId,
+          nodeRunId,
+          requestType: 'workflow_gate',
+          rationale: node.human.title,
+          exactAction: {
+            kind: 'workflow_gate',
+            verb: 'approve',
+            target: node.id,
+            sideEffectClass: 'workflow_transition',
+            metadata: { allowedDecisions: node.human.allowedDecisions },
+          },
+          riskClass: task.risk === 'critical' ? 'high' : task.risk,
+          stateHash: baseCommit,
+        });
+        const alreadyDecided = this.confirmations
+          .listByTask(task.id)
+          .find(
+            (candidate) =>
+              candidate.status === 'approved' &&
+              candidate.requestType === confirmation.requestType &&
+              candidate.fingerprint === confirmation.fingerprint,
+          );
+        if (alreadyDecided === undefined) {
+          this.confirmations.create(confirmation);
+          this.setTaskState(task.id, 'awaiting_confirmation');
+          this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation');
+          this.bus.publish('approval.requested', confirmation);
+          const decision = await this.waitForConfirmation(confirmation.id, controller.signal);
+          if (decision === 'rejected') {
+            throw new Error(`Confirmation rejected: ${node.human.title}`);
+          }
+        } else {
+          this.appendEvent(task.id, 'confirmation.reused', {
+            graphRunId,
+            nodeRunId,
+            confirmationId: alreadyDecided.id,
+            stateHash: alreadyDecided.stateHash,
+          });
+        }
       } else if (role === 'reviewer') {
         if (route) {
           const invoked = await this.invokeRole({
@@ -1540,7 +1605,14 @@ export class Orchestrator {
             graphRunId,
             nodeRunId,
             invocationId,
-            prompt: `Review the proposed source-code change and confirm whether its repository scope is appropriate.\n\n${compiled.promptBlock}`,
+            prompt: [
+              node.objective ? `Authored objective: ${node.objective}` : '',
+              'Review the proposed source-code change and confirm whether its repository scope is appropriate.',
+              '',
+              compiled.promptBlock,
+            ]
+              .filter(Boolean)
+              .join('\n'),
             cwd: worktreePath,
             signal: controller.signal,
           });
@@ -1702,6 +1774,7 @@ export class Orchestrator {
                 pinnedPlan !== undefined
                   ? executorInstructionBlock(pinnedPlan)
                   : 'Implement the smallest sufficient bug fix in this repository worktree.',
+                node.objective ? `Authored objective: ${node.objective}` : '',
                 `Title: ${task.title}`,
                 `Brief: ${task.brief}`,
                 `Expected: ${task.expectedBehaviour ?? 'n/a'}`,
@@ -1798,6 +1871,50 @@ export class Orchestrator {
           memLease.release();
           this.worktrees.setWriterLease(task.id, null);
         }
+      } else if (role === 'action') {
+        if (node.operation === undefined) {
+          throw new Error(`Action node ${node.id} has no executable operation`);
+        }
+        const [command, ...args] = parseCommandArgv(node.operation.command);
+        this.publishLiveProgress(nodeRunId, {
+          activity: `Running authored action ${node.id}`,
+          append: `$ ${node.operation.command}\n`,
+        });
+        try {
+          const result = await runCommand({
+            command,
+            args,
+            cwd: worktreePath,
+            sandboxRoot: worktreePath,
+            timeoutMs: verificationTimeoutMs(),
+            onChunk: (_stream, chunk) => this.publishLiveProgress(nodeRunId, { append: chunk }),
+          });
+          nodeOutput = [result.stdout, result.stderr].filter(Boolean).join('\n');
+          this.evidence.addFinding({
+            id: randomUUID(),
+            taskId: task.id,
+            nodeRunId,
+            severity: 'info',
+            summary: `Authored action completed: ${node.operation.command}`,
+            details: nodeOutput || 'Command completed without output.',
+            createdAt: now(),
+          });
+        } catch (error) {
+          if (!(error instanceof CommandError)) throw error;
+          this.evidence.addFinding({
+            id: randomUUID(),
+            taskId: task.id,
+            nodeRunId,
+            severity: 'error',
+            summary: `Authored action failed: ${node.operation.command}`,
+            details: [error.result.stdout, error.result.stderr].filter(Boolean).join('\n'),
+            createdAt: now(),
+          });
+          throw new NodeFailure(
+            `Authored action failed (${node.operation.command})`,
+            'verification_failed',
+          );
+        }
       } else if (role === 'test') {
         // Assurance path: when the task carries authorised intent, an approved
         // plan, and a frozen specification, the verdict comes from a clean
@@ -1833,7 +1950,11 @@ export class Orchestrator {
             );
           }
         } else {
-          const verification = await this.resolveVerification(task, worktreePath);
+          const verification = await this.resolveVerification(
+            task,
+            worktreePath,
+            node.operation?.command,
+          );
           this.publishLiveProgress(nodeRunId, {
             activity: `Running ${verification.label}`,
             append: `$ ${verification.command}${verification.args.length ? ` ${verification.args.join(' ')}` : ''}\n`,
@@ -1898,6 +2019,14 @@ export class Orchestrator {
           }
         }
       } else if (role === 'accept') {
+        if (node.human !== undefined) {
+          this.appendEvent(task.id, 'human.approval_requested', {
+            graphRunId,
+            nodeRunId,
+            title: node.human.title,
+            allowedDecisions: node.human.allowedDecisions,
+          });
+        }
         this.setTaskState(task.id, 'awaiting_acceptance');
         this.updateExecution(task, graphRunId, nodeRunId, role, 'awaiting_confirmation');
         // `resolveAcceptance` issues the passport, so it is already durable by
@@ -2593,7 +2722,11 @@ export class Orchestrator {
     this.bus.publish('control.force_killed', { taskId, nodeRunId });
   }
 
-  private async resolveVerification(task: Task, worktreePath: string): Promise<VerificationSpec> {
+  private async resolveVerification(
+    task: Task,
+    worktreePath: string,
+    authoredCommand?: string,
+  ): Promise<VerificationSpec> {
     if (this.forceFake) {
       return {
         command: process.execPath,
@@ -2601,15 +2734,8 @@ export class Orchestrator {
         label: 'simulation-check',
       };
     }
-    if (task.verificationCommand?.trim()) {
-      const parts = parseCommandArgv(task.verificationCommand);
-      const command = parts[0];
-      return {
-        command,
-        args: parts.slice(1),
-        label: task.verificationCommand.trim(),
-      };
-    }
+    const configured = configuredVerificationSpec(task.verificationCommand, authoredCommand);
+    if (configured !== undefined) return configured;
     const suggested = await discoverVerificationCommand(worktreePath);
     if (suggested) {
       const parts = parseCommandArgv(suggested);

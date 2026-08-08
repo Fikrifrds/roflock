@@ -117,6 +117,63 @@ describe('bridging compiled .roflock into the runtime graph', () => {
     expect(graph.nodes.filter((n) => n.writer)).toHaveLength(1);
   });
 
+  it('carries authored objectives, commands, and human copy into executable nodes', () => {
+    const graph = graphOf(LINEAR);
+
+    expect(graph.nodes.find((n) => n.id === 'Builder')).toMatchObject({
+      objective: 'make the change',
+    });
+    expect(graph.nodes.find((n) => n.id === 'Tests')).toMatchObject({
+      operation: { driver: 'command', command: 'npm test' },
+    });
+    expect(graph.nodes.find((n) => n.id === 'Accept')).toMatchObject({
+      human: {
+        requestType: 'approval',
+        title: 'Accept',
+        allowedDecisions: ['approve', 'reject'],
+      },
+    });
+  });
+
+  it('keeps semantically different source as different executable behavior', () => {
+    const first = graphOf(LINEAR);
+    const second = graphOf(
+      LINEAR.replace('make the change', 'make a different change').replace(
+        'npm test',
+        'npm run test:unit',
+      ),
+    );
+
+    expect(second.nodes.find((n) => n.id === 'Builder')!.objective).not.toBe(
+      first.nodes.find((n) => n.id === 'Builder')!.objective,
+    );
+    expect(second.nodes.find((n) => n.id === 'Tests')!.operation).not.toEqual(
+      first.nodes.find((n) => n.id === 'Tests')!.operation,
+    );
+  });
+
+  it('bridges a command action into an executable deterministic operation', () => {
+    const graph = graphOf(`
+      workflow WithAction { version "1.0.0" }
+      role implementer { write }
+      agent Builder { role implementer objective "build" }
+      action Format { run "npm run format" }
+      check Tests { run "npm test" required }
+      human Accept
+      flow {
+        Builder -> Format
+        Format -> Tests
+        Tests.pass -> Accept
+      }
+    `);
+
+    expect(graph.nodes.find((n) => n.id === 'Format')).toMatchObject({
+      role: 'action',
+      kind: 'command',
+      operation: { driver: 'command', command: 'npm run format' },
+    });
+  });
+
   it('maps a bounded loop to a typed failure edge behind the repair gate', () => {
     const graph = graphOf(REPAIR_LOOP);
     const repair = graph.edges.find((e) => e.from === 'Tests' && e.to === 'Builder')!;
@@ -289,6 +346,17 @@ describe('executing compiled .roflock through runGraph', () => {
 });
 
 describe('the bridge fails closed', () => {
+  it('rejects custom human decisions the runtime cannot represent', () => {
+    const { bridged } = compileToRuntimeGraph(
+      LINEAR.replace('human Accept', 'human Accept { decisions ship, revise }'),
+    );
+
+    expect(bridged.graph).toBeUndefined();
+    expect(bridged.diagnostics.some((d) => d.message.includes('plain approve/reject gate'))).toBe(
+      true,
+    );
+  });
+
   it('rejects a graph the runtime validator will not accept', () => {
     // Two concurrent writers: the IR validator catches this first, so reach the
     // bridge with hand-built IR that skipped compilation.

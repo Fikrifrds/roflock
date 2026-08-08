@@ -37,14 +37,14 @@ that those external actions have happened.
 
 These findings take precedence over milestone completion claims.
 
-| Ticket     | State    | Required outcome                                                                                                                                                                                        |
-| ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RF-EVO-181 | complete | Task creation atomically stores source, Graph IR, executable graph, semantic identity, and graph integrity hash. Upgrades freeze pre-snapshot tasks once; later template edits cannot rewrite them.     |
-| RF-EVO-182 | open     | Lower every supported v0.1 node semantic faithfully. Agent objectives, check operations, action operations, and human metadata must either execute as authored or fail compilation/bridging explicitly. |
-| RF-EVO-183 | open     | Remove the built-in `GraphMode` ceiling from new workflow execution while preserving all historical graph versions.                                                                                     |
-| RF-EVO-184 | open     | Route production agent turns through `AgentDriver`; `ProviderAdapter` remains a compatibility wrapper, not the runtime contract.                                                                        |
-| RF-EVO-185 | open     | Persist driver session/resume identity and report cancellation only at the guarantee the selected driver can prove.                                                                                     |
-| RF-EVO-186 | open     | Add end-to-end proof that two semantically different sources cannot collapse to the same executable behavior or mutable pin.                                                                            |
+| Ticket     | State    | Required outcome                                                                                                                                                                                                                              |
+| ---------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RF-EVO-181 | complete | Task creation atomically stores source, Graph IR, executable graph, semantic identity, and graph integrity hash. Upgrades freeze pre-snapshot tasks once; later template edits cannot rewrite them.                                           |
+| RF-EVO-182 | complete | Runtime nodes carry authored objectives, exact check/action commands, and approval metadata. Supported commands execute without a shell; unsupported driver, schema, timeout, effect, and custom-decision semantics fail bridging explicitly. |
+| RF-EVO-183 | open     | Remove the built-in `GraphMode` ceiling from new workflow execution while preserving all historical graph versions.                                                                                                                           |
+| RF-EVO-184 | open     | Route production agent turns through `AgentDriver`; `ProviderAdapter` remains a compatibility wrapper, not the runtime contract.                                                                                                              |
+| RF-EVO-185 | open     | Persist driver session/resume identity and report cancellation only at the guarantee the selected driver can prove.                                                                                                                           |
+| RF-EVO-186 | open     | Add end-to-end proof that two semantically different sources cannot collapse to the same executable behavior or mutable pin.                                                                                                                  |
 
 The implementation order is 181 → 182 → 183 → 184 → 185 → 186. Each ticket
 must preserve the single `runGraph` runtime and pass its targeted tests before a

@@ -54,6 +54,7 @@ export const UsageConfidenceSchema = z.enum(['exact', 'provider_reported', 'esti
 export type UsageConfidence = z.infer<typeof UsageConfidenceSchema>;
 
 export const ConfirmationRequestTypeSchema = z.enum([
+  'workflow_gate',
   'clarify_requirement',
   'expand_scope',
   'write_path',
