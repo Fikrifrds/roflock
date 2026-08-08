@@ -29,7 +29,6 @@ function wellBehavedAdapter(): ProviderAdapter {
   return {
     id: 'codex-like',
     capabilities: CAPABILITIES,
-    // eslint-disable-next-line @typescript-eslint/require-await
     async *invoke(request: InvocationRequest): AsyncIterable<InvocationEvent> {
       yield { type: 'invocation.started', invocationId: request.invocationId };
       yield { type: 'model.output.delta', text: `working on: ${request.prompt}` };
@@ -59,7 +58,6 @@ describe('an adapter presented as a driver', () => {
   it('still passes when the adapter reports usage', async () => {
     const withUsage: ProviderAdapter = {
       ...wellBehavedAdapter(),
-      // eslint-disable-next-line @typescript-eslint/require-await
       async *invoke(request: InvocationRequest): AsyncIterable<InvocationEvent> {
         yield { type: 'invocation.started', invocationId: request.invocationId };
         yield { type: 'usage.updated', usage: { inputTokens: 5, outputTokens: 7 } };
@@ -120,7 +118,6 @@ describe('an adapter presented as a driver', () => {
   it("passes even when the adapter would ignore its envelope, because conformance's probe never reaches it", async () => {
     const disobedient: ProviderAdapter = {
       ...wellBehavedAdapter(),
-      // eslint-disable-next-line @typescript-eslint/require-await
       async *invoke(request: InvocationRequest): AsyncIterable<InvocationEvent> {
         yield { type: 'invocation.started', invocationId: request.invocationId };
         yield { type: 'invocation.completed', output: 'wrote anyway' };
