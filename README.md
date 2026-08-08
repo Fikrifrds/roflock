@@ -1,24 +1,25 @@
-# RoleFlock
+# Roflock
 
-**RoleFlock by Mlola** — local-first delivery assurance for AI-generated software changes.
+**AI coding teams as code.**
 
-Use any supported coding agent. RoleFlock is evolving into the independent authority that
-binds authorised intent, a planner-owned execution plan, independent verification, policy,
-and human acceptance to the exact change that is allowed to ship.
+Roflock orchestrates the coding agents you already use. Define the workflow once
+— planning, review, deterministic checks, bounded retries, human approval — and
+run it with Codex, Claude Code, Cursor, or your own harness.
 
-- Public site: https://roleflock.com
+Roflock does not replace your coding agent. The harness keeps its own agent
+loop, file editing, tools, and provider authentication. Roflock owns everything
+around it: workflow definition, graph orchestration, role assignment, retry
+budgets, verification, worktree coordination, policy, approvals, and evidence.
+
 - Local UI (dev): http://127.0.0.1:5173
 - Local daemon: http://127.0.0.1:4178
+- Licence: [Apache-2.0](LICENSE)
 
-## Status: reliable local beta
+## Status
 
-The current beta implements the governed execution foundation. The delivery-assurance
-architecture is now in execution; see
-[`docs/product/roleflock_delivery_assurance_implementation_plan_v1.0.md`](docs/product/roleflock_delivery_assurance_implementation_plan_v1.0.md).
-
-See [`docs/test-plans/mvp-readiness.md`](docs/test-plans/mvp-readiness.md) for the Public MVP exit-gate checklist.
-
-Implemented and covered by automated tests:
+Roflock is evolving from RoleFlock, a working local-first delivery-assurance
+product. The governed runtime below is **implemented and covered by automated
+tests today**:
 
 - Verified bug-fix flow (planner → approval → writer → verification → verifier → accept)
 - Per-role provider and model choice with automatic failover when a quota runs out
@@ -34,8 +35,17 @@ Implemented and covered by automated tests:
 - Localhost-only bind, file-delivered session token, CSRF, origin allow-list, no shell endpoint
 - Version/update check without repository data
 
-Manual checklist: [`docs/test-plans/manual-test-checklist.md`](docs/test-plans/manual-test-checklist.md)  
-Verified Fix first run: [`docs/product/verified-fix-onboarding.md`](docs/product/verified-fix-onboarding.md)  
+The parts that make it _Roflock_ are **not built yet**: the `.roflock` language,
+the compiler, canonical Graph IR, the public AgentDriver contract, and the
+Playground. Workflows are still hard-coded TypeScript graphs. Do not read the
+positioning above as a description of shipped features.
+
+Where the migration stands, and what is being preserved rather than rewritten:
+[`docs/implementation/ROFLOCK_REPO_AUDIT.md`](docs/implementation/ROFLOCK_REPO_AUDIT.md).
+Read order and the full document index: [`docs/README.md`](docs/README.md).
+
+Manual checklist: [`docs/test-plans/manual-test-checklist.md`](docs/test-plans/manual-test-checklist.md)
+Verified Fix first run: [`docs/product/verified-fix-onboarding.md`](docs/product/verified-fix-onboarding.md)
 Threat model: [`docs/security/threat-model.md`](docs/security/threat-model.md)
 
 ## Setup
@@ -44,7 +54,7 @@ Requires Node 24+ and pnpm 11+.
 
 For live agent runs, install and authenticate at least one writer-capable CLI:
 Codex or Cursor Agent. The Providers page reports a missing CLI as unavailable;
-RoleFlock no longer substitutes a generated markdown file for a live code change.
+Roflock does not substitute a generated markdown file for a live code change.
 
 ```bash
 pnpm install
@@ -75,22 +85,49 @@ That `rft` parameter is the one-time handoff of the session token. The UI stores
 and strips it from the address bar; after the first visit a plain
 `http://127.0.0.1:5173` works. Lost the link? Run `pnpm url`.
 
-The token lives in `~/.roleflock/session.json` (mode `0600`) and is stable across
-restarts, so the link keeps working. `ROLEFLOCK_ROTATE_TOKEN=1 pnpm dev` mints a new
+The token lives in `<data dir>/session.json` (mode `0600`) and is stable across
+restarts, so the link keeps working. `ROFLOCK_ROTATE_TOKEN=1 pnpm dev` mints a new
 one and invalidates the old. The daemon never serves the token over HTTP — loopback is
 shared with every other OS account on the machine, so the file mode is what keeps a
 second local user out.
 
-State: `~/.roleflock/roleflock.db` (override with `ROLEFLOCK_DATA_DIR`).
+State lives in `<data dir>/roleflock.db`. A new install uses `~/.roflock`; an
+install created before the rename keeps using `~/.roleflock` and is never moved.
+Override with `ROFLOCK_DATA_DIR`.
 
 If port `4178` is occupied, choose another one consistently for daemon and Vite:
 
 ```bash
-ROLEFLOCK_PORT=4312 pnpm dev
-ROLEFLOCK_PORT=4312 pnpm dev:web
+ROFLOCK_PORT=4312 pnpm dev
+ROFLOCK_PORT=4312 pnpm dev:web
 ```
 
 **Important:** restart both daemon and web after pulling new code. If Start fails, the UI shows the error text.
+
+### Command line
+
+```bash
+roflock --help
+roflock passport verify <passport.json> --identity <runner.json>
+```
+
+`roleflock` still works as a deprecated alias and warns on stderr. Language and
+run commands arrive with the compiler and runtime surfaces.
+
+### Environment variables
+
+Roflock reads `ROFLOCK_*`. The matching `ROLEFLOCK_*` names still work and warn
+once per variable, so an existing installation keeps running after an upgrade:
+
+| Variable                           | Purpose                                        |
+| ---------------------------------- | ---------------------------------------------- |
+| `ROFLOCK_DATA_DIR`                 | Override the data directory                    |
+| `ROFLOCK_PORT`                     | Daemon port (default 4178)                     |
+| `ROFLOCK_ROTATE_TOKEN=1`           | Mint a new session token                       |
+| `ROFLOCK_FORCE_FAKE=1`             | Deterministic simulation — never real evidence |
+| `ROFLOCK_INCLUDE_FAKE=1`           | Register the fake provider without forcing it  |
+| `ROFLOCK_PROVIDER_IDLE_TIMEOUT_MS` | How long a silent provider may stall a node    |
+| `ROFLOCK_VERIFICATION_TIMEOUT_MS`  | Verification command budget                    |
 
 ## Suggested first test path
 
@@ -101,7 +138,7 @@ ROLEFLOCK_PORT=4312 pnpm dev:web
 5. Accept when verification finishes
 6. Open Evidence + Providers
 
-Use `ROLEFLOCK_FORCE_FAKE=1 pnpm dev` only for a deterministic UI/workflow
+Use `ROFLOCK_FORCE_FAKE=1 pnpm dev` only for a deterministic UI/workflow
 simulation without live CLIs. The UI and exported evidence label it as
 **simulation**; its scripted output and `simulation-check` are not proof that a
 repository fix works.
@@ -109,7 +146,7 @@ repository fix works.
 ## Roles and models
 
 Open **Roles** to set which provider and model runs each role. Each role is an
-ordered list: RoleFlock uses the first candidate that is healthy and not out of
+ordered list: Roflock uses the first candidate that is healthy and not out of
 quota, and falls through to the next when one refuses.
 
 Shipping defaults:
@@ -122,7 +159,7 @@ Shipping defaults:
 | Verifier       | Cursor · `gpt-5.6-terra-high`   | `claude-opus-5-medium`, then Codex `gpt-5.6-terra`                   |
 
 There is no fake provider. It is not in any list and it is not even registered
-unless `ROLEFLOCK_FORCE_FAKE=1` or `ROLEFLOCK_INCLUDE_FAKE=1` asks for it, so it
+unless `ROFLOCK_FORCE_FAKE=1` or `ROFLOCK_INCLUDE_FAKE=1` asks for it, so it
 cannot be picked by accident. If every candidate for a role refuses, the run
 **stops** and shows what each provider said.
 
@@ -149,13 +186,13 @@ documents is clamped rather than forwarded.
 
 ## Notes
 
-- **Fake provider** is omitted from the Providers UI unless `ROLEFLOCK_INCLUDE_FAKE=1`; `ROLEFLOCK_FORCE_FAKE=1` is visibly labelled simulation and never production verification.
+- **Fake provider** is omitted from the Providers UI unless `ROFLOCK_INCLUDE_FAKE=1`; `ROFLOCK_FORCE_FAKE=1` is visibly labelled simulation and never production verification.
 - Claude / Codex / Cursor appear on Providers with `ready` or `missing` based on PATH; login via provider auth actions.
 - **Writer:** Cursor Agent or Codex edits only the leased worktree. Codex uses an explicit `workspace-write` sandbox; all non-writer Codex turns are explicitly `read-only`.
 - A live run without a custom verification command or a package test script fails closed instead of accepting artefact presence as a test.
 - Planner/verifier may invoke Claude/Codex when discovered and not forced fake.
 - Provider discovery spawns the real CLIs and caches the result for 15s, so the Providers page does not respawn subprocesses on every poll.
-- `pnpm url` reprints the launch URL; `ROLEFLOCK_ROTATE_TOKEN=1` rotates the session token.
+- `pnpm url` reprints the launch URL; `ROFLOCK_ROTATE_TOKEN=1` rotates the session token.
 - Public site copy (draft): [`docs/public/README.md`](docs/public/README.md), [`docs/public/privacy.md`](docs/public/privacy.md)
 - Baseline benchmark: `pnpm benchmark` → [`docs/benchmarks/baseline.md`](docs/benchmarks/baseline.md)
 
@@ -174,16 +211,31 @@ documents is clamped rather than forwarded.
 - Stopping a task kills its provider process and settles the task on a terminal state
 - Update checks never send repository paths or contents
 
+## Open source
+
+Apache-2.0. Roflock carries no capability gates: agent count, graph size, local
+and self-hosted runs, repositories, compiler and validator behaviour, evidence
+and replay, self-hosted access control, and custom providers are part of the
+software, not a paid tier. Managed infrastructure may one day be a service;
+permission to use the software's own capabilities will not be.
+
+Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md) · Security:
+[`SECURITY.md`](SECURITY.md)
+
 ## Workspace
 
 ```text
 apps/web          Local React control UI (routes/, components/, lib/, test/)
 apps/daemon       Fastify local daemon + orchestrator
+apps/cli          roflock executable
 packages/*        Contracts, database, runtime, providers, approvals
-docs/product      PRD + implementation plan
+docs/prd          Roflock open-source PRD
+docs/implementation  Migration plan, repo audit, backlog
+docs/rfc          Proposed contracts (Graph IR v1)
 docs/adr          Architecture decision records
+docs/product      Historical RoleFlock PRD + plans
 docs/security     Threat model
-docs/public       roleflock.com draft copy
+docs/public       Public site draft copy
 docs/test-plans   Exit gates + manual checklist
 docs/benchmarks   Local fixture baselines
 ```

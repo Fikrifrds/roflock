@@ -2,7 +2,7 @@
   "name": "roleflock",
   "version": "0.1.0",
   "private": true,
-  "description": "Independent delivery assurance for AI-generated software",
+  "description": "Roflock \u2014 AI coding teams as code. Compiler-driven runtime for defining, running, and verifying AI coding teams.",
   "bin": {
     "roleflock": "./apps/cli/dist/cli.js"
   },
@@ -39,5 +39,6 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.65.0",
     "vitest": "^3.2.4"
-  }
+  },
+  "license": "Apache-2.0"
 }
