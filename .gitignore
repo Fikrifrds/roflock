@@ -22,3 +22,4 @@ test-results/
 apps/web/dist/
 apps/daemon/dist/
 packages/*/dist/
+apps/playground/dist
