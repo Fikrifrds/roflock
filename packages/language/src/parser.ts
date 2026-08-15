@@ -78,7 +78,7 @@ class Parser {
   }
 
   private error(message: string, span: SourceSpan = this.current.span): never {
-    this.diagnostics.push({ code: DiagnosticCode.UnknownNode, severity: 'error', message, span });
+    this.diagnostics.push({ code: DiagnosticCode.SyntaxError, severity: 'error', message, span });
     throw new Recovered();
   }
 
@@ -439,6 +439,7 @@ class Parser {
     this.block((keyword) => {
       if (keyword.value !== 'max')
         this.error(`Unknown transition property '${keyword.value}'`, keyword.span);
+      if (max !== undefined) this.error(`Transition declares 'max' more than once`, keyword.span);
       max = Number(this.expect('number', 'a retry limit').value);
     });
 
@@ -461,7 +462,10 @@ function isDeclarationKeyword(value: string): boolean {
 
 function describe(token: Token): string {
   if (token.type === 'eof') return 'end of file';
-  if (token.type === 'string') return `string "${token.value}"`;
+  // Re-escaped so the quoted text is what the source contains, not the decoded
+  // value a diagnostic reader would search for and fail to find.
+  if (token.type === 'string')
+    return `string "${token.value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
   return `'${token.value}'`;
 }
 
@@ -474,7 +478,7 @@ export function parse(source: string, uri?: string): ParseResult {
     return {
       diagnostics: [
         {
-          code: DiagnosticCode.UnknownNode,
+          code: DiagnosticCode.SyntaxError,
           severity: 'error',
           message: caught.message,
           span: caught.span,

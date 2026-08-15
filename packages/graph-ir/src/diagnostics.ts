@@ -6,7 +6,7 @@ import type { SourceSpan } from './types.js';
  *
  * Namespaces follow RFC-001 §19:
  *
- *   RF1xx  names / references
+ *   RF1xx  names / references / source shape
  *   RF2xx  graph / reachability / loops
  *   RF3xx  concurrency / writer safety
  *   RF4xx  roles / independence / capability
@@ -16,6 +16,7 @@ import type { SourceSpan } from './types.js';
  *   RF8xx  package / extension / compatibility
  */
 export const DiagnosticCode = {
+  SyntaxError: 'RF110',
   UnknownNode: 'RF101',
   UnknownRole: 'RF102',
   DuplicateDeclaration: 'RF103',

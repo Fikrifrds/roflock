@@ -381,10 +381,11 @@ Current codes are:
 
 | Code    | Contract                                         |
 | ------- | ------------------------------------------------ |
-| `RF101` | unknown/unsupported node or syntax construct     |
+| `RF101` | unknown/unsupported node reference               |
 | `RF102` | unknown/unsupported role or authority profile    |
 | `RF103` | duplicate declaration                            |
 | `RF104` | execution profile binds an unknown role          |
+| `RF110` | malformed source: tokenizer or parser error      |
 | `RF121` | unknown outcome                                  |
 | `RF201` | unreachable node                                 |
 | `RF202` | missing reachable terminal                       |

@@ -329,6 +329,10 @@ export async function preserveWorktree(worktreePath: string): Promise<void> {
 }
 
 export class WriterLease {
+  /** Process-local: the in-memory owners map is per daemon, so the one-writer
+   * guarantee holds within a single process. Cross-process exclusion is the
+   * external-worktree layout's job — one task worktree is never shared between
+   * daemons — not this map's. */
   private static owners = new Map<string, string>();
 
   constructor(

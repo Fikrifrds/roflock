@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { FastifyRequest } from 'fastify';
@@ -14,10 +14,6 @@ export function createSession(): Session {
     token: randomBytes(32).toString('base64url'),
     csrf: randomBytes(24).toString('base64url'),
   };
-}
-
-export function sessionHash(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
 }
 
 export function sessionFilePath(dataDir: string): string {
