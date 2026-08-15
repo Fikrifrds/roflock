@@ -4,7 +4,7 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # No `version` here on purpose: declaring it alongside `packageManager`
       # in package.json is an ERR_PNPM_BAD_PM_VERSION error, which failed the
       # job during setup — so the suite had never actually run in CI.
