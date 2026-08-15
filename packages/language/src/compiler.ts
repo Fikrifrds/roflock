@@ -356,6 +356,28 @@ function lower(
     }
   });
 
+  // --- Unreferenced nodes -----------------------------------------------------
+  //
+  // A node no transition mentions becomes its own entry point, so an author
+  // who forgot an edge still gets a run — one that bills a provider for a node
+  // they may never have intended to execute. Deliberate parallel starts (the
+  // two planners in the built-in Standard workflow) are referenced by their
+  // outgoing edges, so only genuinely disconnected nodes warn.
+  const referenced = new Set([
+    ...edges.map((edge) => edge.from.nodeId),
+    ...edges.map((edge) => edge.to.nodeId),
+  ]);
+  for (const node of nodes) {
+    if (referenced.has(node.id)) continue;
+    diagnostics.push(
+      warn(
+        DiagnosticCode.UnreferencedNode,
+        `Node '${node.id}' appears in no transition, so it runs as its own entry point. If that is not intended, connect it in a flow.`,
+        nodeSpans[node.id],
+      ),
+    );
+  }
+
   // --- Human gates -----------------------------------------------------------
   //
   // A human node is only the accept gate when nothing follows it. One in the

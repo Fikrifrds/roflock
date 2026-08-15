@@ -339,6 +339,44 @@ flow { Builder.exploded -> Approval }`,
     ).not.toContain(DiagnosticCode.AmbiguousLoopBudget);
   });
 
+  it('warns when a declared node appears in no transition', () => {
+    const source = `
+      role writer { write }
+      role critic { readonly }
+      agent Builder { role writer }
+      agent Orphan { role critic }
+      human Approval
+      flow { Builder -> Approval }
+    `;
+    const result = compile(source, { uri: 'test.roflock' });
+
+    // The orphan still runs — it is its own entry point — so this compiles.
+    // But a forgotten edge bills a provider for a node the author may never
+    // have meant to execute, and the author is told before that happens.
+    expect(result.ir).toBeDefined();
+    expect(result.ir?.workflow.entryNodeIds).toContain('Orphan');
+    expect(warningCodes(source)).toContain(DiagnosticCode.UnreferencedNode);
+    const warning = result.diagnostics.find((d) => d.code === DiagnosticCode.UnreferencedNode);
+    expect(warning?.span?.start.line).toBe(5);
+    expect(warning?.message).toContain("'Orphan'");
+  });
+
+  it('does not warn for deliberate parallel entry nodes that flow onward', () => {
+    expect(
+      warningCodes(`
+        role planner_role { readonly }
+        role writer { write }
+        agent First { role planner_role }
+        agent Second { role planner_role }
+        human Approval
+        flow {
+          First -> Approval
+          Second -> Approval
+        }
+      `),
+    ).not.toContain(DiagnosticCode.UnreferencedNode);
+  });
+
   it('rejects a check with no command', () => {
     expect(
       errorCodes(`

@@ -390,6 +390,7 @@ Current codes are:
 | `RF201` | unreachable node                                 |
 | `RF202` | missing reachable terminal                       |
 | `RF203` | no entry node                                    |
+| `RF204` | node appears in no transition (runs as an entry) |
 | `RF210` | unbounded or invalid cycle                       |
 | `RF211` | loop verifier cannot re-evaluate the cycle       |
 | `RF212` | retry can occur without new evidence             |
