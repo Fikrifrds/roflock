@@ -57,6 +57,12 @@ function err(code: DiagnosticCode, message: string, span?: SourceSpan): Diagnost
   return span ? { code, severity: 'error', message, span } : { code, severity: 'error', message };
 }
 
+function warn(code: DiagnosticCode, message: string, span?: SourceSpan): Diagnostic {
+  return span
+    ? { code, severity: 'warning', message, span }
+    : { code, severity: 'warning', message };
+}
+
 /**
  * Lowers a parsed `.roflock` file into Graph IR.
  *
@@ -646,7 +652,28 @@ function deriveLoops(
     const verifier = verifiers.sort((a, b) => (depth.get(a) ?? 0) - (depth.get(b) ?? 0)).at(-1)!;
     // Several bounded edges from one verifier describe one decision with
     // several destinations, so the widest budget governs the cycle.
-    const maxAttempts = Math.max(...edgeIds.map((edgeId) => boundedEdges.get(edgeId)!));
+    const budgets = edgeIds.map((edgeId) => boundedEdges.get(edgeId)!);
+    const maxAttempts = Math.max(...budgets);
+    if (new Set(budgets).size > 1) {
+      // Silent widening is the failure mode this guards against: an author who
+      // wrote `max 2` on one route and `max 4` on another gets 4 for both,
+      // paying for attempts they believed were capped. The warning points at
+      // the budget that was raised, not the one that won.
+      const widened = edgeIds.find((edgeId) => boundedEdges.get(edgeId)! < maxAttempts)!;
+      const edge = edges.find((candidate) => candidate.id === widened)!;
+      diagnostics.push(
+        warn(
+          DiagnosticCode.AmbiguousLoopBudget,
+          `Repair cycle budgets disagree: transitions in this cycle declare ${[...new Set(budgets)]
+            .sort((a, b) => a - b)
+            .map((b) => `max ${b}`)
+            .join(
+              ' and ',
+            )}. The widest (max ${maxAttempts}) governs every route out of the cycle, including '${edge.from.nodeId} -> ${edge.to.nodeId}'.`,
+          spans[widened],
+        ),
+      );
+    }
 
     counter += 1;
     loops.push({

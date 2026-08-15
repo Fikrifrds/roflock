@@ -63,6 +63,12 @@ function errorCodes(source: string): string[] {
     .map((d) => d.code);
 }
 
+function warningCodes(source: string): string[] {
+  return compile(source, { uri: 'test.roflock' })
+    .diagnostics.filter((d) => d.severity === 'warning')
+    .map((d) => d.code);
+}
+
 describe('compiling .roflock to Graph IR', () => {
   it('lowers the reference bug-fix workflow', () => {
     const ir = compileOk(BUG_FIX);
@@ -283,6 +289,54 @@ flow { Builder.exploded -> Approval }`,
 
     expect(agent).toContain(DiagnosticCode.UnboundedCycle);
     expect(check).toContain(DiagnosticCode.UnboundedCycle);
+  });
+
+  it('warns when one repair cycle declares disagreeing budgets', () => {
+    const source = `
+      role writer { write }
+      role planner_role { readonly }
+      agent Writer { role writer }
+      agent Planner { role planner_role }
+      check Tests { run "npm test" required }
+      human Approval
+      flow {
+        Planner -> Writer
+        Writer -> Tests
+        Tests.pass -> Approval
+        Tests.fail -> Writer { max 4 }
+        Tests.fail -> Planner { max 2 }
+      }
+    `;
+    const result = compile(source, { uri: 'test.roflock' });
+
+    // The widest budget governs the whole cycle, so this still compiles — but
+    // the author asked for 2 on one route and gets 4 on both, and must be told.
+    expect(result.ir).toBeDefined();
+    expect(warningCodes(source)).toContain(DiagnosticCode.AmbiguousLoopBudget);
+    const warning = result.diagnostics.find((d) => d.code === DiagnosticCode.AmbiguousLoopBudget);
+    expect(warning?.span?.start.line).toBe(13);
+    expect(warning?.message).toContain('max 2');
+    expect(warning?.message).toContain('max 4');
+  });
+
+  it('does not warn when every route out of a cycle shares one budget', () => {
+    expect(
+      warningCodes(`
+        role writer { write }
+        role planner_role { readonly }
+        agent Writer { role writer }
+        agent Planner { role planner_role }
+        check Tests { run "npm test" required }
+        human Approval
+        flow {
+          Planner -> Writer
+          Writer -> Tests
+          Tests.pass -> Approval
+          Tests.fail -> Writer { max 4 }
+          Tests.fail -> Planner { max 4 }
+        }
+      `),
+    ).not.toContain(DiagnosticCode.AmbiguousLoopBudget);
   });
 
   it('rejects a check with no command', () => {

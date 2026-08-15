@@ -29,6 +29,7 @@ export const DiagnosticCode = {
   LoopVerifierUnreachable: 'RF211',
   RetryWithoutNewEvidence: 'RF212',
   NoEntryNode: 'RF203',
+  AmbiguousLoopBudget: 'RF213',
 
   ConcurrentWriters: 'RF301',
 

@@ -393,6 +393,7 @@ Current codes are:
 | `RF210` | unbounded or invalid cycle                       |
 | `RF211` | loop verifier cannot re-evaluate the cycle       |
 | `RF212` | retry can occur without new evidence             |
+| `RF213` | repair cycle budgets disagree (widest governs)   |
 | `RF301` | concurrent writers                               |
 | `RF401` | reviewer independence weakened                   |
 | `RF410` | missing required capability                      |
