@@ -335,6 +335,29 @@ export function boundedInterruptResult(
   };
 }
 
+/**
+ * Repair re-entries a graph run has spent, including what it inherited.
+ *
+ * A run's own `loop_attempts` rows count only its own spend. A run that
+ * resumed an earlier one carries that earlier spend in
+ * `graph_runs.resumed_loop_iterations`, so the sum is the chain's cumulative
+ * total and stays correct across any number of restarts. A run that started
+ * fresh records 0 there and the sum is its own spend alone.
+ */
+export function repairBudgetSpent(db: SqliteDb, graphRunId: string): number {
+  const run = db
+    .prepare('SELECT resumed_loop_iterations FROM graph_runs WHERE id = ?')
+    .get(graphRunId) as { resumed_loop_iterations: number } | undefined;
+  if (!run) return 0;
+  const own = db
+    .prepare(
+      `SELECT COUNT(*) AS count FROM loop_attempts
+       WHERE node_run_id IN (SELECT id FROM node_runs WHERE graph_run_id = ?)`,
+    )
+    .get(graphRunId) as { count: number };
+  return (run.resumed_loop_iterations ?? 0) + own.count;
+}
+
 export class Orchestrator {
   private readonly active = new Map<string, AbortController>();
   private readonly activeDriverTurns = new Map<string, Map<string, ActiveDriverTurn>>();
@@ -1024,9 +1047,20 @@ export class Orchestrator {
 
     this.db
       .prepare(
-        'INSERT INTO graph_runs (id, task_id, graph_version_id, state, started_at, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO graph_runs (id, task_id, graph_version_id, state, started_at, created_at, resumed_loop_iterations) VALUES (?, ?, ?, ?, ?, ?, ?)',
       )
-      .run(graphRunId, task.id, graph.version, 'running', now(), now());
+      .run(
+        graphRunId,
+        task.id,
+        graph.version,
+        'running',
+        now(),
+        now(),
+        // Recorded so the next resume can chain the budget: a run's own
+        // `loop_attempts` rows cover only what it spent, never what it
+        // inherited. See `repairBudgetSpent`.
+        reusable ? (resume?.loopIterations ?? 0) : 0,
+      );
     if (reusable && resume?.completed.length) {
       const timestamp = now();
       const insert = this.db.prepare(
@@ -1222,14 +1256,12 @@ export class Orchestrator {
     // Re-entries already paid for. Without this a restarted task would receive
     // a fresh repair budget and could spend the whole thing again, billing a
     // provider for attempts the previous process already made.
-    const spent = (
-      this.db
-        .prepare(
-          `SELECT COUNT(*) AS count FROM loop_attempts
-           WHERE node_run_id IN (SELECT id FROM node_runs WHERE graph_run_id = ?)`,
-        )
-        .get(previous.id) as { count: number }
-    ).count;
+    //
+    // Cumulative across the whole resume chain, not just this run: the run
+    // records what it inherited in `resumed_loop_iterations`, so a task
+    // interrupted twice keeps the spend of both earlier runs. The budget
+    // belongs to the task, not to any one process that executed it.
+    const spent = repairBudgetSpent(this.db, previous.id);
 
     return {
       // Before a writer finishes, rerunning the planning context is safer than

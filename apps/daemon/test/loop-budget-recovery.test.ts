@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openMigratedDatabase } from '@roleflock/database';
 import { afterEach, describe, expect, it } from 'vitest';
+import { repairBudgetSpent } from '../src/services/orchestrator.js';
 
 /**
  * R5: a repair budget that survives the process, recorded durably.
@@ -108,5 +109,69 @@ describe('durable repair budget', () => {
       { attempt: 1, state: 'taken' },
       { attempt: 2, state: 'taken' },
     ]);
+  });
+
+  describe('a resume chain', () => {
+    /** A run that resumed `inherited` re-entries from the run before it. */
+    function seedResumedRun(
+      db: ReturnType<typeof openMigratedDatabase>,
+      runId: string,
+      attempts: number,
+      inherited: number,
+    ) {
+      seedRun(db, runId, attempts);
+      db.prepare('UPDATE graph_runs SET resumed_loop_iterations = ? WHERE id = ?').run(
+        inherited,
+        runId,
+      );
+    }
+
+    it('counts spend from both sides of a second restart', () => {
+      const db = database();
+      // Run 1 spent two re-entries, then the daemon died. Run 2 resumed with
+      // those two already paid for and spent one more before dying itself.
+      seedRun(db, 'run_1', 2);
+      seedResumedRun(db, 'run_2', 1, 2);
+
+      // Run 3 must resume against the chain's total, not run 2's own rows:
+      // forgetting run 1's spend would hand the task a nearly fresh budget and
+      // let it re-pay for attempts already made.
+      expect(repairBudgetSpent(db, 'run_2')).toBe(3);
+    });
+
+    it('keeps inherited spend when the resumed run looped zero times', () => {
+      const db = database();
+      seedRun(db, 'run_1', 2);
+      seedResumedRun(db, 'run_2', 0, 2);
+
+      // A middle run that never re-entered must not reset the chain. Counting
+      // only the latest run's rows returns 0 here, which is the bug this pins.
+      expect(repairBudgetSpent(db, 'run_2')).toBe(2);
+    });
+
+    it('accumulates across a chain of any length', () => {
+      const db = database();
+      seedRun(db, 'run_1', 1);
+      seedResumedRun(db, 'run_2', 1, 1);
+      seedResumedRun(db, 'run_3', 1, 2);
+      seedResumedRun(db, 'run_4', 0, 3);
+
+      expect(repairBudgetSpent(db, 'run_4')).toBe(3);
+    });
+
+    it('treats a run with no recorded base as spending only its own rows', () => {
+      const db = database();
+      // Rows written before migration 037 existed carry the column default.
+      // Their spend reads exactly as it did before the migration.
+      seedRun(db, 'run_legacy', 2);
+
+      expect(repairBudgetSpent(db, 'run_legacy')).toBe(2);
+    });
+
+    it('reports zero for an unknown run', () => {
+      const db = database();
+
+      expect(repairBudgetSpent(db, 'missing')).toBe(0);
+    });
   });
 });

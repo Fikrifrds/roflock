@@ -6,6 +6,12 @@ changes and a patch release remains compatible within that minor line.
 
 ## [Unreleased]
 
+### Fixed
+
+- the repair budget now chains across any number of daemon restarts: a task
+  interrupted twice keeps the re-entries both earlier runs already paid for
+  (`graph_runs.resumed_loop_iterations`, migration 037).
+
 ### Added
 
 - release-ready open-source, operator, language, CLI, Studio/Playground, driver,
