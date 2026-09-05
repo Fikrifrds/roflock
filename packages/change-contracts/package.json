@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "@roleflock/contracts": "workspace:*",
-    "zod": "^3.25.76"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
