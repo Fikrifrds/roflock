@@ -42,7 +42,7 @@
     "@roleflock/secret-store": "workspace:*",
     "@roleflock/usage-ledger": "workspace:*",
     "@roleflock/verification-runner": "workspace:*",
-    "fastify": "^5.2.1"
+    "fastify": "^5.12.3"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
