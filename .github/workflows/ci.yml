@@ -9,7 +9,7 @@ jobs:
       # in package.json is an ERR_PNPM_BAD_PM_VERSION error, which failed the
       # job during setup — so the suite had never actually run in CI.
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       # Build first. Workspace packages resolve each other through their
